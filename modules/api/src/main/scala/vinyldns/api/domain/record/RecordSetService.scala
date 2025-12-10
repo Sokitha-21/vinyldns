@@ -666,8 +666,7 @@ class RecordSetService(
           RecordSetChangeNotFoundError(
             s"Unable to find record set change with id $changeId in zone ${zone.name}"
           )
-        )
-        .toResult[RecordSetChange]
+        ).toResult[RecordSetChange]
       _ <- canViewRecordSet(
         authPrincipal,
         change.recordSet.name,
