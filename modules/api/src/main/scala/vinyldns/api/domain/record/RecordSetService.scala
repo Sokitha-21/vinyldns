@@ -653,11 +653,13 @@ class RecordSetService(
 
   def getRecordSetChange(
                           zoneId: String,
+                          rsId: String,
                           changeId: String,
                           authPrincipal: AuthPrincipal
                         ): Result[RecordSetChange] =
     for {
       zone <- getZone(zoneId)
+      _ <-getRecordSet(rsId)
       change <- recordChangeRepository
         .getRecordSetChange(zone.id, changeId)
         .orFail(
