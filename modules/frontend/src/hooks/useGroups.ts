@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { groupsService } from '../services/groupsService';
 import { usePaging } from './usePaging';
@@ -34,8 +34,7 @@ function getErrorMessage(error: { response?: { data?: string | { errors?: string
   return msg;
 }
 
-export function useGroups(ignoreAccess = false) {
-  const [query, setQuery] = useState('');
+export function useGroups(ignoreAccess = false, query = '') {
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
     nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
   const { addAlert } = useAlerts();
@@ -89,14 +88,6 @@ export function useGroups(ignoreAccess = false) {
     },
   });
 
-  const search = useCallback(
-    (q: string) => {
-      setQuery(q);
-      resetPaging();
-    },
-    [resetPaging]
-  );
-
   const nextPage = useCallback(() => {
     nextPageUpdate(data?.groups?.length ?? 0, data?.nextId);
   }, [data, nextPageUpdate]);
@@ -109,13 +100,13 @@ export function useGroups(ignoreAccess = false) {
     groups: data?.groups ?? [],
     isLoading,
     query,
-    search,
     nextPage,
     prevPage,
     nextPageEnabled,
     prevPageEnabled,
     getPanelTitle,
     refetch,
+    resetPaging,
     createGroup: createGroupMutation.mutate,
     updateGroup: updateGroupMutation.mutate,
     deleteGroup: deleteGroupMutation.mutate,

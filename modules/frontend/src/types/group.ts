@@ -22,6 +22,8 @@ export interface GroupMember {
   email?: string;
   created?: string;
   lockStatus?: string;
+  /** Set by the server: true if this member is in the group's admins list */
+  isAdmin?: boolean;
 }
 
 export interface Group {
@@ -48,6 +50,8 @@ export interface GroupChange {
   oldGroup?: Group;
   changeType: string;
   userId: string;
+  userName?: string;
+  groupChangeMessage?: string;
   id: string;
   created: string;
 }

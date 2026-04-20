@@ -83,7 +83,7 @@ export const groupsService = {
   getGroupChanges(groupId: string, count?: number, startFrom?: string) {
     const params = { startFrom, maxItems: count };
     return api.get<GroupChangesResponse>(
-      urlBuilder(`/groups/${groupId}/groupchanges`, params)
+      urlBuilder(`/groups/${groupId}/activity`, params)
     );
   },
 };

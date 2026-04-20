@@ -20,29 +20,36 @@ import type { Group } from '../../types/group';
 
 interface GroupsTableProps {
   groups: Group[];
-  onDelete: (id: string) => void;
+  onDelete: (group: Group) => void;
   onEdit: (group: Group) => void;
   isDeleting: boolean;
+  isGroupAdmin: (group: Group) => boolean;
+  currentUserId?: string;
 }
 
-export function GroupsTable({ groups, onDelete, onEdit, isDeleting }: GroupsTableProps) {
+export function GroupsTable({ groups, onDelete, onEdit, isDeleting, isGroupAdmin, currentUserId }: GroupsTableProps) {
   if (groups.length === 0) {
     return (
-      <div className="alert alert-info">
-        No groups found. Create a group to get started.
+      <div className="vds-empty-state">
+        <i className="bi bi-people fs-1 mb-2" style={{ opacity: 0.4 }} />
+        <p className="mb-0 fw-semibold">No groups found</p>
+        <small className="text-muted">Create a group to get started.</small>
       </div>
     );
   }
 
+  const initials = (name: string) =>
+    name.split(/[-_ ]+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
+
   return (
-    <div className="table-responsive">
-      <table className="table table-hover table-striped align-middle">
-        <thead className="table-dark">
+    <div className="vds-groups-table-wrap">
+      <table className="vds-groups-table">
+        <thead>
           <tr>
             <th>Group Name</th>
             <th>Email</th>
             <th>Description</th>
-            <th>Members</th>
+            <th>Your Role</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -50,37 +57,70 @@ export function GroupsTable({ groups, onDelete, onEdit, isDeleting }: GroupsTabl
           {groups.map((group) => (
             <tr key={group.id}>
               <td>
-                <Link
-                  to={`/groups/${group.id}`}
-                  className="fw-semibold text-decoration-none"
-                >
-                  {group.name}
-                </Link>
-              </td>
-              <td>{group.email}</td>
-              <td className="text-muted">{group.description ?? '—'}</td>
-              <td>
-                <span className="badge bg-secondary">
-                  {group.members?.length ?? 0}
-                </span>
-              </td>
-              <td>
-                <div className="d-flex gap-2">
-                  <button
-                    className="btn btn-sm btn-outline-primary"
-                    onClick={() => onEdit(group)}
-                    title="Edit group"
+                <div className="d-flex align-items-center gap-2">
+                  <span className="vds-group-avatar">{initials(group.name)}</span>
+                  <Link
+                    to={`/groups/${group.id}`}
+                    className="fw-semibold text-decoration-none vds-table-primary"
                   >
-                    <i className="bi bi-pencil" />
-                  </button>
-                  <button
-                    className="btn btn-sm btn-outline-danger"
-                    onClick={() => onDelete(group.id)}
-                    disabled={isDeleting}
-                    title="Delete group"
+                    {group.name}
+                  </Link>
+                </div>
+              </td>
+              <td className="vds-table-secondary">{group.email}</td>
+              <td className={group.description?.trim() ? 'vds-table-secondary' : 'vds-table-placeholder'}>
+                {group.description?.trim() || 'No description'}
+              </td>
+              <td>
+                {(() => {
+                  const isAdmin = currentUserId && group.admins.some((a) => a.id === currentUserId);
+                  const isMember = currentUserId && group.members.some((m) => m.id === currentUserId);
+                  if (isAdmin) return (
+                    <span className="vds-role-badge vds-role-badge--admin">
+                      <i className="bi bi-shield-fill" />Admin
+                    </span>
+                  );
+                  if (isMember) return (
+                    <span className="vds-role-badge vds-role-badge--member">
+                      <i className="bi bi-person-fill" />Member
+                    </span>
+                  );
+                  return (
+                    <span className="vds-role-badge vds-role-badge--none">
+                      <i className="bi bi-person-dash" />No Role
+                    </span>
+                  );
+                })()}
+              </td>
+              <td>
+                <div className="d-flex gap-2 align-items-center">
+                  <Link
+                    to={`/groups/${group.id}`}
+                    className="vds-action-btn vds-action-btn--view"
+                    title="View group"
                   >
-                    <i className="bi bi-trash" />
-                  </button>
+                    <i className="bi bi-eye-fill" />
+                  </Link>
+                  {isGroupAdmin(group) && (
+                    <button
+                      className="vds-action-btn vds-action-btn--edit"
+                      onClick={() => onEdit(group)}
+                      title="Edit group"
+                    >
+                      <i className="bi bi-pencil-fill" />
+                    </button>
+                  )}
+                  {isGroupAdmin(group) && (
+                    <button
+                      id={`delete-group-${group.name}`}
+                      className="vds-action-btn vds-action-btn--delete"
+                      onClick={() => onDelete(group)}
+                      disabled={isDeleting}
+                      title="Delete group"
+                    >
+                      <i className="bi bi-trash3-fill" />
+                    </button>
+                  )}
                 </div>
               </td>
             </tr>

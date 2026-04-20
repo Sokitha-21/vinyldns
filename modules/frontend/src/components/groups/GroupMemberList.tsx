@@ -21,54 +21,86 @@ interface GroupMemberListProps {
   members: GroupMember[];
   admins: GroupMember[];
   onRemove?: (memberId: string) => void;
+  onToggleAdmin?: (memberId: string, makeAdmin: boolean) => void;
   canManage?: boolean;
 }
 
-export function GroupMemberList({ members, admins, onRemove, canManage }: GroupMemberListProps) {
+export function GroupMemberList({ members, admins, onRemove, onToggleAdmin, canManage }: GroupMemberListProps) {
   const adminIds = new Set(admins.map((a) => a.id));
 
+  const formatName = (member: GroupMember) => {
+    const parts = [member.lastName, member.firstName].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : '—';
+  };
+
+  if (members.length === 0) {
+    return (
+      <div className="vds-empty-state">
+        <i className="bi bi-person-x fs-2 mb-2" style={{ opacity: 0.4 }} />
+        <p className="mb-0 fw-semibold">No members yet</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="table-responsive">
-      <table className="table table-hover table-sm align-middle">
-        <thead className="table-secondary">
+    <div className="vds-groups-table-wrap">
+      <table className="vds-groups-table">
+        <thead>
           <tr>
-            <th>Username</th>
+            <th>User Name</th>
             <th>Name</th>
             <th>Email</th>
-            <th>Role</th>
+            <th>Group Manager</th>
+            <th>Status</th>
             {canManage && <th>Actions</th>}
           </tr>
         </thead>
         <tbody>
-          {members.map((member) => (
-            <tr key={member.id}>
-              <td>{member.userName ?? member.id}</td>
-              <td>
-                {member.firstName || member.lastName
-                  ? `${member.firstName ?? ''} ${member.lastName ?? ''}`.trim()
-                  : '—'}
-              </td>
-              <td>{member.email ?? '—'}</td>
-              <td>
-                {adminIds.has(member.id) ? (
-                  <span className="badge bg-warning text-dark">Admin</span>
-                ) : (
-                  <span className="badge bg-secondary">Member</span>
-                )}
-              </td>
-              {canManage && (
-                <td>
-                  <button
-                    className="btn btn-sm btn-outline-danger"
-                    onClick={() => onRemove?.(member.id)}
-                    title="Remove member"
-                  >
-                    <i className="bi bi-person-x" />
-                  </button>
-                </td>
-              )}
-            </tr>
-          ))}
+          {members
+            .slice()
+            .sort((a, b) => (a.userName ?? '').localeCompare(b.userName ?? ''))
+            .map((member) => {
+              // Use server-computed isAdmin (from MemberInfo) as primary source;
+              // fall back to adminIds set if not present.
+              const isAdminMember = member.isAdmin ?? adminIds.has(member.id);
+              return (
+                <tr key={member.id}>
+                  <td className="vds-table-username">{member.userName ?? member.id}</td>
+                  <td className="vds-table-secondary">{formatName(member)}</td>
+                  <td className="vds-table-secondary">{member.email ?? '—'}</td>
+                  <td>
+                    <div className="form-check form-switch mb-0">
+                      {/* Mirrors old portal: ng-disabled="!isGroupAdmin" — no last-admin UI guard */}
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        role="switch"
+                        checked={isAdminMember}
+                        disabled={!canManage}
+                        onChange={(e) => onToggleAdmin?.(member.id, e.target.checked)}
+                      />
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`vds-lock-status ${member.lockStatus === 'Locked' ? 'vds-lock-status--locked' : 'vds-lock-status--active'}`}>
+                      {member.lockStatus ?? 'Active'}
+                    </span>
+                  </td>
+                  {/* Mirrors old portal: ng-if="isGroupAdmin" — delete always clickable when shown */}
+                  {canManage && (
+                    <td>
+                      <button
+                        className="vds-action-btn vds-action-btn--delete"
+                        onClick={() => onRemove?.(member.id)}
+                        title="Remove member"
+                      >
+                        <i className="bi bi-person-dash-fill" />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
         </tbody>
       </table>
     </div>
