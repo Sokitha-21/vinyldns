@@ -56,7 +56,7 @@ export function RecordsPage() {
               <input
                 type="text"
                 className="form-control"
-                placeholder="Filter by name…"
+                placeholder="Filter by name"
                 value={nameFilter}
                 onChange={(e) => setNameFilter(e.target.value)}
                 onKeyUp={(e) => e.key === 'Enter' && handleSearch()}
