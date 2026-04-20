@@ -128,6 +128,10 @@ export const zonesService = {
     return api.delete(`/zones/${id}`);
   },
 
+  syncZone(id: string) {
+    return api.post<{ zone: Zone }>(`/zones/${id}/sync`, {});
+  },
+
   normalizeZoneDates(zone: Zone): Zone {
     if (zone.created) zone.created = toApiIso(zone.created);
     if (zone.updated) zone.updated = toApiIso(zone.updated);

@@ -19,7 +19,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { zonesService } from '../services/zonesService';
 import { usePaging } from './usePaging';
 import { useAlerts } from '../contexts/AlertContext';
-import type { Zone } from '../types/zone';
+import type { Zone, DeletedZoneChange } from '../types/zone';
 
 export function useZones(ignoreAccess = false, includeReverse = true) {
   const [query, setQuery] = useState('');
@@ -110,12 +110,62 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
     prevPageEnabled,
     getPanelTitle,
     refetch,
+    resetPaging,
     createZone: createZoneMutation.mutate,
     updateZone: updateZoneMutation.mutate,
     deleteZone: deleteZoneMutation.mutate,
     isCreating: createZoneMutation.isPending,
     isUpdating: updateZoneMutation.isPending,
     isDeleting: deleteZoneMutation.isPending,
+  };
+}
+
+export function useDeletedZones(ignoreAccess = false) {
+  const [query, setQuery] = useState('');
+  const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
+    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['deleted-zones', ignoreAccess, query, paging.next],
+    queryFn: async () => {
+      const res = await zonesService.getDeletedZones(
+        paging.maxItems,
+        paging.next as string | undefined,
+        query,
+        ignoreAccess
+      );
+      return res.data;
+    },
+  });
+
+  const search = useCallback(
+    (q: string) => {
+      setQuery(q);
+      resetPaging();
+    },
+    [resetPaging]
+  );
+
+  const nextPage = useCallback(() => {
+    nextPageUpdate(data?.zonesDeletedInfo?.length ?? 0, data?.nextId);
+  }, [data, nextPageUpdate]);
+
+  const prevPage = useCallback(() => {
+    prevPageUpdate(getPrevStartFrom());
+  }, [prevPageUpdate, getPrevStartFrom]);
+
+  return {
+    deletedZones: (data?.zonesDeletedInfo ?? []) as DeletedZoneChange[],
+    isLoading,
+    query,
+    search,
+    nextPage,
+    prevPage,
+    nextPageEnabled,
+    prevPageEnabled,
+    getPanelTitle,
+    refetch,
+    resetPaging,
   };
 }
 
