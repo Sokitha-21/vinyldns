@@ -588,29 +588,53 @@ export function GroupsPage() {
           </div>
         </div>
 
-        {/* My Groups */}
+        {/* My Groups tab: Groups to Explore | All Groups tab: My Groups */}
         <div className="col-6 col-md-3 d-flex">
-          <div className="rounded-3 px-3 py-2 w-100 d-flex flex-column vds-insight-card vds-insight-card--purple">
-            <div className="d-flex align-items-center gap-2 mb-1">
-              <div className="rounded-2 vds-insight-icon vds-insight-icon--purple">
-                <i className="bi bi-person-check-fill" />
+          {!ignoreAccess ? (
+            /* ── My Groups tab: Member Only ── */
+            <div className="rounded-3 px-3 py-2 w-100 d-flex flex-column vds-insight-card vds-insight-card--purple">
+              <div className="d-flex align-items-center gap-2 mb-1">
+                <div className="rounded-2 vds-insight-icon vds-insight-icon--purple">
+                  <i className="bi bi-person-lines-fill" />
+                </div>
+                <span className="vds-insight-label vds-insight-label--purple">Member Only</span>
+                <span className="vds-insight-value vds-insight-value--purple">
+                  {(anyFilterActive ? cardMemberOnly : insightMemberOnlyCount) ?? <span className="vds-insight-skeleton vds-insight-skeleton--purple" />}
+                </span>
               </div>
-              <span className="vds-insight-label vds-insight-label--purple">My Groups</span>
-              <span className="vds-insight-value vds-insight-value--purple">
-                {(anyFilterActive ? cardCount : insightMyCount) ?? <span className="vds-insight-skeleton vds-insight-skeleton--purple" />}
-              </span>
-            </div>
-            <div className="vds-insight-body vds-insight-body--purple">
-              <div className="vds-insight-stat-label">Admin</div>
-              <div className="vds-insight-stat-label vds-insight-stat-label--right">Member only</div>
-              <div className="vds-insight-stat-value vds-insight-stat-value--purple">{cardAdminCount ?? '…'}</div>
-              <div className="vds-insight-stat-value vds-insight-stat-value--purple vds-insight-stat-value--right">{cardMemberOnly ?? '…'}</div>
-              <div className="vds-insight-footnote">
-                <i className="bi bi-info-circle me-1 vds-icon-purple-dim" />
-                Groups you are a member or admin of
+              <div className="vds-insight-body vds-insight-body--purple">
+                <div className="vds-insight-stat-label" style={{ gridColumn: '1 / -1' }}>My groups</div>
+                <div className="vds-insight-stat-value vds-insight-stat-value--purple" style={{ gridColumn: '1 / -1' }}>{insightMyCount ?? '…'}</div>
+                <div className="vds-insight-footnote">
+                  <i className="bi bi-eye me-1 vds-icon-purple-dim" />
+                  Groups where you're a member but not an admin
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            /* ── All Groups tab: My Groups ── */
+            <div className="rounded-3 px-3 py-2 w-100 d-flex flex-column vds-insight-card vds-insight-card--purple">
+              <div className="d-flex align-items-center gap-2 mb-1">
+                <div className="rounded-2 vds-insight-icon vds-insight-icon--purple">
+                  <i className="bi bi-person-check-fill" />
+                </div>
+                <span className="vds-insight-label vds-insight-label--purple">My Groups</span>
+                <span className="vds-insight-value vds-insight-value--purple">
+                  {(anyFilterActive ? cardCount : insightMyCount) ?? <span className="vds-insight-skeleton vds-insight-skeleton--purple" />}
+                </span>
+              </div>
+              <div className="vds-insight-body vds-insight-body--purple">
+                <div className="vds-insight-stat-label">Admin</div>
+                <div className="vds-insight-stat-label vds-insight-stat-label--right">Member only</div>
+                <div className="vds-insight-stat-value vds-insight-stat-value--purple">{cardAdminCount ?? '…'}</div>
+                <div className="vds-insight-stat-value vds-insight-stat-value--purple vds-insight-stat-value--right">{cardMemberOnly ?? '…'}</div>
+                <div className="vds-insight-footnote">
+                  <i className="bi bi-info-circle me-1 vds-icon-purple-dim" />
+                  Groups you are a member or admin of
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* I Manage */}
