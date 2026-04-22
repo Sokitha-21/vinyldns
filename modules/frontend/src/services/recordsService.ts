@@ -97,4 +97,29 @@ export const recordsService = {
       urlBuilder(`/zones/${zoneId}/recordsetchanges`, params)
     );
   },
+
+  getRecordSuggestions(term: string) {
+    const params = { searchString: term, maxItems: 10 };
+    return api.get<Array<{ name: string; zone: string; type: string }>>(
+      urlBuilder('/recordsets/search', params)
+    );
+  },
+
+  listRecordSetChangeHistory(
+    zoneId: string,
+    limit: number,
+    startFrom?: string,
+    fqdn?: string,
+    recordType?: string
+  ) {
+    const params = {
+      maxItems: limit,
+      startFrom,
+      fqdn: fqdn || undefined,
+      recordType: recordType || undefined,
+    };
+    return api.get<{ changes: any[]; hasMore: boolean }>(
+      urlBuilder(`/recordsetchange/history`, params)
+    );
+  },
 };
