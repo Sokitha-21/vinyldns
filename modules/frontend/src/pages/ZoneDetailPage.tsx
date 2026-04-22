@@ -1040,8 +1040,9 @@ export function ZoneDetailPage() {
                 isZoneAdmin={isZoneAdmin}
                 userGroupIds={userGroupIds}
                 onRequestOwnership={(rec) => {
-                  setOwnershipGroupId(userGroupIds[0] ?? '');
-                  setOwnershipModal({ mode: rec.ownerGroupId ? 'request' : 'claim', record: rec });
+                  const mode = rec.ownerGroupId ? 'request' : 'claim';
+                  setOwnershipGroupId('');
+                  setOwnershipModal({ mode, record: rec });
                 }}
                 onCloseOwnershipRequest={(rec) => cancelOwnershipRequestMutation.mutate(rec)}
                 onApproveOwnership={(rec) => approveOwnershipMutation.mutate(rec)}
@@ -1166,7 +1167,11 @@ export function ZoneDetailPage() {
                         style={{ borderRadius: '0.6rem' }}
                       >
                         <option value="">— Select your group —</option>
-                        {(myGroupsData ?? []).map((g) => (
+                        {(myGroupsData ?? [])
+                          .filter((g) =>
+                            ownershipModal.mode === 'claim' || g.id !== ownershipModal.record.ownerGroupId
+                          )
+                          .map((g) => (
                           <option key={g.id} value={g.id}>{g.name}</option>
                         ))}
                       </select>
