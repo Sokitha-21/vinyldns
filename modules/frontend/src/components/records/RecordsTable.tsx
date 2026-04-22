@@ -167,8 +167,8 @@ function resolveOwnershipCapability(
   }
 
   // No active transfer request
-  if (isOwner) return 'NONE';
-  if (isSuper || isSupport || isZoneAdmin) return 'REQUEST';
+  const hasNonOwnerGroup = userGroupIds.some((gid) => gid !== record.ownerGroupId);
+  if (isOwner && !hasNonOwnerGroup && !isSuper && !isSupport) return 'NONE';
   return 'REQUEST';
 }
 
