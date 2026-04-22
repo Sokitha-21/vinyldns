@@ -15,16 +15,21 @@
  */
 
 export type DnsChangeStatus =
-  | 'Pending'
-  | 'PendingReview'
-  | 'Complete'
-  | 'Failed'
-  | 'Cancelled'
-  | 'PartialFailure'
-  | 'Scheduled';
+  | "Pending"
+  | "PendingReview"
+  | "Complete"
+  | "Failed"
+  | "Cancelled"
+  | "PartialFailure"
+  | "Scheduled";
+
+export interface ValidationError {
+  message?: string;
+  [key: string]: unknown;
+}
 
 export interface SingleChange {
-  changeType: 'Add' | 'DeleteRecordSet' | 'DeleteRecord';
+  changeType: "Add" | "DeleteRecordSet" | "DeleteRecord";
   inputName: string;
   type: string;
   ttl?: number;
@@ -34,9 +39,13 @@ export interface SingleChange {
   zoneName?: string;
   zoneId?: string;
   recordSetId?: string;
+  /** Client-side errors array (string or object with .message) */
   errors?: string[];
+  /** Server-side validation errors returned in the batch change response */
+  validationErrors?: Array<ValidationError | string>;
   id: string;
   systemMessage?: string;
+  outstandingErrors?: boolean;
 }
 
 export interface DnsChange {
@@ -85,7 +94,17 @@ export interface DnsChangeListResponse {
 
 export interface CreateDnsChangeRequest {
   comments?: string;
-  changes: Omit<SingleChange, 'id' | 'status' | 'recordName' | 'zoneName' | 'zoneId' | 'recordSetId' | 'errors' | 'systemMessage'>[];
+  changes: Omit<
+    SingleChange,
+    | "id"
+    | "status"
+    | "recordName"
+    | "zoneName"
+    | "zoneId"
+    | "recordSetId"
+    | "errors"
+    | "systemMessage"
+  >[];
   ownerGroupId?: string;
   scheduledTime?: string;
 }

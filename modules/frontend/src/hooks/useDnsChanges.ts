@@ -14,56 +14,92 @@
  * limitations under the License.
  */
 
-import { useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { dnsChangeService } from '../services/dnsChangeService';
-import { usePaging } from './usePaging';
-import { useAlerts } from '../contexts/AlertContext';
-import type { CreateDnsChangeRequest } from '../types/dnsChange';
+import { useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { dnsChangeService } from "../services/dnsChangeService";
+import { usePaging } from "./usePaging";
+import { useAlerts } from "../contexts/AlertContext";
+import type { CreateDnsChangeRequest } from "../types/dnsChange";
 
-export function useDnsChanges(ignoreAccess = false) {
-  const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom,
-    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(25);
+export function useDnsChanges(
+  ignoreAccess = false,
+  submitterName?: string,
+  approvalStatus?: string,
+  dateTimeRangeStart?: string,
+  dateTimeRangeEnd?: string,
+) {
+  const {
+    paging,
+    nextPageUpdate,
+    prevPageUpdate,
+    getPrevStartFrom,
+    nextPageEnabled,
+    prevPageEnabled,
+    getPanelTitle,
+    resetPaging,
+  } = usePaging(25);
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['dnschanges', ignoreAccess, paging.next],
+    queryKey: [
+      "dnschanges",
+      ignoreAccess,
+      paging.next,
+      submitterName,
+      approvalStatus,
+      dateTimeRangeStart,
+      dateTimeRangeEnd,
+    ],
     queryFn: async () => {
       const res = await dnsChangeService.getBatchChanges(
         paging.maxItems,
         paging.next as number | undefined,
-        ignoreAccess
+        ignoreAccess,
+        approvalStatus,
+        submitterName,
+        dateTimeRangeStart,
+        dateTimeRangeEnd,
       );
       return res.data;
     },
   });
 
   const createMutation = useMutation({
-    mutationFn: ({ data, allowManualReview }: { data: CreateDnsChangeRequest; allowManualReview?: boolean }) =>
-      dnsChangeService.createBatchChange(data, allowManualReview),
+    mutationFn: ({
+      data,
+      allowManualReview,
+    }: {
+      data: CreateDnsChangeRequest;
+      allowManualReview?: boolean;
+    }) => dnsChangeService.createBatchChange(data, allowManualReview),
     onSuccess: () => {
-      addAlert('success', 'Batch change submitted successfully');
-      void queryClient.invalidateQueries({ queryKey: ['dnschanges'] });
+      addAlert("success", "Batch change submitted successfully");
+      void queryClient.invalidateQueries({ queryKey: ["dnschanges"] });
     },
     onError: (err: unknown) => {
-      const error = err as { response?: { data?: unknown; status?: number; statusText?: string } };
+      const error = err as {
+        response?: { data?: unknown; status?: number; statusText?: string };
+      };
       const status = error.response?.status;
       const responseData = error.response?.data;
       // 400 + array = per-row errors; the caller (DnsChangeNewPage) shows inline row errors + its own alert
       if (status === 400 && Array.isArray(responseData)) return;
-      addAlert('danger', `Error submitting DNS change: HTTP ${status ?? 0} ${error.response?.statusText ?? ''}`);
+      addAlert(
+        "danger",
+        `Error submitting DNS change: HTTP ${status ?? 0} ${error.response?.statusText ?? ""}`,
+      );
     },
   });
 
   const cancelMutation = useMutation({
     mutationFn: (id: string) => dnsChangeService.cancelBatchChange(id),
     onSuccess: () => {
-      addAlert('success', 'Batch change cancelled');
-      void queryClient.invalidateQueries({ queryKey: ['dnschanges'] });
+      addAlert("success", "Batch change cancelled");
+      void queryClient.invalidateQueries({ queryKey: ["dnschanges"] });
     },
     onError: () => {
-      addAlert('danger', 'Failed to cancel batch change');
+      addAlert("danger", "Failed to cancel batch change");
     },
   });
 
@@ -71,11 +107,11 @@ export function useDnsChanges(ignoreAccess = false) {
     mutationFn: ({ id, comment }: { id: string; comment?: string }) =>
       dnsChangeService.approveBatchChange(id, comment),
     onSuccess: () => {
-      addAlert('success', 'Batch change approved');
-      void queryClient.invalidateQueries({ queryKey: ['dnschanges'] });
+      addAlert("success", "Batch change approved");
+      void queryClient.invalidateQueries({ queryKey: ["dnschanges"] });
     },
     onError: () => {
-      addAlert('danger', 'Failed to approve batch change');
+      addAlert("danger", "Failed to approve batch change");
     },
   });
 
@@ -83,11 +119,11 @@ export function useDnsChanges(ignoreAccess = false) {
     mutationFn: ({ id, comment }: { id: string; comment?: string }) =>
       dnsChangeService.rejectBatchChange(id, comment),
     onSuccess: () => {
-      addAlert('success', 'Batch change rejected');
-      void queryClient.invalidateQueries({ queryKey: ['dnschanges'] });
+      addAlert("success", "Batch change rejected");
+      void queryClient.invalidateQueries({ queryKey: ["dnschanges"] });
     },
     onError: () => {
-      addAlert('danger', 'Failed to reject batch change');
+      addAlert("danger", "Failed to reject batch change");
     },
   });
 
@@ -108,6 +144,7 @@ export function useDnsChanges(ignoreAccess = false) {
     nextPageEnabled,
     prevPageEnabled,
     getPanelTitle,
+    resetPaging,
     createBatchChange: createMutation.mutate,
     cancelBatchChange: cancelMutation.mutate,
     approveBatchChange: approveMutation.mutate,
