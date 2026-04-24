@@ -26,10 +26,6 @@ export const groupsService = {
     return api.get<Group>(`/groups/${id}`);
   },
 
-  listEmailDomains() {
-    return api.get<string[]>('/groups/valid/domains');
-  },
-
   deleteGroup(id: string) {
     return api.delete(`/groups/${id}`);
   },

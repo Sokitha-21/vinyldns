@@ -46,11 +46,9 @@ export function GroupDetailPage() {
   const [copySuccess, setCopySuccess] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [groupModal, setGroupModal] = useState<{ title: string; group: Group } | null>(null);
-  // ── Change History time filter ──────────────────────────────────────────────
   const [chTimeRange, setChTimeRange] = useState<'all' | '1d' | '7d' | '30d' | '90d' | 'custom'>('all');
   const [chDateFrom, setChDateFrom] = useState('');
   const [chDateTo, setChDateTo] = useState('');
-  // ── Change History sort ────────────────────────────────────────────────────
   const [chTimeSort, setChTimeSort] = useState<SortDir>(null);
 
   const { data: group, isLoading } = useQuery({
@@ -71,7 +69,6 @@ export function GroupDetailPage() {
     enabled: Boolean(id),
   });
 
-  // Mirrors old portal removeMember: filter from both arrays → updateGroup (NOT delete endpoint)
   const removeMemberMutation = useMutation({
     mutationFn: async (memberId: string) => {
       const currentGroup = (await groupsService.getGroup(id)).data;
@@ -87,7 +84,6 @@ export function GroupDetailPage() {
     onError: () => addAlert('danger', 'Failed to remove member'),
   });
 
-  // Mirrors old portal addMember: lookup by username → updateGroup
   const addMemberMutation = useMutation({
     mutationFn: async ({ login, makeAdmin }: { login: string; makeAdmin: boolean }) => {
       const userRes = await profileService.getUserDataByUsername(login);
@@ -114,7 +110,6 @@ export function GroupDetailPage() {
     onError: () => addAlert('danger', 'Failed to add member — check the username and try again'),
   });
 
-  // Mirrors old portal toggleAdmin: update group admins array → updateGroup
   const toggleAdminMutation = useMutation({
     mutationFn: async ({ memberId, makeAdmin }: { memberId: string; makeAdmin: boolean }) => {
       const currentGroup = (await groupsService.getGroup(id)).data;
@@ -133,14 +128,11 @@ export function GroupDetailPage() {
     onError: () => addAlert('danger', 'Failed to update admin status'),
   });
 
-  // Primary: use server-computed isAdmin from member list (most reliable).
-  // Fallback: check group.admins directly. Super-fallback: isSuper.
   const currentUserMember = memberListData?.find((m) => m.id === profile?.id);
   const isGroupAdmin =
     currentUserMember?.isAdmin ??
     ((group?.admins.some((a) => a.id === profile?.id) ?? false) || (profile?.isSuper ?? false));
   const isMember = group?.members.some((m) => m.id === profile?.id) ?? false;
-  // Mirrors old portal canSeeGroup: isMember || isSupport || isSuper
   const showChangeHistory = isGroupAdmin || isMember || (profile?.isSupport ?? false);
 
   const { data: changesData, isLoading: changesLoading, refetch: refetchChanges } = useQuery({
@@ -174,7 +166,6 @@ export function GroupDetailPage() {
     }
   };
 
-  // ── Compute time-filtered changes ──────────────────────────────────────────
   const filteredChanges = (() => {
     if (!changesData || chTimeRange === 'all') return changesData ?? [];
     const now = Date.now();
@@ -214,7 +205,7 @@ export function GroupDetailPage() {
         </Link>
       </div>
 
-      {/* ── Email validation notice (mirrors old portal) ── */}
+      {/* ── Email validation notice ── */}
       <div className="vds-email-warning">
         <i className="bi bi-info-circle-fill fs-6" style={{ flexShrink: 0 }} />
         <span>Updates to group require a valid email. If group email is invalid please enter a valid email.</span>
@@ -300,7 +291,7 @@ export function GroupDetailPage() {
             )}
           </div>
 
-          {/* ── Add Member card (admin only, shown on demand) ── */}
+          {/* ── Add Member card ── */}
           {isGroupAdmin && showAddForm && (
             <div className="mx-4 my-3 rounded-3 p-3 vds-add-member-form">
               <div className="d-flex align-items-center gap-2 mb-3">

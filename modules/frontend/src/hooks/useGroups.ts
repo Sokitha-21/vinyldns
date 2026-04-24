@@ -40,9 +40,8 @@ export function useGroups(ignoreAccess = false, query = '') {
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['groups', ignoreAccess, query, paging.next],
-    staleTime: 0,
     queryFn: async () => {
       const res = await groupsService.getGroupsAbridged(
         paging.maxItems,
@@ -99,13 +98,11 @@ export function useGroups(ignoreAccess = false, query = '') {
   return {
     groups: data?.groups ?? [],
     isLoading,
-    query,
     nextPage,
     prevPage,
     nextPageEnabled,
     prevPageEnabled,
     getPanelTitle,
-    refetch,
     resetPaging,
     createGroup: createGroupMutation.mutate,
     updateGroup: updateGroupMutation.mutate,

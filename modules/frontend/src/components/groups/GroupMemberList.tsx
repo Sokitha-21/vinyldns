@@ -60,8 +60,6 @@ export function GroupMemberList({ members, admins, onRemove, onToggleAdmin, canM
             .slice()
             .sort((a, b) => (a.userName ?? '').localeCompare(b.userName ?? ''))
             .map((member) => {
-              // Use server-computed isAdmin (from MemberInfo) as primary source;
-              // fall back to adminIds set if not present.
               const isAdminMember = member.isAdmin ?? adminIds.has(member.id);
               return (
                 <tr key={member.id}>
@@ -70,7 +68,6 @@ export function GroupMemberList({ members, admins, onRemove, onToggleAdmin, canM
                   <td className="vds-table-secondary">{member.email ?? '—'}</td>
                   <td>
                     <div className="form-check form-switch mb-0">
-                      {/* Mirrors old portal: ng-disabled="!isGroupAdmin" — no last-admin UI guard */}
                       <input
                         className="form-check-input"
                         type="checkbox"
@@ -86,7 +83,6 @@ export function GroupMemberList({ members, admins, onRemove, onToggleAdmin, canM
                       {member.lockStatus ?? 'Active'}
                     </span>
                   </td>
-                  {/* Mirrors old portal: ng-if="isGroupAdmin" — delete always clickable when shown */}
                   {canManage && (
                     <td>
                       <button

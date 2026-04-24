@@ -32,10 +32,8 @@ export function GroupsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editGroup, setEditGroup] = useState<Group | null>(null);
   const [groupToDelete, setGroupToDelete] = useState<Group | null>(null);
-  // Per-tab committed search query (only applied on Search btn / Enter)
   const [myGroupsQuery, setMyGroupsQuery] = useState('');
   const [allGroupsQuery, setAllGroupsQuery] = useState('');
-  // What is currently typed in the box (uncommitted until Search/Enter)
   const [searchInput, setSearchInput] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -68,15 +66,6 @@ export function GroupsPage() {
     resetPaging,
   } = useGroups(ignoreAccess, activeQuery);
 
-  const { data: validEmailDomains } = useQuery({
-    queryKey: ['email-domains'],
-    queryFn: async () => {
-      const res = await groupsService.listEmailDomains();
-      return Array.isArray(res.data) ? res.data : [];
-    },
-  });
-
-  // ── Insight cards data ──
   const { data: insightMyGroups } = useQuery({
     queryKey: ['insight-my-groups'],
     queryFn: async () => {
@@ -123,12 +112,10 @@ export function GroupsPage() {
     ? insightMyGroups.filter((g) => g.admins.some((a) => a.id === profile?.id) && g.admins.length === 1).length
     : null;
   useEffect(() => {
-    // Skip suggestion fetch if value was just set by selecting a suggestion
     if (justSelectedRef.current) {
       justSelectedRef.current = false;
       return;
     }
-    // Show suggestions only for name-style input (no @ in it)
     if (searchInput.includes('@') || searchInput.length < 1) {
       setSuggestions([]);
       setShowSuggestions(false);
@@ -148,7 +135,6 @@ export function GroupsPage() {
     return () => clearTimeout(timer);
   }, [searchInput, ignoreAccess]);
 
-  // Close suggestions and role dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)) {
@@ -164,9 +150,7 @@ export function GroupsPage() {
 
   const handleSearch = useCallback(() => {
     setShowSuggestions(false);
-    // Always filter client-side by both name and email from insight pool
     setEmailFilter(searchInput);
-    // Also fire API name search (for the paginated table when no email filter)
     if (!searchInput.includes('@')) {
       if (ignoreAccess) setAllGroupsQuery(searchInput);
       else setMyGroupsQuery(searchInput);
@@ -181,7 +165,6 @@ export function GroupsPage() {
     justSelectedRef.current = true;
     setSearchInput(name);
     setShowSuggestions(false);
-    // Immediately apply the filter with the clicked name
     setEmailFilter(name);
     if (ignoreAccess) setAllGroupsQuery(name);
     else setMyGroupsQuery(name);
@@ -190,7 +173,6 @@ export function GroupsPage() {
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      // Always commit search on Enter regardless of suggestion state
       setShowSuggestions(false);
       handleSearch();
       return;
@@ -215,17 +197,14 @@ export function GroupsPage() {
     );
   };
 
-  // Reset paging + sync search box when switching tabs
   useEffect(() => {
     resetPaging();
-    // Show the committed query for the tab we just switched to
     setSearchInput(ignoreAccess ? allGroupsQuery : myGroupsQuery);
     setSuggestions([]);
     setShowSuggestions(false);
-  }, [ignoreAccess]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ignoreAccess]);
 
   const handleRefresh = useCallback(() => {
-    // Clear committed query and search box for the current tab
     if (ignoreAccess) {
       setAllGroupsQuery('');
     } else {
@@ -243,7 +222,6 @@ export function GroupsPage() {
   const handleTabSwitch = useCallback((newIgnoreAccess: boolean) => {
     if (newIgnoreAccess === ignoreAccess) return;
     setTabFading(true);
-    // Wait for fade-out, then swap tab and fade back in
     setTimeout(() => {
       setIgnoreAccess(newIgnoreAccess);
       setRoleFilter(null);
@@ -273,7 +251,6 @@ export function GroupsPage() {
     });
   };
 
-  // Mirrors old portal's groupAdmin() check
   const isGroupAdmin = (group: Group): boolean => {
     const isAdmin = group.admins.some((a) => a.id === profile?.id);
     return Boolean(isAdmin || profile?.isSuper);
@@ -288,7 +265,6 @@ export function GroupsPage() {
     }
   };
 
-  // ── Computed displayed groups (email filter + role filter applied client-side) ──
   const insightSource = ignoreAccess ? (insightAllGroups ?? []) : (insightMyGroups ?? []);
   const emailFilteredGroups = emailFilter
     ? insightSource.filter((g) =>
@@ -309,9 +285,6 @@ export function GroupsPage() {
 
   const roleFilterLabel: Record<string, string> = { admin: 'Admin', member: 'Member', norole: 'No Role' };
 
-  // ── Filter-aware insight card stats ──
-  // When any filter is active, derive counts from the filtered set (full insightSource-based).
-  // When no filter, fall back to the raw insightMyGroups/insightAllGroups computed stats.
   const anyFilterActive = !!(roleFilter || emailFilter);
   const cardAdminFiltered = displayedGroups.filter(
     (g) => g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper)
@@ -328,7 +301,7 @@ export function GroupsPage() {
       g.admins.length === 1
   ).length;
 
-  // Values to render in each card
+  
   const cardCount      = anyFilterActive ? displayedGroups.length  : (ignoreAccess ? insightAllCount  : insightMyCount);
   const cardAdminCount = anyFilterActive ? cardAdminFiltered        : insightMgdCount;
   const cardMemberOnly = anyFilterActive ? cardMemberOnlyFiltered   : insightMemberOnlyCount;
@@ -338,7 +311,6 @@ export function GroupsPage() {
 
   return (
     <div>
-      {/* ── Breadcrumb ── */}
       {/* ── Page header ── */}
       <div className="rounded-3 mb-4 d-flex justify-content-between align-items-center vds-page-header">
         <div className="d-flex align-items-center gap-3">
@@ -371,7 +343,6 @@ export function GroupsPage() {
               onCancel={() => setShowForm(false)}
               isSubmitting={isCreating}
               mode="create"
-              validEmailDomains={validEmailDomains ?? []}
             />
           </div>
         </div>
@@ -390,7 +361,6 @@ export function GroupsPage() {
               onCancel={() => setEditGroup(null)}
               isSubmitting={isUpdating}
               mode="edit"
-              validEmailDomains={validEmailDomains ?? []}
             />
           </div>
         </div>
@@ -454,7 +424,7 @@ export function GroupsPage() {
                 )}
               </div>
 
-              {/* ── Search (Enter to search, no button) ── */}
+              {/* ── Search ── */}
               <div className="position-relative vds-search-wrapper" ref={suggestionsRef}>
                 <div className="input-group input-group-sm vds-search-group" style={{ width: 220, flexShrink: 1 }}>
                   <span className="input-group-text border-0 bg-transparent pe-1">
@@ -588,7 +558,7 @@ export function GroupsPage() {
           </div>
         </div>
 
-        {/* My Groups tab: Groups to Explore | All Groups tab: My Groups */}
+        {/* My Groups tab */}
         <div className="col-6 col-md-3 d-flex">
           {!ignoreAccess ? (
             /* ── My Groups tab: Member Only ── */
@@ -727,7 +697,7 @@ export function GroupsPage() {
           )}
         </>
       )}
-      </div>{/* end vds-tab-content */}
+      </div>
       {/* ── Delete confirmation modal ── */}
       {groupToDelete && (
         <div

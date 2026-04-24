@@ -30,7 +30,6 @@ interface GroupFormProps {
   onCancel: () => void;
   isSubmitting: boolean;
   mode: 'create' | 'edit';
-  validEmailDomains?: string[];
 }
 
 export function GroupForm({
@@ -39,7 +38,6 @@ export function GroupForm({
   onCancel,
   isSubmitting,
   mode,
-  validEmailDomains = [],
 }: GroupFormProps) {
   const { register, handleSubmit, reset, formState: { errors } } = useForm<GroupFormData>({
     defaultValues: {
