@@ -101,10 +101,6 @@ export function ZonesPage() {
   const myAbandoned  = useDeletedZones(false);
   const allAbandoned = useDeletedZones(true);
 
-  // Which hook is active?
-  const activeHook =
-    mainTab === 'myZones'   ? myZones :
-    mainTab === 'allZones'  ? allZones : null;
   const activeAbandonedHook =
     abandonedSubTab === 'myAbandoned' ? myAbandoned : allAbandoned;
 
@@ -151,7 +147,6 @@ export function ZonesPage() {
   });
   const insightAbandonedCount = insightAbandonedData?.length ?? null;
 
-  // Raw platform-wide counts kept as reference anchors (never filtered)
   const insightMyCount  = insightMyZones?.length ?? null;
   const insightAllCount = insightAllZones?.length ?? null;
 
@@ -164,10 +159,8 @@ export function ZonesPage() {
     return m > 0 ? `${y}y ${m}mo` : `${y}y`;
   };
 
-  // ── Client-side filtering (email + status + access) ───────────────────────────
   const insightSource = mainTab === 'allZones' ? (insightAllZones ?? []) : (insightMyZones ?? []);
   const zonesForTab   = mainTab === 'allZones' ? allZones.zones : myZones.zones;
-  // Use insight pool when loaded; fall back to current page data so options always populate
   const filterSource  = insightSource.length > 0 ? insightSource : zonesForTab;
 
   const byGroupActive = mainTab === 'allZones' ? allZonesByGroup : myZonesByGroup;
@@ -204,7 +197,7 @@ export function ZonesPage() {
         const matchesTime = isWithinRange(z.latestSync, zoneTimeRange, zoneDateFrom, zoneDateTo);
         return matchesSearch && matchesStatus && matchesAccess && matchesTime;
       })
-    : null; // null = use paginated API results
+    : null;
 
   const renderedZones = displayedZones ?? zonesForTab;
 
@@ -235,15 +228,11 @@ export function ZonesPage() {
       })
     : abandonedZonesRaw;
 
-  // ── Card source — reactive to tab + active filters ────────────────────────
-  // Abandoned tab: use the filtered abandoned Zone objects
-  // Other tabs: use client-side filtered result, or fall back to full insight pool
   const cardSource: Zone[] =
     mainTab === 'abandonedZones'
       ? displayedAbandonedZones.map((i) => i.zoneChange.zone)
       : (displayedZones ?? insightSource);
 
-  // True while the backing query hasn't returned yet
   const cardLoading =
     mainTab === 'abandonedZones' ? insightAbandonedData === undefined
     : mainTab === 'allZones'     ? insightAllZones === undefined
@@ -269,7 +258,6 @@ export function ZonesPage() {
     return times.length ? Math.floor((Date.now() - Math.min(...times)) / 86400000) : null;
   })();
 
-  // Context badge text for card headers
   const cardContextLabel =
     mainTab === 'abandonedZones' ? 'Abandoned'
     : mainTab === 'allZones'     ? 'All Zones'
@@ -281,7 +269,6 @@ export function ZonesPage() {
   const skeletonPurple = <span className="vds-insight-skeleton vds-insight-skeleton--purple" />;
   const skeletonAmber  = <span className="vds-insight-skeleton vds-insight-skeleton--amber" />;
 
-  // Reference row labels/values for card 1 body (contextual)
   const card1RefLabel  = mainTab === 'abandonedZones' ? 'Total abandoned' : 'Platform';
   const card1ViewLabel = mainTab === 'abandonedZones' ? 'Showing' : 'In view';
   const card1RefCount  = mainTab === 'abandonedZones' ? insightAbandonedCount : insightAllCount;
@@ -294,7 +281,6 @@ export function ZonesPage() {
     PendingUpdate: 'Pending Update',
   };
 
-  // Options derived from filterSource — always populated once table data loads
   const availableStatuses = Array.from(new Set(filterSource.map((z) => z.status))) as string[];
   const hasShared  = filterSource.some((z) => z.shared);
   const hasPrivate = filterSource.some((z) => !z.shared);
@@ -331,13 +317,13 @@ export function ZonesPage() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
-  // ── Auto-switch abandoned sub-tab for non-super users ─────────────────────────────
+  
   useEffect(() => {
     if (profile && !canSeeAllAbandoned && abandonedSubTab === 'allAbandoned') {
       setAbandonedSubTab('myAbandoned');
     }
   }, [profile, canSeeAllAbandoned, abandonedSubTab]);
-  // ── Tab switching with fade ───────────────────────────────────────────────────
+  
   const handleTabSwitch = useCallback((tab: MainTab) => {
     if (tab === mainTab) return;
     setTabFading(true);
@@ -382,7 +368,6 @@ export function ZonesPage() {
   // ── Search handlers ───────────────────────────────────────────────────────────
   const handleMyZonesSearch = useCallback(() => {
     setEmailFilter(myZonesInput);
-    // Only send to API if not an email — API only supports name/group search
     if (!myZonesInput.includes('@')) setMyZonesQuery(myZonesInput);
     else setMyZonesQuery('');
     myZones.resetPaging();
@@ -390,14 +375,12 @@ export function ZonesPage() {
 
   const handleAllZonesSearch = useCallback(() => {
     setEmailFilter(allZonesInput);
-    // Only send to API if not an email — API only supports name/group search
     if (!allZonesInput.includes('@')) setAllZonesQuery(allZonesInput);
     else setAllZonesQuery('');
     allZones.resetPaging();
   }, [allZonesInput, allZones]);
 
   const handleAbandonedSearch = useCallback(() => {
-    // API only supports zone name filter — don't send email or admin group searches
     if (!abanByGroup && !abandonedInput.includes('@')) {
       setAbandonedQuery(abandonedInput);
     } else {

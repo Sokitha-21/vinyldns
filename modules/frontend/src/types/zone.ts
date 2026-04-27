@@ -54,8 +54,6 @@ export interface Zone {
   shared?: boolean;
   backendId?: string;
   recurrenceSchedule?: string;
-  accessLevel?: string;
-  account?: string;
 }
 
 export interface ZoneListResponse {

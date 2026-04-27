@@ -114,7 +114,6 @@ export function ZoneDetailPage() {
   const [zcGroupNames, setZcGroupNames] = useState<Record<string, string>>({});
   const [viewingRecordSet, setViewingRecordSet] = useState<{ label: string; rs: RecordSet } | null>(null);
   const [aclModal, setAclModal] = useState<{ rules: AclRule[] } | null>(null);
-  // ── Manage Zone tab state ──────────────────────────────────────────────────
   const navigate = useNavigate();
   const [zoneFormData, setZoneFormData] = useState<Zone | null>(null);
   const [zoneUpdateMode, setZoneUpdateMode] = useState<'idle' | 'confirm'>('idle');
@@ -124,7 +123,6 @@ export function ZoneDetailPage() {
   const [aclRuleModal, setAclRuleModal] = useState<AclRuleForm | null>(null);
   const [aclDeleteModal, setAclDeleteModal] = useState<{ index: number } | null>(null);
   const [zoneTabAlert, setZoneTabAlert] = useState<{ type: 'success' | 'danger'; msg: string } | null>(null);
-  // ── Zone Sync Schedule state ───────────────────────────────────────────────
   const [syncSchedule, setSyncSchedule] = useState('');
   const [syncScheduleRemove, setSyncScheduleRemove] = useState(false);
   const [syncScheduleMode, setSyncScheduleMode] = useState<'idle' | 'confirm'>('idle');
@@ -134,14 +132,10 @@ export function ZoneDetailPage() {
   const [localTimeInput, setLocalTimeInput] = useState('');
   const [utcTimeOutput, setUtcTimeOutput] = useState('');
   const [showUtcConverter, setShowUtcConverter] = useState(false);
-  // ── Panel open/close toggles ──────────────────────────────────────────────
   const [zoneInfoOpen, setZoneInfoOpen] = useState(true);
   const [zoneAclOpen, setZoneAclOpen] = useState(true);
   const [zoneSyncOpen, setZoneSyncOpen] = useState(true);
-  // ── Separate clipboard state for Record Changes tab ───────────────────────
   const [copiedRcChangeId, setCopiedRcChangeId] = useState<string | null>(null);
-
-  // ── Time filters ──────────────────────────────────────────────────────────
   const [recentRcTimeRange, setRecentRcTimeRange] = useState<TimeRange>('all');
   const [recentRcDateFrom, setRecentRcDateFrom] = useState('');
   const [recentRcDateTo, setRecentRcDateTo] = useState('');
@@ -163,10 +157,9 @@ export function ZoneDetailPage() {
     title: string;
     msg: string;
     icon: string;
-    accent: string;   // CSS colour for left border / icon
+    accent: string;   
   } | null>(null);
 
-  // ── Sort states ───────────────────────────────────────────────────────────
   const [recentRcDateSort, setRecentRcDateSort] = useState<SortDir>(null);
   const [rcTimeSort, setRcTimeSort] = useState<SortDir>(null);
   const [zcCreatedSort, setZcCreatedSort] = useState<SortDir>(null);
@@ -176,7 +169,6 @@ export function ZoneDetailPage() {
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const ttlDropdownRef = useRef<HTMLDivElement>(null);
 
-  // ── Zone data ──────────────────────────────────────────────────────────────
   const { data: zoneData, isLoading: zoneLoading } = useQuery({
     queryKey: ['zone', id],
     queryFn: async () => {
@@ -186,7 +178,6 @@ export function ZoneDetailPage() {
     enabled: Boolean(id),
   });
 
-  // ── Zone admin group membership check ────────────────────────────────────
   const { data: adminGroupData } = useQuery({
     queryKey: ['admin-group', zoneData?.adminGroupId],
     queryFn: async () => {
@@ -200,7 +191,6 @@ export function ZoneDetailPage() {
     adminGroupData?.members?.some((m) => m.id === profile.id)
   );
 
-  // ── For ZoneForm (edit tab) ────────────────────────────────────────────────
   const { data: groupsData } = useQuery({
     queryKey: ['all-groups'],
     queryFn: async () => {
@@ -210,7 +200,6 @@ export function ZoneDetailPage() {
     enabled: isZoneAdmin || Boolean(zoneData?.shared), // load for zone admins and shared zones
   });
 
-  // ── Current user's own groups (for ownership transfer checks) ─────────────
   const { data: myGroupsData } = useQuery({
     queryKey: ['my-groups', profile?.id],
     queryFn: async () => {
@@ -228,7 +217,6 @@ export function ZoneDetailPage() {
     },
   });
 
-  // ── Records hook ───────────────────────────────────────────────────────────
   const {
     records, isLoading: recordsLoading,
     nextPage: recordsNext, prevPage: recordsPrev,
@@ -332,8 +320,6 @@ export function ZoneDetailPage() {
 
   const claimOrRequestOwnershipMutation = useMutation({
     mutationFn: ({ record, groupId }: { record: RecordSet; groupId: string }) => {
-      // Always send 'Requested' — backend auto-converts to 'AutoApproved' when the record
-      // has no existing owner, and to 'PendingReview' when one already exists.
       return recordsService.updateRecordSet(id, record.id, {
         ...record,
         recordSetGroupChange: {
@@ -419,7 +405,7 @@ export function ZoneDetailPage() {
     },
   });
 
-  // ── Recent record changes (for Manage Records tab mini-panel) ─────────────
+  // ── Recent record changes ─────────────
   const { data: recentRcData } = useQuery({
     queryKey: ['record-changes-recent', id],
     queryFn: async () => {
@@ -473,12 +459,10 @@ export function ZoneDetailPage() {
   }, [zcData, zcNextUpdate]);
   const zcPrevPage = useCallback(() => { zcPrevUpdate(zcGetPrev()); }, [zcPrevUpdate, zcGetPrev]);
 
-  // ── Enrich zone changes: look up userName and adminGroupName ───────────────
   useEffect(() => {
     if (!zcData?.zoneChanges?.length) return;
     const changes = zcData.zoneChanges;
 
-    // Unique userIds not yet resolved
     const newUserIds = [...new Set(changes.map(c => c.userId))]
       .filter(uid => uid && uid !== 'system' && !zcUserNames[uid]);
     newUserIds.forEach(uid => {
@@ -487,7 +471,6 @@ export function ZoneDetailPage() {
         .catch(() => {}); // keep showing userId if lookup fails
     });
 
-    // Unique adminGroupIds not yet resolved
     const newGroupIds = [...new Set(changes.map(c => c.zone.adminGroupId))]
       .filter(gid => gid && !zcGroupNames[gid]);
     newGroupIds.forEach(gid => {
@@ -495,7 +478,6 @@ export function ZoneDetailPage() {
         .then(res => setZcGroupNames(prev => ({ ...prev, [gid]: res.data.name })))
         .catch(() => {});
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zcData]);
 
   // ── Outside-click for filter dropdowns ────────────────────────────────────
@@ -534,8 +516,6 @@ export function ZoneDetailPage() {
   const initials = (name: string) =>
     name.split(/[-_.]+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || name.slice(0, 2).toUpperCase();
 
-  // Feed zone name into topbar breadcrumb
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (zoneData) {
       setCrumbs([{ label: 'Zones', to: '/zones' }, { label: zoneData.name }]);
@@ -543,7 +523,6 @@ export function ZoneDetailPage() {
     return () => setCrumbs(null);
   }, [zoneData, setCrumbs]);
 
-  // ── Sync zoneFormData whenever live zone data changes ─────────────────────
   useEffect(() => {
     if (zoneData) {
       setZoneFormData({ ...zoneData });
@@ -552,7 +531,6 @@ export function ZoneDetailPage() {
       const cron = zoneData.recurrenceSchedule ?? '';
       setSyncSchedule(cron);
       setSyncScheduleRemove(false);
-      // Try to parse existing cron into visual builder: "0 MM HH ? * DAY1,DAY2"
       const parts = cron.split(' ');
       if (parts.length >= 6) {
         const h = parseInt(parts[2], 10);
@@ -592,7 +570,6 @@ export function ZoneDetailPage() {
         </Link>
       </div>
 
-      {/* ── Zone meta strip ── */}
       <div className="vds-zone-meta-strip mb-3">
         <div
           className="vds-zone-meta-item"
@@ -711,7 +688,7 @@ export function ZoneDetailPage() {
 
           {recordsLoading ? <LoadingSpinner /> : (
             <>
-              {/* ── Recent Record Changes (top of tab) ── */}
+              {/* ── Recent Record Changes ── */}
               {recentRcData?.recordSetChanges?.length ? (
                 <div className="vds-recent-changes-panel mb-3">
                   <div className="vds-recent-changes-panel__header">
@@ -827,7 +804,6 @@ export function ZoneDetailPage() {
               <div className="card mb-2 vds-toolbar-card">
                 <div className="card-body py-2 px-3">
                   <div className="d-flex gap-2 align-items-center flex-wrap">
-                    {/* Bold + fancy record count badge */}
                     <div className="vds-record-count-badge">
                       <i className="bi bi-file-earmark-text vds-record-count-badge__icon" />
                       <span className="vds-record-count-badge__num">
@@ -1472,7 +1448,6 @@ export function ZoneDetailPage() {
       {/* ── Manage Zone ── */}
       {activeTab === 'zone' && (
         <>
-          {/* Alert banner */}
           {zoneTabAlert && (
             <div className={`alert alert-${zoneTabAlert.type} alert-dismissible d-flex align-items-center gap-2 mb-3`} role="alert">
               <i className={`bi ${zoneTabAlert.type === 'success' ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'}`} />
@@ -1511,7 +1486,6 @@ export function ZoneDetailPage() {
 
             {zoneInfoOpen && (
             <div className="p-4">
-              {/* ─── READ-ONLY view (non-admin) ─── */}
               {!isZoneAdmin && zoneData && (
                 <div className="row g-4">
                   {[
@@ -1804,9 +1778,8 @@ export function ZoneDetailPage() {
                 </>
               )}
             </div>
-            )} {/* end zoneInfoOpen body */}
+            )} 
 
-            {/* Zone Info footer — only for admins */}
             {zoneInfoOpen && isZoneAdmin && (
             <div className="vds-manage-zone-footer">
               {zoneUpdateMode === 'idle' ? (
@@ -1866,7 +1839,6 @@ export function ZoneDetailPage() {
             )}
           </div>
 
-          {/* ── Zone Access Rules Panel (zone admins only) ── */}
           {isZoneAdmin && (
           <div className="vds-recent-changes-panel mt-4">
             <div className="vds-recent-changes-panel__header">
@@ -1975,9 +1947,9 @@ export function ZoneDetailPage() {
                 </tbody>
               </table>
             </div>
-            )} {/* end zoneAclOpen */}
+            )} 
           </div>
-          )} {/* end isZoneAdmin ACL panel */}
+          )} 
 
           {/* ── Zone Sync Schedule Panel (super users only) ── */}
           {isSuper && (
@@ -1997,7 +1969,6 @@ export function ZoneDetailPage() {
               </div>
               {zoneSyncOpen && (              <>
               <div className="p-4">
-                {/* ─── Day of week selector ─── */}
                 <div className="mb-4">
                   <label className="vds-zone-form__label d-flex align-items-center gap-2">
                     <i className="bi bi-calendar-week" />Run on Days
@@ -2053,7 +2024,6 @@ export function ZoneDetailPage() {
                   </div>
                 </div>
 
-                {/* ─── Time selector ─── */}
                 <div className="row g-3 mb-4">
                   <div className="col-sm-4">
                     <label className="vds-zone-form__label d-flex align-items-center gap-2">
@@ -2261,7 +2231,7 @@ export function ZoneDetailPage() {
                 )}
               </div>
               </>
-              )} {/* end zoneSyncOpen */}
+              )} 
             </div>
           )}
 

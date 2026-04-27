@@ -88,10 +88,6 @@ export const zonesService = {
     return api.get<{ zone: Zone }>(`/zones/${id}`);
   },
 
-  getZoneByName(name: string) {
-    return api.get<{ zone: Zone }>(`/zones/name/${name}`);
-  },
-
   getZoneChanges(limit: number, startFrom: string | undefined, zoneId: string) {
     const params = { maxItems: limit, startFrom };
     return api.get<ZoneChangesResponse>(urlBuilder(`/zones/${zoneId}/changes`, params));
@@ -136,16 +132,6 @@ export const zonesService = {
     if (zone.created) zone.created = toApiIso(zone.created);
     if (zone.updated) zone.updated = toApiIso(zone.updated);
     if (zone.latestSync) zone.latestSync = toApiIso(zone.latestSync);
-    return zone;
-  },
-
-  checkBackendId(zone: Zone): Zone {
-    if (zone.backendId === '') zone.backendId = undefined;
-    return zone;
-  },
-
-  checkSharedStatus(zone: Zone): Zone {
-    zone.shared = String(zone.shared).toLowerCase() === 'true';
     return zone;
   },
 };

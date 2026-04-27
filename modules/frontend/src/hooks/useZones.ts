@@ -29,7 +29,7 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['zones', ignoreAccess, includeReverse, query, searchByAdminGroup, paging.next],
     queryFn: async () => {
       const res = await zonesService.getZones(
@@ -109,7 +109,6 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
     nextPageEnabled,
     prevPageEnabled,
     getPanelTitle,
-    refetch,
     resetPaging,
     createZone: createZoneMutation.mutate,
     updateZone: updateZoneMutation.mutate,
@@ -125,7 +124,7 @@ export function useDeletedZones(ignoreAccess = false) {
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
     nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['deleted-zones', ignoreAccess, query, paging.next],
     queryFn: async () => {
       const res = await zonesService.getDeletedZones(
@@ -164,7 +163,6 @@ export function useDeletedZones(ignoreAccess = false) {
     nextPageEnabled,
     prevPageEnabled,
     getPanelTitle,
-    refetch,
     resetPaging,
   };
 }
