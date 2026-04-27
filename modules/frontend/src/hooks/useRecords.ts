@@ -45,7 +45,7 @@ export function useRecords() {
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['recordsets', nameFilter, typeFilter, nameSort, ownerGroupFilter, paging.next],
     queryFn: async () => {
       const res = await recordsService.listRecordSetData(
@@ -128,7 +128,6 @@ export function useRecords() {
     nextPageEnabled,
     prevPageEnabled,
     getPanelTitle,
-    refetch,
     createRecord: createRecordMutation.mutate,
     updateRecord: updateRecordMutation.mutate,
     deleteRecord: deleteRecordMutation.mutate,
@@ -144,7 +143,7 @@ export function useZoneRecords(zoneId: string) {
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['zone-recordsets', zoneId, nameFilter, typeFilter, paging.next],
     queryFn: async () => {
       const res = await recordsService.listRecordSetsByZone(
@@ -213,7 +212,6 @@ export function useZoneRecords(zoneId: string) {
     records: data?.recordSets ?? [],
     isLoading,
     search,
-    refetch,
     nextPage,
     prevPage,
     nextPageEnabled,

@@ -88,8 +88,6 @@ export interface RecordSet {
   updated?: string;
   ttl: number;
   records: RecordData[];
-  account?: string;
-  accessLevel?: string;
   ownerGroupId?: string;
   ownerGroupName?: string;
   recordSetGroupChange?: RecordSetGroupChange;

@@ -110,7 +110,7 @@ export function RecordsPage() {
         <LoadingSpinner />
       ) : (
         <>
-          <RecordsTable records={records} showZone />
+          <RecordsTable records={records} />
           <Pagination
             onPrev={prevPage}
             onNext={nextPage}

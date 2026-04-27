@@ -49,7 +49,6 @@ interface RecordFormValues {
 }
 
 interface RecordFormProps {
-  zoneId: string;
   zoneName: string;
   initialData?: RecordSet;
   onSubmit: (data: Partial<RecordSet>) => void;
@@ -80,7 +79,6 @@ export function RecordForm({ zoneName, initialData, onSubmit, onCancel, mode, is
   const selectedType = watch('type');
   const { fields, append, remove, replace, update } = useFieldArray({ control, name: 'records' });
 
-  // When type changes, reset records to single empty record for that type
   useEffect(() => {
     if (mode === 'create') {
       replace([emptyRecord(selectedType)]);
@@ -248,7 +246,6 @@ export function RecordForm({ zoneName, initialData, onSubmit, onCancel, mode, is
                       type={selectedType}
                       index={idx}
                       register={register}
-                      control={control}
                       errors={errors}
                     />
                   </div>
@@ -305,12 +302,11 @@ export function RecordForm({ zoneName, initialData, onSubmit, onCancel, mode, is
   );
 }
 
-// ── Per-type data fields ──────────────────────────────────────────────────────
+
 function RecordDataFields({ type, index, register, errors }: {
   type: RecordType;
   index: number;
   register: ReturnType<typeof useForm<RecordFormValues>>['register'];
-  control: ReturnType<typeof useForm<RecordFormValues>>['control'];
   errors: ReturnType<typeof useForm<RecordFormValues>>['formState']['errors'];
 }) {
   const p = `records.${index}` as const;

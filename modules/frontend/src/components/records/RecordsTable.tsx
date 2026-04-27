@@ -17,7 +17,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { RecordSet, RecordData } from '../../types/record';
 
-// ── Props ─────────────────────────────────────────────────────────────────────
+
 export interface RecordsTableProps {
   records: RecordSet[];
   onEdit?: (record: RecordSet) => void;
@@ -42,7 +42,6 @@ export interface RecordsTableProps {
   onRejectOwnership?: (record: RecordSet) => void;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 const statusClass = (status: string) => {
   if (status === 'Active')        return 'vds-zone-status-badge--active';
   if (status === 'Inactive')      return 'vds-zone-status-badge--deleted';
@@ -85,7 +84,6 @@ function formatRecordData(r: RecordSet): React.ReactNode {
   );
 }
 
-// ── Ownership transfer status badge ───────────────────────────────────────────
 const OWNERSHIP_STATUS_META: Record<string, { cls: string; icon: string; label: string }> = {
   AutoApproved:     { cls: 'vds-ownership-badge--approved',  icon: 'bi-check-circle-fill',      label: 'Auto Approved'  },
   ManuallyApproved: { cls: 'vds-ownership-badge--approved',  icon: 'bi-check-circle-fill',      label: 'Approved'       },
@@ -109,7 +107,6 @@ function OwnershipStatusBadge({ status }: { status?: string }) {
   );
 }
 
-// ── Owner group cell ──────────────────────────────────────────────────────────
 function OwnerGroupCell({ record }: { record: RecordSet }) {
   if (!record.ownerGroupId) {
     return (
@@ -127,15 +124,14 @@ function OwnerGroupCell({ record }: { record: RecordSet }) {
   );
 }
 
-// ── Ownership capability logic ────────────────────────────────────────────────
 type OwnershipCapability =
-  | 'CLAIM'          // no owner – anyone can claim
-  | 'REQUEST'        // has owner, user can request transfer
-  | 'REQUESTOR'      // user's group raised the pending request → hourglass + cancel only
-  | 'APPROVER'       // user is in the current owner group → approve + reject (no cancel)
-  | 'ADMIN_APPROVER' // super/support/admin → approve + reject + cancel
-  | 'PENDING'        // PendingReview exists but user has no role → disabled hourglass
-  | 'NONE';          // record owned by user's group, no active transfer
+  | 'CLAIM'          
+  | 'REQUEST'        
+  | 'REQUESTOR'      
+  | 'APPROVER'      
+  | 'ADMIN_APPROVER' 
+  | 'PENDING'       
+  | 'NONE';          
 
 function resolveOwnershipCapability(
   record: RecordSet,
@@ -144,7 +140,6 @@ function resolveOwnershipCapability(
   const { isSuper, isSupport, isZoneAdmin, userGroupIds } = opts;
   const status = record.recordSetGroupChange?.ownershipTransferStatus ?? 'None';
 
-  // No owner → anyone can claim
   if (!record.ownerGroupId) return 'CLAIM';
 
   const isOwner = userGroupIds.includes(record.ownerGroupId);
@@ -162,17 +157,14 @@ function resolveOwnershipCapability(
     if (isOwner) return 'APPROVER';
     // Zone admin (not requestor, not owner): approve + reject + cancel
     if (isZoneAdmin) return 'ADMIN_APPROVER';
-    // Bystander with no role
     return 'PENDING';
   }
 
-  // No active transfer request
   const hasNonOwnerGroup = userGroupIds.some((gid) => gid !== record.ownerGroupId);
   if (isOwner && !hasNonOwnerGroup && !isSuper && !isSupport) return 'NONE';
   return 'REQUEST';
 }
 
-// ── Zone-type header pill ─────────────────────────────────────────────────────
 function ZoneTypePill({ isSharedZone }: { isSharedZone: boolean }) {
   return (
     <span className={`vds-records-zone-pill ${isSharedZone ? 'vds-records-zone-pill--shared' : 'vds-records-zone-pill--private'}`}>
@@ -182,9 +174,8 @@ function ZoneTypePill({ isSharedZone }: { isSharedZone: boolean }) {
   );
 }
 
-// ── Ownership actions dropdown (Approve / Reject / Cancel) ───────────────────
 interface OwnershipActionsDropdownProps {
-  canCancel: boolean;  /** When true: trigger is a hourglass (pending mode, only Cancel shown) */
+  canCancel: boolean;  
   isPendingOnly?: boolean;  onApprove?: () => void;
   onReject?: () => void;
   onCancel?: () => void;
@@ -264,7 +255,6 @@ function OwnershipActionsDropdown({ canCancel, isPendingOnly = false, onApprove,
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
 export function RecordsTable({
   records,
   onEdit,
@@ -290,11 +280,9 @@ export function RecordsTable({
   }
 
   const hasActions = !!(onEdit || onDelete || (isSharedZone && (onRequestOwnership || onApproveOwnership)));
-  const colCount = 5 + (isSharedZone ? 2 : 0) + (hasActions ? 1 : 0);
 
   return (
     <div className="vds-zones-table-wrap">
-      {/* Zone-type banner above the table */}
       <div className="vds-records-table-banner">
         <ZoneTypePill isSharedZone={isSharedZone} />
         <span className="vds-records-table-banner__hint">
@@ -364,7 +352,6 @@ export function RecordsTable({
                 {hasActions && (
                   <td>
                     <div className="d-flex gap-1 align-items-center flex-nowrap">
-                      {/* Standard edit / delete */}
                       {onEdit && (
                         <button
                           className="vds-action-btn vds-action-btn--edit"
@@ -384,10 +371,8 @@ export function RecordsTable({
                         </button>
                       )}
 
-                      {/* ── Ownership action buttons (shared zones only) ── */}
                       {isSharedZone && capability && capability !== 'NONE' && (
                         <>
-                          {/* Claim: no current owner */}
                           {capability === 'CLAIM' && onRequestOwnership && (
                             <button
                               className="vds-action-btn vds-action-btn--claim"
@@ -398,7 +383,6 @@ export function RecordsTable({
                             </button>
                           )}
 
-                          {/* Request: has owner, user wants a transfer */}
                           {capability === 'REQUEST' && onRequestOwnership && (
                             <button
                               className="vds-action-btn vds-action-btn--request"
@@ -409,7 +393,6 @@ export function RecordsTable({
                             </button>
                           )}
 
-                          {/* Requestor: user's group raised the request → amber hourglass dropdown with Cancel only */}
                           {capability === 'REQUESTOR' && (
                             <OwnershipActionsDropdown
                               isPendingOnly
@@ -418,7 +401,6 @@ export function RecordsTable({
                             />
                           )}
 
-                          {/* Bystander pending: nobody with a role, just waiting */}
                           {capability === 'PENDING' && (
                             <button
                               className="vds-action-btn vds-action-btn--pending"
@@ -429,7 +411,6 @@ export function RecordsTable({
                             </button>
                           )}
 
-                          {/* Current owner (not requestor): teal shield → Approve + Reject only */}
                           {capability === 'APPROVER' && (
                             <OwnershipActionsDropdown
                               canCancel={false}
@@ -438,7 +419,6 @@ export function RecordsTable({
                             />
                           )}
 
-                          {/* Super / support / zone admin: teal shield → Approve + Reject + Cancel */}
                           {capability === 'ADMIN_APPROVER' && (
                             <OwnershipActionsDropdown
                               canCancel
@@ -458,8 +438,6 @@ export function RecordsTable({
         </tbody>
       </table>
 
-      {/* Empty colgroup for correct column count */}
-      <div style={{ display: 'none' }} data-col-count={colCount} />
     </div>
   );
 }
