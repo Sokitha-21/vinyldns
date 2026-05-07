@@ -48,7 +48,7 @@ const inRange = (dateStr: string | undefined, range: TimeRange, from: string, to
   if (range === '30d') return ts >= now - 30 * 86400000;
   if (range === '90d') return ts >= now - 90 * 86400000;
   if (range === 'custom') {
-    if (from && ts < new Date(from).getTime()) return false;
+    if (from && ts < new Date(from + 'T00:00:00').getTime()) return false;
     if (to && ts > new Date(to + 'T23:59:59').getTime()) return false;
   }
   return true;

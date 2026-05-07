@@ -41,9 +41,9 @@ export function ZonesPage() {
   const canSeeAllAbandoned = isSuper || isSupport;
 
   // ── Tab state ────────────────────────────────────────────────────────────────
-  const [mainTab, setMainTab]           = useState<MainTab>('myZones');
+  const [mainTab, setMainTab] = useState<MainTab>('myZones');
   const [abandonedSubTab, setAbandonedSubTab] = useState<AbandonedSubTab>('myAbandoned');
-  const [tabFading, setTabFading]        = useState(false);
+  const [tabFading, setTabFading] = useState(false);
 
   // ── Modals / forms ───────────────────────────────────────────────────────────
   const [showConnectForm, setShowConnectForm] = useState(false);
@@ -73,16 +73,16 @@ export function ZonesPage() {
   const accessDropdownRef  = useRef<HTMLDivElement>(null);
 
   // ── Abandoned zone filters ────────────────────────────────────────────────────
-  const [abanStatusFilter,    setAbanStatusFilter]    = useState<string | null>(null);
-  const [abanAccessFilter,    setAbanAccessFilter]    = useState<'shared' | 'private' | null>(null);
-  const [abanByGroup,         setAbanByGroup]         = useState(false);
-  const [abanByFilter,        setAbanByFilter]        = useState<string | null>(null);
-  const [abanStatusDropdownOpen,    setAbanStatusDropdownOpen]    = useState(false);
-  const [abanAccessDropdownOpen,    setAbanAccessDropdownOpen]    = useState(false);
-  const [abanByDropdownOpen,        setAbanByDropdownOpen]        = useState(false);
-  const abanStatusDropdownRef     = useRef<HTMLDivElement>(null);
-  const abanAccessDropdownRef     = useRef<HTMLDivElement>(null);
-  const abanByDropdownRef         = useRef<HTMLDivElement>(null);
+  const [abanStatusFilter, setAbanStatusFilter] = useState<string | null>(null);
+  const [abanAccessFilter, setAbanAccessFilter] = useState<'shared' | 'private' | null>(null);
+  const [abanByGroup, setAbanByGroup] = useState(false);
+  const [abanByFilter, setAbanByFilter] = useState<string | null>(null);
+  const [abanStatusDropdownOpen, setAbanStatusDropdownOpen] = useState(false);
+  const [abanAccessDropdownOpen, setAbanAccessDropdownOpen] = useState(false);
+  const [abanByDropdownOpen, setAbanByDropdownOpen] = useState(false);
+  const abanStatusDropdownRef = useRef<HTMLDivElement>(null);
+  const abanAccessDropdownRef = useRef<HTMLDivElement>(null);
+  const abanByDropdownRef = useRef<HTMLDivElement>(null);
 
   // ── Client-side email filter ───────────────────────────────────────────────────
   const [emailFilter, setEmailFilter] = useState('');
@@ -175,7 +175,9 @@ export function ZonesPage() {
     if (range === '30d') return ts >= now - 30 * 86400000;
     if (range === '90d') return ts >= now - 90 * 86400000;
     if (range === 'custom') {
-      if (from && ts < new Date(from).getTime()) return false;
+      // Append T00:00:00 / T23:59:59 without timezone so JS parses as local (browser) time,
+      // not UTC — ensuring the filter respects the user's local timezone.
+      if (from && ts < new Date(from + 'T00:00:00').getTime()) return false;
       if (to && ts > new Date(to + 'T23:59:59').getTime()) return false;
     }
     return true;
@@ -420,7 +422,7 @@ export function ZonesPage() {
             <small className="text-muted">Manage DNS zones and their configurations</small>
           </div>
         </div>
-        {mainTab === 'myZones' && (
+        {mainTab === 'myZones' && isSuper && (
           <button
             className="btn btn-primary d-flex align-items-center gap-2 vds-btn-primary-shadow vds-btn-nav"
             onClick={() => setShowConnectForm((p) => !p)}
