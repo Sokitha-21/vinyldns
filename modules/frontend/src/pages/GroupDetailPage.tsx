@@ -172,8 +172,8 @@ export function GroupDetailPage() {
     return changesData.filter((c) => {
       const t = new Date(c.created).getTime();
       if (chTimeRange === 'custom') {
-        const from = chDateFrom ? new Date(chDateFrom).getTime() : 0;
-        const to = chDateTo ? new Date(chDateTo).getTime() + 86399999 : Infinity;
+        const from = chDateFrom ? new Date(chDateFrom + 'T00:00:00').getTime() : 0;
+        const to = chDateTo ? new Date(chDateTo + 'T23:59:59').getTime() : Infinity;
         return t >= from && t <= to;
       }
       const ms = chTimeRange === '1d' ? 86400000 : chTimeRange === '7d' ? 604800000 : chTimeRange === '30d' ? 2592000000 : chTimeRange === '90d' ? 7776000000 : 2592000000;
