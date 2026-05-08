@@ -25,15 +25,11 @@ export const portalConfig = {
   loginLinks: [
     {
       title: 'Documentation',
-      href: import.meta.env.VITE_DOCS_URL,
+      href: 'https://www.vinyldns.io/',
     },
     {
       title: 'API Docs',
-      href: import.meta.env.VITE_API_DOCS_URL,
-    },
-    {
-      title: import.meta.env.VITE_SUPPORT_TITLE || 'Support',
-      href: import.meta.env.VITE_SUPPORT_HREF,
+      href: 'https://www.vinyldns.io/api/',
     },
   ].filter((l) => Boolean(l.href)),
 } as const;

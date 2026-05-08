@@ -13,7 +13,6 @@ const versionSbt = readFileSync(
 const versionMatch = versionSbt.match(/:=\s*"([^"]+)"/);
 const appVersion = versionMatch ? versionMatch[1] : 'unknown';
 
-// https://vitejs.dev/config/
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),

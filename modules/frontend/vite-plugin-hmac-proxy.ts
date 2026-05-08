@@ -387,7 +387,6 @@ function ldapLookupUser(username: string): Promise<LdapUserDetails | null> {
 
 function ldapAuthenticate(username: string, password: string): Promise<LdapUserDetails> {
   const cfg = getConfig().ldap;
-  // Escape special characters in the username for use in an LDAP filter
   const safeUsername = username.replace(/[*\\()\x00]/g, '\\$&');
   const filter = `(${cfg.userAttr}=${safeUsername})`;
 
@@ -560,9 +559,7 @@ async function createUser(ldapDetails: LdapUserDetails): Promise<VinylUser> {
     secretKey,
     created,
     id,
-    // Mirror MySqlUserRepository.save() → user.copy(isSuper = true):
-    // every user is treated as a super user, matching old portal behaviour.
-    isSuper:    true,
+    isSuper:    false,
     lockStatus: 'Unlocked',
     firstName:  ldapDetails.firstName,
     lastName:   ldapDetails.lastName,
@@ -591,8 +588,7 @@ async function createUser(ldapDetails: LdapUserDetails): Promise<VinylUser> {
     firstName:  ldapDetails.firstName,
     lastName:   ldapDetails.lastName,
     email:      ldapDetails.email,
-    // Mirror MySqlUserRepository.save() → user.copy(isSuper = true)
-    isSuper:    true,
+    isSuper:    false,
     isSupport:  false,
     lockStatus: 'Unlocked',
   };
