@@ -4,8 +4,6 @@ import path from 'path';
 import { hmacProxyPlugin } from './vite-plugin-hmac-proxy';
 import { readFileSync, createReadStream, existsSync } from 'fs';
 
-// Read the canonical version from version.sbt at the repo root.
-// version.sbt contains a single line: version in ThisBuild := "x.y.z"
 const versionSbt = readFileSync(
   path.resolve(__dirname, '../../version.sbt'),
   'utf-8'
@@ -13,7 +11,7 @@ const versionSbt = readFileSync(
 const versionMatch = versionSbt.match(/:=\s*"([^"]+)"/);
 const appVersion = versionMatch ? versionMatch[1] : 'unknown';
 
-// https://vitejs.dev/config/
+
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),

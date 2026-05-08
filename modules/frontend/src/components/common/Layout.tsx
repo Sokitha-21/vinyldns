@@ -232,19 +232,19 @@ export function Layout({ children }: LayoutProps) {
             <ul className="nav flex-column px-2 vds-nav-list">
               <li className="nav-item">
                 <a
-                  href="https://comcast.github.io/vinyldns/user-guide/2_getting-started-user-guide/"
+                  href="https://www.vinyldns.io/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className={`nav-link vds-nav-link d-flex align-items-center px-3 py-2 rounded-2${collapsed ? ' vds-tip' : ''}`}
-                  data-vds-tip="Comcast User Guide"
+                  data-vds-tip="User Guide"
                 >
                   <i className="bi bi-book-half vds-nav-icon" />
-                  {!collapsed && <span className="vds-nav-text">Comcast User Guide</span>}
+                  {!collapsed && <span className="vds-nav-text">User Guide</span>}
                 </a>
               </li>
               <li className="nav-item">
                 <a
-                  href="https://comcast.github.io/vinyldns/"
+                  href="https://www.vinyldns.io/portal/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className={`nav-link vds-nav-link d-flex align-items-center px-3 py-2 rounded-2${collapsed ? ' vds-tip' : ''}`}
@@ -252,18 +252,6 @@ export function Layout({ children }: LayoutProps) {
                 >
                   <i className="bi bi-file-earmark-text vds-nav-icon" />
                   {!collapsed && <span className="vds-nav-text">Portal Guide</span>}
-                </a>
-              </li>
-              <li className="nav-item">
-                <a
-                  href="https://github.com/vinyldns/vinyldns/issues"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`nav-link vds-nav-link d-flex align-items-center px-3 py-2 rounded-2${collapsed ? ' vds-tip' : ''}`}
-                  data-vds-tip="Support"
-                >
-                  <i className="bi bi-life-preserver vds-nav-icon" />
-                  {!collapsed && <span className="vds-nav-text">Support</span>}
                 </a>
               </li>
             </ul>

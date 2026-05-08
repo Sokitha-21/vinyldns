@@ -36,7 +36,6 @@ const LABELS: Record<TimeRange, string> = {
   custom: 'Custom Range',
 };
 
-// 3 rows × 2 cols
 const GRID: { range: TimeRange; icon: string; label: string; desc: string }[][] = [
   [
     { range: 'all',    icon: 'bi-infinity',       label: 'All Time',      desc: 'No restriction' },
@@ -72,7 +71,6 @@ export function TimeFilterDropdown({
       ? `${dateFrom || '…'} – ${dateTo || '…'}`
       : LABELS[value];
 
-  // ── Renders one option card cell ──────────────────────────────────────────
   const renderCell = (opt: { range: TimeRange; icon: string; label: string; desc: string }) => {
     const selected = value === opt.range;
     return (
@@ -160,7 +158,6 @@ export function TimeFilterDropdown({
           border: '1px solid #d4dbe8',
           overflow: 'hidden',
         }}>
-          {/* Gradient header */}
           <div style={{
             background: 'linear-gradient(90deg,#1e3a5f 0%,#2e5090 100%)',
             padding: '10px 14px 9px',
@@ -172,7 +169,6 @@ export function TimeFilterDropdown({
             </span>
           </div>
 
-          {/* 2-column grid of option cards */}
           <div style={{ padding: '8px 10px 4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
             {GRID.map((row, ri) => (
               <div key={ri} style={{ display: 'flex', gap: 4 }}>
