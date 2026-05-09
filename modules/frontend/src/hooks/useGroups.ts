@@ -100,7 +100,7 @@ export function useGroups(ignoreAccess = false, query = '') {
     isLoading,
     nextPage,
     prevPage,
-    nextPageEnabled,
+    nextPageEnabled: Boolean(data?.nextId),
     prevPageEnabled,
     getPanelTitle,
     resetPaging,

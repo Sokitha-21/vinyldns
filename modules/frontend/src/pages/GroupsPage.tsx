@@ -42,6 +42,7 @@ export function GroupsPage() {
   const [roleFilter, setRoleFilter] = useState<'admin' | 'member' | 'norole' | null>(null);
   const [emailFilter, setEmailFilter] = useState('');
   const [tabFading, setTabFading] = useState(false);
+  const [showCards, setShowCards] = useState(true);
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
@@ -266,6 +267,19 @@ export function GroupsPage() {
   };
 
   const insightSource = ignoreAccess ? (insightAllGroups ?? []) : (insightMyGroups ?? []);
+
+  const hasAdminRole = insightSource.some(
+    (g) => g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper)
+  );
+  const hasMemberRole = insightSource.some((g) => {
+    const isAdminRole = g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper);
+    return (g.members?.some((m) => m.id === profile?.id) ?? false) && !isAdminRole;
+  });
+  const hasNoRoleInData = insightSource.some((g) => {
+    const isAdminRole = g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper);
+    return !(g.members?.some((m) => m.id === profile?.id) ?? false) && !isAdminRole;
+  });
+
   const emailFilteredGroups = emailFilter
     ? insightSource.filter((g) =>
         g.name.toLowerCase().includes(emailFilter.toLowerCase()) ||
@@ -409,17 +423,33 @@ export function GroupsPage() {
                     className="list-group position-absolute shadow"
                     style={{ zIndex: 1050, top: 'calc(100% + 4px)', right: 0, minWidth: '145px', borderRadius: '0.55rem', overflow: 'hidden', border: '1px solid #d4dbe8' }}
                   >
-                    {([['admin', 'Admin', 'bi-shield-fill'], ['member', 'Member', 'bi-person-check'], ['norole', 'No Role', 'bi-person-dash']] as const).map(([val, label, icon]) => (
+                    {hasAdminRole && (
                       <li
-                        key={val}
-                        className={`list-group-item list-group-item-action py-2 px-3 d-flex align-items-center gap-2 vds-suggestion-item${roleFilter === val ? ' vds-role-item--selected' : ''}`}
+                        className={`list-group-item list-group-item-action py-2 px-3 d-flex align-items-center gap-2 vds-suggestion-item${roleFilter === 'admin' ? ' vds-role-item--selected' : ''}`}
                         style={{ cursor: 'pointer', fontSize: '0.85rem' }}
-                        onMouseDown={() => { setRoleFilter(roleFilter === val ? null : val); setRoleDropdownOpen(false); }}
+                        onMouseDown={() => { setRoleFilter(roleFilter === 'admin' ? null : 'admin'); setRoleDropdownOpen(false); }}
                       >
-                        <i className={`bi ${icon}`} />
-                        {label}
+                        <i className="bi bi-shield-fill" />Admin
                       </li>
-                    ))}
+                    )}
+                    {hasMemberRole && (
+                      <li
+                        className={`list-group-item list-group-item-action py-2 px-3 d-flex align-items-center gap-2 vds-suggestion-item${roleFilter === 'member' ? ' vds-role-item--selected' : ''}`}
+                        style={{ cursor: 'pointer', fontSize: '0.85rem' }}
+                        onMouseDown={() => { setRoleFilter(roleFilter === 'member' ? null : 'member'); setRoleDropdownOpen(false); }}
+                      >
+                        <i className="bi bi-person-check" />Member
+                      </li>
+                    )}
+                    {hasNoRoleInData && (
+                      <li
+                        className={`list-group-item list-group-item-action py-2 px-3 d-flex align-items-center gap-2 vds-suggestion-item${roleFilter === 'norole' ? ' vds-role-item--selected' : ''}`}
+                        style={{ cursor: 'pointer', fontSize: '0.85rem' }}
+                        onMouseDown={() => { setRoleFilter(roleFilter === 'norole' ? null : 'norole'); setRoleDropdownOpen(false); }}
+                      >
+                        <i className="bi bi-person-dash" />No Role
+                      </li>
+                    )}
                   </ul>
                 )}
               </div>
@@ -475,6 +505,14 @@ export function GroupsPage() {
               >
                 <i className="bi bi-arrow-clockwise" />
                 <span className="vds-btn-flat__label">Refresh</span>
+              </button>
+              <button
+                className="btn btn-sm d-flex align-items-center gap-1 vds-btn-flat"
+                onClick={() => setShowCards((v) => !v)}
+                title={showCards ? 'Hide insight cards' : 'Show insight cards'}
+              >
+                <i className={`bi ${showCards ? 'bi-eye-slash' : 'bi-eye'}`} />
+                <span className="vds-btn-flat__label">{showCards ? 'Hide Cards' : 'Show Cards'}</span>
               </button>
 
             </div>
@@ -532,7 +570,7 @@ export function GroupsPage() {
       <div className={`vds-tab-content${tabFading ? ' vds-tab-content--fading' : ''}`}>
 
       {/* ── Insight cards ── */}
-      <div className="row g-2 mb-3 align-items-stretch">
+      {showCards && <div className="row g-2 mb-3 align-items-stretch">
         {/* Total Groups */}
         <div className="col-6 col-md-3 d-flex">
           <div className="rounded-3 px-3 py-2 w-100 d-flex flex-column vds-insight-card vds-insight-card--blue">
@@ -672,7 +710,7 @@ export function GroupsPage() {
             </div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {isLoading ? (
         <LoadingSpinner />

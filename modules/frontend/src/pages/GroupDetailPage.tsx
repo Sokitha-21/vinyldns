@@ -14,17 +14,19 @@
  * limitations under the License.
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { groupsService } from '../services/groupsService';
 import { profileService } from '../services/profileService';
 import { GroupMemberList } from '../components/groups/GroupMemberList';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
+import { Pagination } from '../components/common/Pagination';
 import { TimeFilterDropdown } from '../components/common/TimeFilterDropdown';
 import { useAlerts } from '../contexts/AlertContext';
 import { useProfile } from '../contexts/ProfileContext';
 import { useBreadcrumbs } from '../contexts/BreadcrumbContext';
+import { usePaging } from '../hooks/usePaging';
 import type { Group, GroupChange, GroupMember } from '../types/group';
 
 type SortDir = 'asc' | 'desc' | null;
@@ -120,7 +122,7 @@ export function GroupDetailPage() {
         : currentGroup.admins.filter((a) => a.id !== memberId);
       return groupsService.updateGroup(id, { ...currentGroup, admins: updatedAdmins });
     },
-    onSuccess: (_, { memberId, makeAdmin }) => {
+    onSuccess: (_, { makeAdmin }) => {
       addAlert('success', makeAdmin ? 'Made group manager' : 'Removed as group manager');
       void queryClient.invalidateQueries({ queryKey: ['group', id] });
       void queryClient.invalidateQueries({ queryKey: ['group-members', id] });
@@ -135,14 +137,32 @@ export function GroupDetailPage() {
   const isMember = group?.members.some((m) => m.id === profile?.id) ?? false;
   const showChangeHistory = isGroupAdmin || isMember || (profile?.isSupport ?? false);
 
+  const {
+    paging: chPaging,
+    nextPageUpdate: chNextPageUpdate,
+    prevPageUpdate: chPrevPageUpdate,
+    getPrevStartFrom: getChPrevStartFrom,
+    prevPageEnabled: chPrevEnabled,
+  } = usePaging(100);
+
   const { data: changesData, isLoading: changesLoading, refetch: refetchChanges } = useQuery({
-    queryKey: ['group-changes', id],
+    queryKey: ['group-changes', id, chPaging.next],
     queryFn: async () => {
-      const res = await groupsService.getGroupChanges(id, 100);
-      return res.data.changes ?? [];
+      const res = await groupsService.getGroupChanges(id, 100, chPaging.next as string | undefined);
+      return res.data;
     },
     enabled: Boolean(id) && showChangeHistory && activeTab === 'changes',
   });
+
+  const chNextEnabled = Boolean(changesData?.nextId);
+
+  const chNextPage = useCallback(() => {
+    chNextPageUpdate(changesData?.changes?.length ?? 0, changesData?.nextId);
+  }, [changesData, chNextPageUpdate]);
+
+  const chPrevPage = useCallback(() => {
+    chPrevPageUpdate(getChPrevStartFrom());
+  }, [chPrevPageUpdate, getChPrevStartFrom]);
 
   useEffect(() => {
     if (!group) return;
@@ -167,9 +187,9 @@ export function GroupDetailPage() {
   };
 
   const filteredChanges = (() => {
-    if (!changesData || chTimeRange === 'all') return changesData ?? [];
+    if (!changesData?.changes || chTimeRange === 'all') return changesData?.changes ?? [];
     const now = Date.now();
-    return changesData.filter((c) => {
+    return changesData.changes.filter((c) => {
       const t = new Date(c.created).getTime();
       if (chTimeRange === 'custom') {
         const from = chDateFrom ? new Date(chDateFrom + 'T00:00:00').getTime() : 0;
@@ -394,10 +414,39 @@ export function GroupDetailPage() {
               </button>
             </div>
           </div>
+          {chTimeRange !== 'all' && (
+            <div className="d-flex justify-content-end gap-2 mb-2 flex-wrap align-items-center px-4">
+              <span className="vds-active-filter-tag d-flex align-items-center gap-1">
+                <i className="bi bi-calendar3" />
+                {chTimeRange === '1d' ? 'Today'
+                  : chTimeRange === '7d' ? 'Last 7 days'
+                  : chTimeRange === '30d' ? 'Last 30 days'
+                  : chTimeRange === '90d' ? 'Last 90 days'
+                  : chTimeRange === 'custom'
+                    ? [chDateFrom, chDateTo].filter(Boolean).join(' → ') || 'Custom range'
+                    : 'Custom range'}
+                <button
+                  type="button"
+                  className="btn-close ms-1"
+                  style={{ fontSize: '0.5rem', filter: 'invert(30%) sepia(80%) saturate(500%) hue-rotate(190deg)' }}
+                  aria-label="Remove time filter"
+                  onClick={() => { setChTimeRange('all'); setChDateFrom(''); setChDateTo(''); }}
+                />
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm vds-btn-flat d-flex align-items-center gap-1"
+                style={{ color: '#e53e3e', border: '1px solid rgba(229,62,62,0.3)', fontSize: '0.78rem' }}
+                onClick={() => { setChTimeRange('all'); setChDateFrom(''); setChDateTo(''); }}
+              >
+                <i className="bi bi-x-circle" />Clear All
+              </button>
+            </div>
+          )}
           <div className="p-3">
             {changesLoading ? (
               <LoadingSpinner message="Loading changes…" />
-            ) : !changesData || changesData.length === 0 ? (
+            ) : !changesData?.changes || changesData.changes.length === 0 ? (
               <div className="vds-empty-state">
                 <i className="bi bi-clock-history fs-2 mb-2" style={{ opacity: 0.4 }} />
                 <p className="mb-0 fw-semibold">No changes recorded</p>
@@ -479,6 +528,14 @@ export function GroupDetailPage() {
                   </tbody>
                 </table>
               </div>
+            )}
+            {(chNextEnabled || chPrevEnabled) && (
+              <Pagination
+                onPrev={chPrevPage}
+                onNext={chNextPage}
+                prevEnabled={chPrevEnabled}
+                nextEnabled={chNextEnabled}
+              />
             )}
           </div>
         </div>
