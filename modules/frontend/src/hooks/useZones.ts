@@ -106,7 +106,7 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
     search,
     nextPage,
     prevPage,
-    nextPageEnabled,
+    nextPageEnabled: Boolean(data?.nextId),
     prevPageEnabled,
     getPanelTitle,
     resetPaging,
@@ -119,10 +119,10 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
   };
 }
 
-export function useDeletedZones(ignoreAccess = false) {
+export function useDeletedZones(ignoreAccess = false, enabled = true) {
   const [query, setQuery] = useState('');
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
-    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
+    prevPageEnabled, getPanelTitle } = usePaging(100);
 
   const { data, isLoading } = useQuery({
     queryKey: ['deleted-zones', ignoreAccess, query, paging.next],
@@ -135,6 +135,7 @@ export function useDeletedZones(ignoreAccess = false) {
       );
       return res.data;
     },
+    enabled: enabled && Boolean(ignoreAccess !== undefined),
   });
 
   const search = useCallback(
@@ -160,7 +161,7 @@ export function useDeletedZones(ignoreAccess = false) {
     search,
     nextPage,
     prevPage,
-    nextPageEnabled,
+    nextPageEnabled: Boolean(data?.nextId),
     prevPageEnabled,
     getPanelTitle,
     resetPaging,

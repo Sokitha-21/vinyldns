@@ -84,6 +84,15 @@ export function ZonesPage() {
   const abanAccessDropdownRef = useRef<HTMLDivElement>(null);
   const abanByDropdownRef = useRef<HTMLDivElement>(null);
 
+  // ── Search suggestions ────────────────────────────────────────────────────────
+  const [mySuggestionsOpen,  setMySuggestionsOpen]  = useState(false);
+  const [allSuggestionsOpen, setAllSuggestionsOpen] = useState(false);
+  const mySuggestionsRef  = useRef<HTMLDivElement>(null);
+  const allSuggestionsRef = useRef<HTMLDivElement>(null);
+  // Debounced values for suggestions queries
+  const [myZonesSuggestQuery,  setMyZonesSuggestQuery]  = useState('');
+  const [allZonesSuggestQuery, setAllZonesSuggestQuery] = useState('');
+
   // ── Client-side email filter ───────────────────────────────────────────────────
   const [emailFilter, setEmailFilter] = useState('');
 
@@ -96,10 +105,12 @@ export function ZonesPage() {
   const [abanDateTo, setAbanDateTo] = useState('');
 
   // ── Zones hooks ───────────────────────────────────────────────────────────────
-  const myZones = useZones(false, myZonesHidePtr);
-  const allZones = useZones(true,  allZonesHidePtr);
-  const myAbandoned  = useDeletedZones(false);
-  const allAbandoned = useDeletedZones(true);
+  const myZones = useZones(false, !myZonesHidePtr);
+  const allZones = useZones(true,  !allZonesHidePtr);
+
+  
+  const myAbandoned  = useDeletedZones(false, mainTab === 'abandonedZones');
+  const allAbandoned = useDeletedZones(true,  mainTab === 'abandonedZones');
 
   const activeAbandonedHook =
     abandonedSubTab === 'myAbandoned' ? myAbandoned : allAbandoned;
@@ -150,6 +161,28 @@ export function ZonesPage() {
   const insightMyCount  = insightMyZones?.length ?? null;
   const insightAllCount = insightAllZones?.length ?? null;
 
+  // ── Search suggestions queries (ignoreAccess + includeReverse like old portal) ─
+  const { data: mySuggestData } = useQuery({
+    queryKey: ['zone-suggestions-my', myZonesSuggestQuery],
+    queryFn: async () => {
+      const res = await zonesService.getZones(100, undefined, myZonesSuggestQuery, false, true, true);
+      return res.data.zones ?? [];
+    },
+    enabled: myZonesSuggestQuery.length > 0 && !myZonesSuggestQuery.includes('@'),
+  });
+
+  const { data: allSuggestData } = useQuery({
+    queryKey: ['zone-suggestions-all', allZonesSuggestQuery],
+    queryFn: async () => {
+      const res = await zonesService.getZones(100, undefined, allZonesSuggestQuery, false, true, true);
+      return res.data.zones ?? [];
+    },
+    enabled: allZonesSuggestQuery.length > 0 && !allZonesSuggestQuery.includes('@'),
+  });
+
+  const mySuggestions  = mySuggestData  ?? [];
+  const allSuggestions = allSuggestData ?? [];
+
   const fmtAge = (days: number): string => {
     if (days < 1) return 'Today';
     if (days < 30) return `${days}d`;
@@ -184,8 +217,16 @@ export function ZonesPage() {
   };
 
   const anyFilterActive = !!(emailFilter || statusFilter || accessFilter || zoneTimeRange !== 'all');
+  // When a name search is committed, use the suggestions data (ignoreAccess:true, includeReverse:true)
+  // as the display base — matching old portal behaviour so reverse and non-owned zones are found.
+  // Fall back to zonesForTab if suggestions haven't loaded yet.
+  const activeNameQuery = mainTab === 'allZones' ? allZonesQuery : myZonesQuery;
+  const activeSuggestions = mainTab === 'allZones' ? allSuggestions : mySuggestions;
+  const clientFilterBase = activeNameQuery
+    ? (activeSuggestions.length > 0 ? activeSuggestions : zonesForTab)
+    : filterSource;
   const displayedZones = anyFilterActive
-    ? filterSource.filter((z) => {
+    ? clientFilterBase.filter((z) => {
         const matchesSearch = !emailFilter || (
           byGroupActive
             ? (z.adminGroupName ?? '').toLowerCase().includes(emailFilter.toLowerCase())
@@ -284,18 +325,28 @@ export function ZonesPage() {
   };
 
   const availableStatuses = Array.from(new Set(filterSource.map((z) => z.status))) as string[];
-  const hasShared  = filterSource.some((z) => z.shared);
-  const hasPrivate = filterSource.some((z) => !z.shared);
-
+  const hasShared  = renderedZones.some((z) => !!z.shared);
+  const hasPrivate = renderedZones.some((z) => !z.shared);
   // ── Sync committed queries → hooks ───────────────────────────────────────────
   useEffect(() => { myZones.search(myZonesQuery, myZonesByGroup); },
-    [myZonesQuery, myZonesByGroup]); // eslint-disable-line react-hooks/exhaustive-deps
+    [myZonesQuery, myZonesByGroup]); 
   useEffect(() => { allZones.search(allZonesQuery, allZonesByGroup); },
-    [allZonesQuery, allZonesByGroup]); // eslint-disable-line react-hooks/exhaustive-deps
+    [allZonesQuery, allZonesByGroup]); 
   useEffect(() => { myAbandoned.search(abandonedQuery); },
-    [abandonedQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+    [abandonedQuery]); 
   useEffect(() => { allAbandoned.search(abandonedQuery); },
-    [abandonedQuery]); // eslint-disable-line react-hooks/exhaustive-deps
+    [abandonedQuery]); 
+
+  // ── Debounce search inputs for suggestions ────────────────────────────────────
+  useEffect(() => {
+    const timer = setTimeout(() => setMyZonesSuggestQuery(myZonesInput), 300);
+    return () => clearTimeout(timer);
+  }, [myZonesInput]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setAllZonesSuggestQuery(allZonesInput), 300);
+    return () => clearTimeout(timer);
+  }, [allZonesInput]);
 
   // ── Outside-click handler for filter dropdowns ───────────────────────────────
   useEffect(() => {
@@ -314,6 +365,12 @@ export function ZonesPage() {
       }
       if (abanByDropdownRef.current && !abanByDropdownRef.current.contains(e.target as Node)) {
         setAbanByDropdownOpen(false);
+      }
+      if (mySuggestionsRef.current && !mySuggestionsRef.current.contains(e.target as Node)) {
+        setMySuggestionsOpen(false);
+      }
+      if (allSuggestionsRef.current && !allSuggestionsRef.current.contains(e.target as Node)) {
+        setAllSuggestionsOpen(false);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -345,6 +402,8 @@ export function ZonesPage() {
     setStatusFilter(null);
     setAccessFilter(null);
     setEmailFilter('');
+    setMySuggestionsOpen(false);
+    setAllSuggestionsOpen(false);
     setZoneTimeRange('all'); setZoneDateFrom(''); setZoneDateTo('');
     if (mainTab === 'myZones') {
       setMyZonesInput(''); setMyZonesQuery('');
@@ -369,6 +428,9 @@ export function ZonesPage() {
 
   // ── Search handlers ───────────────────────────────────────────────────────────
   const handleMyZonesSearch = useCallback(() => {
+    setMySuggestionsOpen(false);
+    // Sync suggest query immediately so suggestions data is ready for display base
+    setMyZonesSuggestQuery(myZonesInput);
     setEmailFilter(myZonesInput);
     if (!myZonesInput.includes('@')) setMyZonesQuery(myZonesInput);
     else setMyZonesQuery('');
@@ -376,6 +438,9 @@ export function ZonesPage() {
   }, [myZonesInput, myZones]);
 
   const handleAllZonesSearch = useCallback(() => {
+    setAllSuggestionsOpen(false);
+    // Sync suggest query immediately so suggestions data is ready for display base
+    setAllZonesSuggestQuery(allZonesInput);
     setEmailFilter(allZonesInput);
     if (!allZonesInput.includes('@')) setAllZonesQuery(allZonesInput);
     else setAllZonesQuery('');
@@ -402,7 +467,7 @@ export function ZonesPage() {
     if (mainTab === 'myZones') setMyZonesInput(myZonesQuery);
     else if (mainTab === 'allZones') setAllZonesInput(allZonesQuery);
     else setAbandonedInput(abandonedQuery);
-  }, [mainTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mainTab]); 
 
   const isLoadingCurrent =
     mainTab === 'myZones'   ? myZones.isLoading :
@@ -489,27 +554,57 @@ export function ZonesPage() {
               {/* My Zones search + filters */}
               {mainTab === 'myZones' && (
                 <>
-                  <div className="vds-search-group input-group input-group-sm" style={{ width: 220, flexShrink: 1 }}>
-                    <span className="input-group-text border-0 bg-transparent pe-1">
-                      <i className="bi bi-search text-muted" />
-                    </span>
-                    <input
-                      type="text"
-                      className="form-control border-0 ps-0 shadow-none bg-transparent"
-                      placeholder="Search by name or email"
-                      value={myZonesInput}
-                      autoComplete="off"
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setMyZonesInput(val);
-                        if (val === '') {
-                          setEmailFilter('');
-                          setMyZonesQuery('');
-                          myZones.resetPaging();
-                        }
-                      }}
-                      onKeyDown={(e) => e.key === 'Enter' && handleMyZonesSearch()}
-                    />
+                  <div ref={mySuggestionsRef} className="position-relative" style={{ width: 220, flexShrink: 1 }}>
+                    <div className="vds-search-group input-group input-group-sm">
+                      <span className="input-group-text border-0 bg-transparent pe-1">
+                        <i className="bi bi-search text-muted" />
+                      </span>
+                      <input
+                        type="text"
+                        className="form-control border-0 ps-0 shadow-none bg-transparent"
+                        placeholder="Search by name or email"
+                        value={myZonesInput}
+                        autoComplete="off"
+                        onFocus={() => { if (myZonesInput.length > 0) setMySuggestionsOpen(true); }}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setMyZonesInput(val);
+                          setMySuggestionsOpen(val.length > 0);
+                          if (val === '') {
+                            setEmailFilter('');
+                            setMyZonesQuery('');
+                            myZones.resetPaging();
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { setMySuggestionsOpen(false); handleMyZonesSearch(); }
+                          if (e.key === 'Escape') setMySuggestionsOpen(false);
+                        }}
+                      />
+                    </div>
+                    {mySuggestionsOpen && mySuggestions.length > 0 && !myZonesInput.includes('@') && (
+                      <ul className="list-group position-absolute shadow" style={{ zIndex: 1060, top: 'calc(100% + 2px)', left: 0, minWidth: '100%', width: 'max-content', maxHeight: '220px', overflowY: 'auto', borderRadius: '0.55rem', border: '1px solid #d4dbe8' }}>
+                        {mySuggestions.map((z) => (
+                          <li
+                            key={z.id}
+                            className="list-group-item list-group-item-action py-2 px-3 d-flex align-items-center gap-2 vds-suggestion-item"
+                            style={{ cursor: 'pointer', fontSize: '0.82rem' }}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setMyZonesInput(z.name);
+                              setEmailFilter(z.name);
+                              setMyZonesQuery(z.name);
+                              setMySuggestionsOpen(false);
+                              myZones.resetPaging();
+                            }}
+                          >
+                            <i className="bi bi-diagram-3 text-muted" style={{ fontSize: '0.75rem', flexShrink: 0 }} />
+                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{z.name}</span>
+                            {z.shared && <span className="badge vds-badge-shared" style={{ fontSize: '0.65rem', flexShrink: 0 }}>shared</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
 
                   {/* By Admin Group toggle */}
@@ -600,27 +695,57 @@ export function ZonesPage() {
               {/* All Zones search + filters */}
               {mainTab === 'allZones' && (
                 <>
-                  <div className="vds-search-group input-group input-group-sm" style={{ width: 220, flexShrink: 1 }}>
-                    <span className="input-group-text border-0 bg-transparent pe-1">
-                      <i className="bi bi-search text-muted" />
-                    </span>
-                    <input
-                      type="text"
-                      className="form-control border-0 ps-0 shadow-none bg-transparent"
-                      placeholder="Search by name or email"
-                      value={allZonesInput}
-                      autoComplete="off"
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setAllZonesInput(val);
-                        if (val === '') {
-                          setEmailFilter('');
-                          setAllZonesQuery('');
-                          allZones.resetPaging();
-                        }
-                      }}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAllZonesSearch()}
-                    />
+                  <div ref={allSuggestionsRef} className="position-relative" style={{ width: 220, flexShrink: 1 }}>
+                    <div className="vds-search-group input-group input-group-sm">
+                      <span className="input-group-text border-0 bg-transparent pe-1">
+                        <i className="bi bi-search text-muted" />
+                      </span>
+                      <input
+                        type="text"
+                        className="form-control border-0 ps-0 shadow-none bg-transparent"
+                        placeholder="Search by name or email"
+                        value={allZonesInput}
+                        autoComplete="off"
+                        onFocus={() => { if (allZonesInput.length > 0) setAllSuggestionsOpen(true); }}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setAllZonesInput(val);
+                          setAllSuggestionsOpen(val.length > 0);
+                          if (val === '') {
+                            setEmailFilter('');
+                            setAllZonesQuery('');
+                            allZones.resetPaging();
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { setAllSuggestionsOpen(false); handleAllZonesSearch(); }
+                          if (e.key === 'Escape') setAllSuggestionsOpen(false);
+                        }}
+                      />
+                    </div>
+                    {allSuggestionsOpen && allSuggestions.length > 0 && !allZonesInput.includes('@') && (
+                      <ul className="list-group position-absolute shadow" style={{ zIndex: 1060, top: 'calc(100% + 2px)', left: 0, minWidth: '100%', width: 'max-content', maxHeight: '220px', overflowY: 'auto', borderRadius: '0.55rem', border: '1px solid #d4dbe8' }}>
+                        {allSuggestions.map((z) => (
+                          <li
+                            key={z.id}
+                            className="list-group-item list-group-item-action py-2 px-3 d-flex align-items-center gap-2 vds-suggestion-item"
+                            style={{ cursor: 'pointer', fontSize: '0.82rem' }}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setAllZonesInput(z.name);
+                              setEmailFilter(z.name);
+                              setAllZonesQuery(z.name);
+                              setAllSuggestionsOpen(false);
+                              allZones.resetPaging();
+                            }}
+                          >
+                            <i className="bi bi-diagram-3 text-muted" style={{ fontSize: '0.75rem', flexShrink: 0 }} />
+                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{z.name}</span>
+                            {z.shared && <span className="badge vds-badge-shared" style={{ fontSize: '0.65rem', flexShrink: 0 }}>shared</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
 
                   {/* By Admin Group toggle */}
@@ -1234,18 +1359,31 @@ export function ZonesPage() {
         {mainTab === 'myZones' && (
           isLoadingCurrent ? <LoadingSpinner /> : (
             <>
+              {!anyFilterActive && (myZones.nextPageEnabled || myZones.prevPageEnabled) && (
+                <div className="mb-2">
+                  <Pagination
+                    onPrev={myZones.prevPage}
+                    onNext={myZones.nextPage}
+                    prevEnabled={myZones.prevPageEnabled}
+                    nextEnabled={myZones.nextPageEnabled}
+                    panelTitle={myZones.getPanelTitle()}
+                  />
+                </div>
+              )}
               <ZonesTable
                 zones={renderedZones}
                 showAllZones={false}
               />
               {!anyFilterActive && (myZones.nextPageEnabled || myZones.prevPageEnabled) && (
-                <Pagination
-                  onPrev={myZones.prevPage}
-                  onNext={myZones.nextPage}
-                  prevEnabled={myZones.prevPageEnabled}
-                  nextEnabled={myZones.nextPageEnabled}
-                  panelTitle={myZones.getPanelTitle()}
-                />
+                <div className="mt-2">
+                  <Pagination
+                    onPrev={myZones.prevPage}
+                    onNext={myZones.nextPage}
+                    prevEnabled={myZones.prevPageEnabled}
+                    nextEnabled={myZones.nextPageEnabled}
+                    panelTitle={myZones.getPanelTitle()}
+                  />
+                </div>
               )}
             </>
           )
@@ -1255,18 +1393,31 @@ export function ZonesPage() {
         {mainTab === 'allZones' && (
           isLoadingCurrent ? <LoadingSpinner /> : (
             <>
+              {!anyFilterActive && (allZones.nextPageEnabled || allZones.prevPageEnabled) && (
+                <div className="mb-2">
+                  <Pagination
+                    onPrev={allZones.prevPage}
+                    onNext={allZones.nextPage}
+                    prevEnabled={allZones.prevPageEnabled}
+                    nextEnabled={allZones.nextPageEnabled}
+                    panelTitle={allZones.getPanelTitle()}
+                  />
+                </div>
+              )}
               <ZonesTable
                 zones={renderedZones}
                 showAllZones
               />
               {!anyFilterActive && (allZones.nextPageEnabled || allZones.prevPageEnabled) && (
-                <Pagination
-                  onPrev={allZones.prevPage}
-                  onNext={allZones.nextPage}
-                  prevEnabled={allZones.prevPageEnabled}
-                  nextEnabled={allZones.nextPageEnabled}
-                  panelTitle={allZones.getPanelTitle()}
-                />
+                <div className="mt-2">
+                  <Pagination
+                    onPrev={allZones.prevPage}
+                    onNext={allZones.nextPage}
+                    prevEnabled={allZones.prevPageEnabled}
+                    nextEnabled={allZones.nextPageEnabled}
+                    panelTitle={allZones.getPanelTitle()}
+                  />
+                </div>
               )}
             </>
           )
@@ -1301,15 +1452,28 @@ export function ZonesPage() {
 
             {isLoadingCurrent ? <LoadingSpinner /> : (
               <>
+                {!anyAbandonedFilterActive && (activeAbandonedHook.nextPageEnabled || activeAbandonedHook.prevPageEnabled) && (
+                  <div className="mb-2">
+                    <Pagination
+                      onPrev={activeAbandonedHook.prevPage}
+                      onNext={activeAbandonedHook.nextPage}
+                      prevEnabled={activeAbandonedHook.prevPageEnabled}
+                      nextEnabled={activeAbandonedHook.nextPageEnabled}
+                      panelTitle={activeAbandonedHook.getPanelTitle()}
+                    />
+                  </div>
+                )}
                 <AbandonedZonesTable zones={displayedAbandonedZones} />
                 {!anyAbandonedFilterActive && (activeAbandonedHook.nextPageEnabled || activeAbandonedHook.prevPageEnabled) && (
-                  <Pagination
-                    onPrev={activeAbandonedHook.prevPage}
-                    onNext={activeAbandonedHook.nextPage}
-                    prevEnabled={activeAbandonedHook.prevPageEnabled}
-                    nextEnabled={activeAbandonedHook.nextPageEnabled}
-                    panelTitle={activeAbandonedHook.getPanelTitle()}
-                  />
+                  <div className="mt-2">
+                    <Pagination
+                      onPrev={activeAbandonedHook.prevPage}
+                      onNext={activeAbandonedHook.nextPage}
+                      prevEnabled={activeAbandonedHook.prevPageEnabled}
+                      nextEnabled={activeAbandonedHook.nextPageEnabled}
+                      panelTitle={activeAbandonedHook.getPanelTitle()}
+                    />
+                  </div>
                 )}
               </>
             )}

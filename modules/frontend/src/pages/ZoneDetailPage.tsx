@@ -108,6 +108,7 @@ export function ZoneDetailPage() {
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [ttlDropdownOpen, setTtlDropdownOpen] = useState(false);
   const [copiedZoneId, setCopiedZoneId] = useState(false);
+  const [availableTypes, setAvailableTypes] = useState<string[]>([]);
   const [copiedChangeId, setCopiedChangeId] = useState<string | null>(null);
   const [recentChangesOpen, setRecentChangesOpen] = useState(true);
   const [zcUserNames, setZcUserNames] = useState<Record<string, string>>({});
@@ -225,6 +226,15 @@ export function ZoneDetailPage() {
     search: searchRecords,
     createRecord, updateRecord, deleteRecord,
   } = useZoneRecords(id);
+
+  // Update the available type list only when no type filter is active (unfiltered results).
+  // This prevents the dropdown from losing types like SOA when NS is selected.
+  useEffect(() => {
+    if (!typeFilter) {
+      const types = Array.from(new Set(records.map((r) => r.type))).sort();
+      if (types.length > 0) setAvailableTypes(types);
+    }
+  }, [records, typeFilter]);
 
   // ── Sync zone ──────────────────────────────────────────────────────────────
   const syncMutation = useMutation({
@@ -405,21 +415,34 @@ export function ZoneDetailPage() {
     },
   });
 
-  // ── Recent record changes ─────────────
+  // ── Recent record changes (paginated, 100 per page like old portal) ─────────
+  const {
+    paging: recentRcPaging, nextPageUpdate: recentRcNextUpdate,
+    prevPageUpdate: recentRcPrevUpdate, getPrevStartFrom: recentRcGetPrev,
+    prevPageEnabled: recentRcPrevEnabled,
+    getPanelTitle: recentRcPanelTitle,
+  } = usePaging(100);
+
   const { data: recentRcData } = useQuery({
-    queryKey: ['record-changes-recent', id],
+    queryKey: ['record-changes-recent', id, recentRcPaging.next],
     queryFn: async () => {
-      const res = await recordsService.getRecordSetChanges(id, 5, undefined);
+      const res = await recordsService.getRecordSetChanges(id, 100, recentRcPaging.next as string | undefined);
       return res.data;
     },
     enabled: Boolean(id),
   });
 
+  const recentRcNextEnabled = Boolean(recentRcData?.nextId);
+  const recentRcNextPage = useCallback(() => {
+    recentRcNextUpdate(recentRcData?.recordSetChanges?.length ?? 0, recentRcData?.nextId);
+  }, [recentRcData, recentRcNextUpdate]);
+  const recentRcPrevPage = useCallback(() => { recentRcPrevUpdate(recentRcGetPrev()); }, [recentRcPrevUpdate, recentRcGetPrev]);
+
   // ── Record set changes ────────────────────────────────────────────────────
   const {
     paging: rcPaging, nextPageUpdate: rcNextUpdate,
     prevPageUpdate: rcPrevUpdate, getPrevStartFrom: rcGetPrev,
-    nextPageEnabled: rcNextEnabled, prevPageEnabled: rcPrevEnabled,
+    prevPageEnabled: rcPrevEnabled,
     getPanelTitle: rcPanelTitle,
   } = usePaging(100);
 
@@ -432,6 +455,8 @@ export function ZoneDetailPage() {
     enabled: Boolean(id) && activeTab === 'recordChanges',
   });
 
+  const rcNextEnabled = Boolean(rcData?.nextId);
+
   const rcNextPage = useCallback(() => {
     rcNextUpdate(rcData?.recordSetChanges?.length ?? 0, rcData?.nextId);
   }, [rcData, rcNextUpdate]);
@@ -441,7 +466,7 @@ export function ZoneDetailPage() {
   const {
     paging: zcPaging, nextPageUpdate: zcNextUpdate,
     prevPageUpdate: zcPrevUpdate, getPrevStartFrom: zcGetPrev,
-    nextPageEnabled: zcNextEnabled, prevPageEnabled: zcPrevEnabled,
+    prevPageEnabled: zcPrevEnabled,
     getPanelTitle: zcPanelTitle,
   } = usePaging(100);
 
@@ -453,6 +478,8 @@ export function ZoneDetailPage() {
     },
     enabled: Boolean(id) && activeTab === 'zoneChanges',
   });
+
+  const zcNextEnabled = Boolean(zcData?.nextId);
 
   const zcNextPage = useCallback(() => {
     zcNextUpdate(zcData?.zoneChanges?.length ?? 0, zcData?.nextId);
@@ -729,8 +756,9 @@ export function ZoneDetailPage() {
                     </div>
                   </div>
                   {recentChangesOpen && (
-                    <div className="vds-zones-table-wrap">
-                      <table className="vds-zones-table">
+                    <>
+                      <div className="vds-zones-table-wrap">
+                        <table className="vds-zones-table">
                         <thead>
                           <tr>
                             <th>Record</th>
@@ -796,6 +824,12 @@ export function ZoneDetailPage() {
                         </tbody>
                       </table>
                     </div>
+                    {(recentRcNextEnabled || recentRcPrevEnabled) && (
+                      <Pagination onPrev={recentRcPrevPage} onNext={recentRcNextPage}
+                        prevEnabled={recentRcPrevEnabled} nextEnabled={recentRcNextEnabled}
+                        panelTitle={recentRcPanelTitle()} />
+                    )}
+                    </>
                   )}
                 </div>
               ) : null}
@@ -845,7 +879,7 @@ export function ZoneDetailPage() {
                       </button>
                       {typeDropdownOpen && (
                         <ul className="list-group position-absolute shadow" style={{ zIndex: 1050, top: 'calc(100% + 4px)', left: 0, minWidth: '110px', borderRadius: '0.55rem', overflow: 'hidden', border: '1px solid #d4dbe8' }}>
-                          {Array.from(new Set(records.map((r) => r.type))).sort().map((t) => (
+                          {availableTypes.map((t) => (
                             <li
                               key={t}
                               className={`list-group-item list-group-item-action py-2 px-3 vds-suggestion-item${typeFilter === t ? ' vds-role-item--selected' : ''}`}
