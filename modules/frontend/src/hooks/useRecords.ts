@@ -45,7 +45,7 @@ export function useRecords() {
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['recordsets', nameFilter, typeFilter, nameSort, ownerGroupFilter, paging.next],
     queryFn: async () => {
       const res = await recordsService.listRecordSetData(
@@ -125,9 +125,10 @@ export function useRecords() {
     search,
     nextPage,
     prevPage,
-    nextPageEnabled,
+    nextPageEnabled: Boolean(data?.nextId),
     prevPageEnabled,
     getPanelTitle,
+    refetch,
     createRecord: createRecordMutation.mutate,
     updateRecord: updateRecordMutation.mutate,
     deleteRecord: deleteRecordMutation.mutate,
@@ -141,9 +142,8 @@ export function useZoneRecords(zoneId: string) {
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
     nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
   const { addAlert } = useAlerts();
-  const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['zone-recordsets', zoneId, nameFilter, typeFilter, paging.next],
     queryFn: async () => {
       const res = await recordsService.listRecordSetsByZone(
@@ -163,7 +163,7 @@ export function useZoneRecords(zoneId: string) {
       recordsService.createRecordSet(zoneId, record),
     onSuccess: () => {
       addAlert('success', 'Record created successfully');
-      void queryClient.invalidateQueries({ queryKey: ['zone-recordsets', zoneId] });
+      void refetch();
     },
     onError: (err: unknown) => {
       addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
@@ -175,19 +175,19 @@ export function useZoneRecords(zoneId: string) {
       recordsService.updateRecordSet(zoneId, recordSetId, record),
     onSuccess: () => {
       addAlert('success', 'Record updated successfully');
-      void queryClient.invalidateQueries({ queryKey: ['zone-recordsets', zoneId] });
+      void refetch();
     },
     onError: (err: unknown) => {
       addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
     },
   });
-
+ 
   const deleteRecordMutation = useMutation({
     mutationFn: (recordSetId: string) =>
-      recordsService.deleteRecordSet(zoneId, recordSetId),
+      recordsService.deleteRecordSet(zoneId, recordSetId),   
     onSuccess: () => {
       addAlert('success', 'Record deleted successfully');
-      void queryClient.invalidateQueries({ queryKey: ['zone-recordsets', zoneId] });
+      void refetch();
     },
     onError: (err: unknown) => {
       addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
@@ -212,13 +212,17 @@ export function useZoneRecords(zoneId: string) {
     records: data?.recordSets ?? [],
     isLoading,
     search,
+    refetch,
     nextPage,
     prevPage,
-    nextPageEnabled,
+    nextPageEnabled: Boolean(data?.nextId),
     prevPageEnabled,
     getPanelTitle,
     createRecord: createRecordMutation.mutate,
     updateRecord: updateRecordMutation.mutate,
     deleteRecord: deleteRecordMutation.mutate,
+    isCreatePending: createRecordMutation.isPending,
+    isUpdatePending: updateRecordMutation.isPending,
+    isDeletePending: deleteRecordMutation.isPending,
   };
 }

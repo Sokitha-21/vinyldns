@@ -17,6 +17,34 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { RecordSet, RecordData } from '../../types/record';
 
+// ── NS / PTR expand-collapse chip list ───────────────────────────────────────
+const SHOW_LIMIT = 3;
+function MultiValueChips({ values }: { values: string[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? values : values.slice(0, SHOW_LIMIT);
+  const extra = values.length - SHOW_LIMIT;
+  return (
+    <div className="d-flex flex-column gap-1">
+      {visible.map((val, i) => (
+        <span key={i} className="vds-record-data-chip vds-record-data-chip--wrap">
+          <i className="bi bi-dot" style={{ fontSize: '0.65rem', marginRight: 2, opacity: 0.5 }} />
+          {val}
+        </span>
+      ))}
+      {values.length > SHOW_LIMIT && (
+        <button
+          type="button"
+          className="vds-record-data-more"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded
+            ? <><i className="bi bi-chevron-up" style={{ fontSize: '0.65rem', marginRight: 3 }} />Show fewer</>
+            : <><i className="bi bi-chevron-down" style={{ fontSize: '0.65rem', marginRight: 3 }} />+{extra} more</>}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export interface RecordsTableProps {
   records: RecordSet[];
@@ -51,34 +79,63 @@ const statusClass = (status: string) => {
 
 function formatRecordData(r: RecordSet): React.ReactNode {
   if (!r.records?.length) return <span className="text-muted">—</span>;
+  
+  // NS / PTR: stacked chips with expand/collapse after 3
+  if (r.type === 'NS' || r.type === 'PTR') {
+    const key = r.type === 'NS' ? 'nsdname' : 'ptrdname';
+    const all = r.records.map((d: RecordData) => (d as Record<string, string>)[key] ?? '');
+    return <MultiValueChips values={all} />;
+  }
 
-  const items = r.records.slice(0, 3).map((d: RecordData, i) => {
+  // SOA: all 7 fields in 4 chips
+  if (r.type === 'SOA' && r.records[0]) {
+    const d = r.records[0];
+    return (
+      <div className="d-flex flex-column gap-1">
+        <span className="vds-record-data-chip vds-record-data-chip--wrap">
+          <i className="bi bi-server" style={{ fontSize: '0.65rem', marginRight: 3, opacity: 0.6 }} />
+          {d.mname}
+        </span>
+        <span className="vds-record-data-chip vds-record-data-chip--wrap">
+          <i className="bi bi-envelope" style={{ fontSize: '0.65rem', marginRight: 3, opacity: 0.6 }} />
+          {d.rname}
+        </span>
+        <span className="vds-record-data-chip vds-record-data-chip--dim">
+          serial {d.serial} · refresh {d.refresh} · retry {d.retry}
+        </span>
+        <span className="vds-record-data-chip vds-record-data-chip--dim">
+          expire {d.expire} · minimum {d.minimum}
+        </span>
+      </div>
+    );
+  }
+
+  const items = r.records.slice(0, 3).map((d: RecordData, i: number) => {
     let text = '';
     switch (r.type) {
       case 'A':
       case 'AAAA':   text = d.address ?? ''; break;
       case 'CNAME':  text = d.cname ?? ''; break;
-      case 'PTR':    text = d.ptrdname ?? ''; break;
-      case 'NS':     text = d.nsdname ?? ''; break;
-      case 'MX':     text = `${d.preference ?? 10} ${d.exchange ?? ''}`; break;
+      case 'MX':     text = `${d.preference ?? 10} ${d.exchange ?? ''}`; break;
       case 'TXT':
-      case 'SPF':    text = `"${(d.text ?? '').slice(0, 50)}"`; break;
-      case 'SRV':    text = `${d.priority} ${d.weight} ${d.port} ${d.target}`; break;
-      case 'SOA':    text = `${d.mname} ${d.rname} (${d.serial})`; break;
-      case 'CAA':    text = `${d.flags} ${d.tag} "${d.value}"`; break;
-      case 'SSHFP':  text = `${d.algorithm} ${d.fingerprintType} ${String(d.fingerprint ?? '').slice(0, 12)}…`; break;
-      case 'DS':     text = `${d.keytag} ${d.algorithm} ${d.digesttype}`; break;
-      case 'NAPTR':  text = `${d.order} ${d.preference} ${d.flags} ${d.service}`; break;
+      case 'SPF':    text = `"${d.text ?? ''}"`; break;
+      case 'SRV':    text = `${d.priority} ${d.weight} ${d.port} ${d.target}`; break;
+      case 'CAA':    text = `${d.flags} ${d.tag} "${d.value}"`; break;
+      case 'SSHFP':  text = `alg ${d.algorithm} fp ${String(d.fingerprint ?? '').slice(0, 12)}…`; break;
+      case 'DS':     text = `tag ${d.keytag} alg ${d.algorithm} digest ${d.digesttype}`; break;
+      case 'NAPTR':  text = `${d.order} ${d.preference} ${d.flags} ${d.service}`; break;
       default:       text = JSON.stringify(d).slice(0, 40);
     }
-    return <span key={i} className="vds-record-data-chip">{text}</span>;
+    return <span key={i} className="vds-record-data-chip vds-record-data-chip--wrap">{text}</span>;
   });
 
   return (
     <div className="d-flex flex-wrap gap-1 align-items-center">
       {items}
       {r.records.length > 3 && (
-        <span className="vds-record-data-more">+{r.records.length - 3}</span>
+        <span className="vds-record-data-more"
+          title={r.records.slice(3).map((d: RecordData) => JSON.stringify(d)).join('\n')}
+        >+{r.records.length - 3} more</span>
       )}
     </div>
   );
