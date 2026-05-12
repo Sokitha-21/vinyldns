@@ -110,7 +110,7 @@ export function ZoneDetailPage() {
   const [copiedZoneId, setCopiedZoneId] = useState(false);
   const [availableTypes, setAvailableTypes] = useState<string[]>([]);
   const [copiedChangeId, setCopiedChangeId] = useState<string | null>(null);
-  const [recentChangesOpen, setRecentChangesOpen] = useState(true);
+  const [recentChangesOpen, setRecentChangesOpen] = useState(false);
   const [zcUserNames, setZcUserNames] = useState<Record<string, string>>({});
   const [zcGroupNames, setZcGroupNames] = useState<Record<string, string>>({});
   const [viewingRecordSet, setViewingRecordSet] = useState<{ label: string; rs: RecordSet } | null>(null);
@@ -224,7 +224,9 @@ export function ZoneDetailPage() {
     nextPageEnabled: recNextEnabled, prevPageEnabled: recPrevEnabled,
     getPanelTitle: recPanelTitle,
     search: searchRecords,
+    refetch: refetchRecords,
     createRecord, updateRecord, deleteRecord,
+    isCreatePending, isUpdatePending, isDeletePending,
   } = useZoneRecords(id);
 
   // Update the available type list only when no type filter is active (unfiltered results).
@@ -707,6 +709,8 @@ export function ZoneDetailPage() {
                   onCancel={() => { setShowRecordForm(false); setEditRecord(null); }}
                   mode={editRecord ? 'edit' : 'create'}
                   isSharedZone={zoneData?.shared ?? false}
+                  isReverseZone={zoneData.name.endsWith('in-addr.arpa.') || zoneData.name.endsWith('ip6.arpa.')}
+                  isLoading={editRecord ? isUpdatePending : isCreatePending}
                   allGroups={groupsData ?? []}
                 />
               </div>
@@ -982,7 +986,7 @@ export function ZoneDetailPage() {
                           setStatusFilter('');
                           setTtlFilter(null);
                           searchRecords({ name: '', type: '' });
-                          void queryClient.invalidateQueries({ queryKey: ['zone-recordsets', id] });
+                          void refetchRecords();
                         }}
                       >
                         <i className="bi bi-arrow-clockwise" />
@@ -1080,9 +1084,11 @@ export function ZoneDetailPage() {
                     Delete <strong>{recordToDelete.name}</strong> ({recordToDelete.type})? This cannot be undone.
                   </div>
                   <div className="modal-footer">
-                    <button className="btn btn-outline-secondary" onClick={() => setRecordToDelete(null)}>Cancel</button>
-                    <button className="btn btn-danger" onClick={handleDeleteConfirm}>
-                      <i className="bi bi-trash me-1" />Delete
+                    <button className="btn btn-outline-secondary" onClick={() => setRecordToDelete(null)} disabled={isDeletePending}>Cancel</button>
+                    <button className="btn btn-danger" onClick={handleDeleteConfirm} disabled={isDeletePending}>
+                      {isDeletePending
+                        ? <><span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />Deleting…</>
+                        : <><i className="bi bi-trash me-1" />Delete</>}
                     </button>
                   </div>
                 </div>

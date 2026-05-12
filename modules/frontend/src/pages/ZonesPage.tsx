@@ -47,7 +47,7 @@ export function ZonesPage() {
 
   // ── Modals / forms ───────────────────────────────────────────────────────────
   const [showConnectForm, setShowConnectForm] = useState(false);
-
+  const [showCards, setShowCards] = useState(true);
   // ── Per-tab search inputs (committed on Search / Enter) ──────────────────────
   const [myZonesInput,   setMyZonesInput]   = useState('');
   const [allZonesInput,  setAllZonesInput]  = useState('');
@@ -165,7 +165,7 @@ export function ZonesPage() {
   const { data: mySuggestData } = useQuery({
     queryKey: ['zone-suggestions-my', myZonesSuggestQuery],
     queryFn: async () => {
-      const res = await zonesService.getZones(100, undefined, myZonesSuggestQuery, false, true, true);
+      const res = await zonesService.getZones(10, undefined, myZonesSuggestQuery, false, false, true);
       return res.data.zones ?? [];
     },
     enabled: myZonesSuggestQuery.length > 0 && !myZonesSuggestQuery.includes('@'),
@@ -174,7 +174,7 @@ export function ZonesPage() {
   const { data: allSuggestData } = useQuery({
     queryKey: ['zone-suggestions-all', allZonesSuggestQuery],
     queryFn: async () => {
-      const res = await zonesService.getZones(100, undefined, allZonesSuggestQuery, false, true, true);
+      const res = await zonesService.getZones(10, undefined, allZonesSuggestQuery, false, true, true);
       return res.data.zones ?? [];
     },
     enabled: allZonesSuggestQuery.length > 0 && !allZonesSuggestQuery.includes('@'),
@@ -583,8 +583,8 @@ export function ZonesPage() {
                       />
                     </div>
                     {mySuggestionsOpen && mySuggestions.length > 0 && !myZonesInput.includes('@') && (
-                      <ul className="list-group position-absolute shadow" style={{ zIndex: 1060, top: 'calc(100% + 2px)', left: 0, minWidth: '100%', width: 'max-content', maxHeight: '220px', overflowY: 'auto', borderRadius: '0.55rem', border: '1px solid #d4dbe8' }}>
-                        {mySuggestions.map((z) => (
+                      <ul className="list-group position-absolute shadow" style={{ zIndex: 1060, top: 'calc(100% + 2px)', left: 0, minWidth: '100%', width: 'max-content', maxHeight: '260px', overflowY: 'auto', borderRadius: '0.55rem', border: '1px solid #d4dbe8' }}>
+                        {mySuggestions.slice(0, 10).map((z) => (
                           <li
                             key={z.id}
                             className="list-group-item list-group-item-action py-2 px-3 d-flex align-items-center gap-2 vds-suggestion-item"
@@ -724,8 +724,8 @@ export function ZonesPage() {
                       />
                     </div>
                     {allSuggestionsOpen && allSuggestions.length > 0 && !allZonesInput.includes('@') && (
-                      <ul className="list-group position-absolute shadow" style={{ zIndex: 1060, top: 'calc(100% + 2px)', left: 0, minWidth: '100%', width: 'max-content', maxHeight: '220px', overflowY: 'auto', borderRadius: '0.55rem', border: '1px solid #d4dbe8' }}>
-                        {allSuggestions.map((z) => (
+                      <ul className="list-group position-absolute shadow" style={{ zIndex: 1060, top: 'calc(100% + 2px)', left: 0, minWidth: '100%', width: 'max-content', maxHeight: '260px', overflowY: 'auto', borderRadius: '0.55rem', border: '1px solid #d4dbe8' }}>
+                        {allSuggestions.slice(0, 10).map((z) => (
                           <li
                             key={z.id}
                             className="list-group-item list-group-item-action py-2 px-3 d-flex align-items-center gap-2 vds-suggestion-item"
@@ -993,6 +993,14 @@ export function ZonesPage() {
                 <i className="bi bi-arrow-clockwise" />
                 <span className="vds-btn-flat__label">Refresh</span>
               </button>
+              <button
+                className="btn btn-sm d-flex align-items-center gap-1 vds-btn-flat"
+                onClick={() => setShowCards((v) => !v)}
+                title={showCards ? 'Hide insight cards' : 'Show insight cards'}
+              >
+                <i className={`bi ${showCards ? 'bi-eye-slash' : 'bi-eye'}`} />
+                <span className="vds-btn-flat__label">{showCards ? 'Hide Cards' : 'Show Cards'}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1137,7 +1145,7 @@ export function ZonesPage() {
       <div className={`vds-tab-content${tabFading ? ' vds-tab-content--fading' : ''}`}>
 
         {/* ── Insight cards ── */}
-        <div className="row g-2 mb-3 align-items-stretch">
+        {showCards && <div className="row g-2 mb-3 align-items-stretch">
 
           {/* ── Card 1: Total Zones ── */}
           <div className="col-6 col-md-3 d-flex">
@@ -1353,7 +1361,7 @@ export function ZonesPage() {
             </div>
           </div>
 
-        </div>
+        </div>}
 
         {/* ── My Zones content ── */}
         {mainTab === 'myZones' && (

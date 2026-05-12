@@ -87,12 +87,18 @@ export function ZonesTable({ zones, showAllZones }: ZonesTableProps) {
               <td>
                 <div className="d-flex align-items-center gap-2">
                   <span className="vds-zone-avatar">{initials(zone.name)}</span>
-                  <Link
-                    to={`/zones/${zone.id}`}
-                    className="fw-semibold text-decoration-none vds-table-primary"
-                  >
-                    {zone.name}
-                  </Link>
+                  {zone.accessLevel && zone.accessLevel !== 'NoAccess' ? (
+                    <Link
+                      to={`/zones/${zone.id}`}
+                      className="fw-semibold text-decoration-none vds-table-primary"
+                    >
+                      {zone.name}
+                    </Link>
+                  ) : (
+                    <span className="fw-semibold vds-table-secondary" title="You do not have access to this zone">
+                      {zone.name}
+                    </span>
+                  )}
                 </div>
               </td>
               <td className="vds-table-secondary">{zone.email}</td>
@@ -125,13 +131,17 @@ export function ZonesTable({ zones, showAllZones }: ZonesTableProps) {
                 </span>
               </td>
               <td>
-                <Link
-                  to={`/zones/${zone.id}`}
-                  className="vds-action-btn vds-action-btn--view"
-                  title="View zone"
-                >
-                  <i className="bi bi-eye-fill" />
-                </Link>
+                {zone.accessLevel && zone.accessLevel !== 'NoAccess' ? (
+                  <Link
+                    to={`/zones/${zone.id}`}
+                    className="vds-action-btn vds-action-btn--view"
+                    title="View zone"
+                  >
+                    <i className="bi bi-eye-fill" />
+                  </Link>
+                ) : (
+                  <span className="vds-table-muted small" title="No access"><i className="bi bi-lock" /></span>
+                )}
               </td>
             </tr>
           ))}
