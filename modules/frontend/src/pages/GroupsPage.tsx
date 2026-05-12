@@ -124,8 +124,8 @@ export function GroupsPage() {
     }
     const timer = setTimeout(async () => {
       try {
-        const res = await groupsService.getGroupsAbridged(100, undefined, ignoreAccess, searchInput);
-        const names = (res.data.groups ?? []).map((g: { name: string }) => g.name);
+        const res = await groupsService.getGroupsAbridged(10, undefined, ignoreAccess, searchInput);
+        const names = (res.data.groups ?? []).map((g: { name: string }) => g.name).slice(0, 10);
         setSuggestions(names);
         setShowSuggestions(names.length > 0);
         setActiveSuggestion(-1);
@@ -483,8 +483,8 @@ export function GroupsPage() {
                   />
                 </div>
                 {showSuggestions && (
-                  <ul className="list-group position-absolute w-100 shadow-lg vds-suggestions-list">
-                    {suggestions.map((name, i) => (
+                  <ul className="list-group position-absolute w-100 shadow-lg vds-suggestions-list" style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                    {suggestions.slice(0, 10).map((name, i) => (
                       <li
                         key={name}
                         className={`list-group-item list-group-item-action vds-suggestion-item${i === activeSuggestion ? ' active' : ''}`}
@@ -716,6 +716,15 @@ export function GroupsPage() {
         <LoadingSpinner />
       ) : (
         <>
+          {(nextPageEnabled || prevPageEnabled) && (
+            <Pagination
+              onPrev={prevPage}
+              onNext={nextPage}
+              prevEnabled={prevPageEnabled}
+              nextEnabled={nextPageEnabled}
+              panelTitle={getPanelTitle()}
+            />
+          )}
           <GroupsTable
             groups={displayedGroups}
             onDelete={handleDelete}
