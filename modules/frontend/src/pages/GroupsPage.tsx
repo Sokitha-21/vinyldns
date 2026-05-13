@@ -40,7 +40,7 @@ export function GroupsPage() {
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const [searchFocused, setSearchFocused] = useState(false);
   const [roleFilter, setRoleFilter] = useState<'admin' | 'member' | 'norole' | null>(null);
-  const [emailFilter, setEmailFilter] = useState('');
+  const [searchFilter, setSearchFilter] = useState('');
   const [tabFading, setTabFading] = useState(false);
   const [showCards, setShowCards] = useState(true);
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
@@ -117,7 +117,7 @@ export function GroupsPage() {
       justSelectedRef.current = false;
       return;
     }
-    if (searchInput.includes('@') || searchInput.length < 1) {
+    if (searchInput.length < 1) {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
@@ -151,14 +151,9 @@ export function GroupsPage() {
 
   const handleSearch = useCallback(() => {
     setShowSuggestions(false);
-    setEmailFilter(searchInput);
-    if (!searchInput.includes('@')) {
-      if (ignoreAccess) setAllGroupsQuery(searchInput);
-      else setMyGroupsQuery(searchInput);
-    } else {
-      if (ignoreAccess) setAllGroupsQuery('');
-      else setMyGroupsQuery('');
-    }
+    setSearchFilter(searchInput);
+    if (ignoreAccess) setAllGroupsQuery(searchInput);
+    else setMyGroupsQuery(searchInput);
     resetPaging();
   }, [ignoreAccess, searchInput, resetPaging]);
 
@@ -166,7 +161,7 @@ export function GroupsPage() {
     justSelectedRef.current = true;
     setSearchInput(name);
     setShowSuggestions(false);
-    setEmailFilter(name);
+    setSearchFilter(name);
     if (ignoreAccess) setAllGroupsQuery(name);
     else setMyGroupsQuery(name);
     resetPaging();
@@ -214,7 +209,7 @@ export function GroupsPage() {
     setSearchInput('');
     setSuggestions([]);
     setShowSuggestions(false);
-    setEmailFilter('');
+    setSearchFilter('');
     setRoleFilter(null);
     resetPaging();
     queryClient.invalidateQueries({ queryKey: ['groups'] });
@@ -226,7 +221,7 @@ export function GroupsPage() {
     setTimeout(() => {
       setIgnoreAccess(newIgnoreAccess);
       setRoleFilter(null);
-      setEmailFilter('');
+      setSearchFilter('');
       setSearchInput('');
       setSuggestions([]);
       setShowSuggestions(false);
@@ -268,26 +263,30 @@ export function GroupsPage() {
 
   const insightSource = ignoreAccess ? (insightAllGroups ?? []) : (insightMyGroups ?? []);
 
-  const hasAdminRole = insightSource.some(
+ const searchFilteredGroups = searchFilter
+    ? insightSource.filter((g) =>
+        g.name.toLowerCase().includes(searchFilter.toLowerCase())
+      )
+    : roleFilter
+    ? insightSource
+    : groups;
+
+  const roleFilterBase = searchFilter ? searchFilteredGroups : insightSource;
+
+  const hasAdminRole = roleFilterBase.some(
     (g) => g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper)
   );
-  const hasMemberRole = insightSource.some((g) => {
+  const hasMemberRole = roleFilterBase.some((g) => {
     const isAdminRole = g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper);
     return (g.members?.some((m) => m.id === profile?.id) ?? false) && !isAdminRole;
   });
-  const hasNoRoleInData = insightSource.some((g) => {
+  const hasNoRoleInData = roleFilterBase.some((g) => {
     const isAdminRole = g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper);
     return !(g.members?.some((m) => m.id === profile?.id) ?? false) && !isAdminRole;
   });
 
-  const emailFilteredGroups = emailFilter
-    ? insightSource.filter((g) =>
-        g.name.toLowerCase().includes(emailFilter.toLowerCase()) ||
-        g.email.toLowerCase().includes(emailFilter.toLowerCase())
-      )
-    : groups;
   const displayedGroups = roleFilter
-    ? emailFilteredGroups.filter((g) => {
+    ? searchFilteredGroups.filter((g) => {
         const isAdminRole = g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper);
         const isMemberRole = g.members?.some((m) => m.id === profile?.id);
         if (roleFilter === 'admin') return isAdminRole;
@@ -295,11 +294,11 @@ export function GroupsPage() {
         if (roleFilter === 'norole') return !isMemberRole && !isAdminRole;
         return true;
       })
-    : emailFilteredGroups;
+    : searchFilteredGroups;
 
   const roleFilterLabel: Record<string, string> = { admin: 'Admin', member: 'Member', norole: 'No Role' };
 
-  const anyFilterActive = !!(roleFilter || emailFilter);
+  const anyFilterActive = !!(roleFilter || searchFilter);
   const cardAdminFiltered = displayedGroups.filter(
     (g) => g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper)
   ).length;
@@ -464,14 +463,14 @@ export function GroupsPage() {
                     id="group-search-text"
                     type="text"
                     className="form-control border-0 ps-0 shadow-none bg-transparent"
-                    placeholder="Search by name or email"
+                    placeholder="Search group by name"
                     value={searchInput}
                     autoComplete="off"
                     onChange={(e) => {
                       const val = e.target.value;
                       setSearchInput(val);
                       if (val === '') {
-                        setEmailFilter('');
+                        setSearchFilter('');
                         if (ignoreAccess) setAllGroupsQuery('');
                         else setMyGroupsQuery('');
                         resetPaging();
@@ -520,19 +519,19 @@ export function GroupsPage() {
         </div>
       </div>
 
-      {(roleFilter || emailFilter) && (
+      {(roleFilter || searchFilter) && (
         <div className="d-flex justify-content-end gap-2 mb-2 flex-wrap align-items-center px-1">
-          {emailFilter && (
+          {searchFilter && (
             <span className="vds-active-filter-tag d-flex align-items-center gap-1">
               <i className="bi bi-search" />
-              Search: {emailFilter}
+              Search: {searchFilter}
               <button
                 type="button"
                 className="btn-close ms-1"
                 style={{ fontSize: '0.5rem', filter: 'invert(30%) sepia(80%) saturate(500%) hue-rotate(190deg)' }}
                 aria-label="Remove search filter"
                 onClick={() => {
-                  setEmailFilter('');
+                  setSearchFilter('');
                   setSearchInput('');
                   if (ignoreAccess) setAllGroupsQuery('');
                   else setMyGroupsQuery('');
@@ -557,7 +556,7 @@ export function GroupsPage() {
           <button type="button" className="btn btn-sm vds-btn-flat d-flex align-items-center gap-1"
             style={{ color: '#e53e3e', border: '1px solid rgba(229,62,62,0.3)', fontSize: '0.78rem' }}
             onClick={() => {
-              setEmailFilter(''); setSearchInput(''); setRoleFilter(null);
+              setSearchFilter(''); setSearchInput(''); setRoleFilter(null);
               if (ignoreAccess) setAllGroupsQuery(''); else setMyGroupsQuery('');
               resetPaging();
             }}>
@@ -716,7 +715,7 @@ export function GroupsPage() {
         <LoadingSpinner />
       ) : (
         <>
-          {(nextPageEnabled || prevPageEnabled) && (
+          {(!anyFilterActive && (nextPageEnabled || prevPageEnabled)) && (
             <Pagination
               onPrev={prevPage}
               onNext={nextPage}
@@ -733,7 +732,7 @@ export function GroupsPage() {
             isGroupAdmin={isGroupAdmin}
             currentUserId={profile?.id}
           />
-          {(nextPageEnabled || prevPageEnabled) && (
+          {(!anyFilterActive && (nextPageEnabled || prevPageEnabled)) && (
             <Pagination
               onPrev={prevPage}
               onNext={nextPage}
