@@ -23,7 +23,7 @@ import type { CreateDnsChangeRequest } from "../types/dnsChange";
 
 export function useDnsChanges(
   ignoreAccess = false,
-  submitterName?: string,
+  userName?: string,
   approvalStatus?: string,
   dateTimeRangeStart?: string,
   dateTimeRangeEnd?: string,
@@ -36,7 +36,6 @@ export function useDnsChanges(
     nextPageEnabled,
     prevPageEnabled,
     getPanelTitle,
-    resetPaging,
   } = usePaging(25);
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
@@ -46,7 +45,7 @@ export function useDnsChanges(
       "dnschanges",
       ignoreAccess,
       paging.next,
-      submitterName,
+      userName,
       approvalStatus,
       dateTimeRangeStart,
       dateTimeRangeEnd,
@@ -57,7 +56,7 @@ export function useDnsChanges(
         paging.next as number | undefined,
         ignoreAccess,
         approvalStatus,
-        submitterName,
+        userName,
         dateTimeRangeStart,
         dateTimeRangeEnd,
       );
@@ -144,7 +143,6 @@ export function useDnsChanges(
     nextPageEnabled,
     prevPageEnabled,
     getPanelTitle,
-    resetPaging,
     createBatchChange: createMutation.mutate,
     cancelBatchChange: cancelMutation.mutate,
     approveBatchChange: approveMutation.mutate,

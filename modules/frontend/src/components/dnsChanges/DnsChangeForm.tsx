@@ -474,6 +474,21 @@ function ChangeRow({
   } = useFormContext<DnsChangeFormData>();
   const changeType = useWatch({ control, name: `changes.${index}.changeType` });
   const recordType = useWatch({ control, name: `changes.${index}.type` });
+  const [isDark, setIsDark] = useState<boolean>(
+    () => document.documentElement.getAttribute("data-vds-theme") === "dark",
+  );
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(
+        document.documentElement.getAttribute("data-vds-theme") === "dark",
+      );
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-vds-theme"],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   const isAdd = changeType === "Add";
   const isPtr = recordType === "PTR";
@@ -486,8 +501,22 @@ function ChangeRow({
   return (
     <div
       style={{
-        background: hasErrors ? "#fff5f5" : "#fff",
-        border: `1px solid ${hasErrors ? "#f5c2c7" : "#e8ecf0"}`,
+        background: hasErrors
+          ? isDark
+            ? "#1e0a0a"
+            : "#fff5f5"
+          : isDark
+            ? "#1e293b"
+            : "#fff",
+        border: `1px solid ${
+          hasErrors
+            ? isDark
+              ? "#4a1515"
+              : "#f5c2c7"
+            : isDark
+              ? "#2d4163"
+              : "#e8ecf0"
+        }`,
         borderRadius: "0.6rem",
         marginBottom: "0.75rem",
         overflow: "hidden",
@@ -501,15 +530,29 @@ function ChangeRow({
           alignItems: "center",
           justifyContent: "space-between",
           padding: "0.45rem 0.85rem",
-          background: hasErrors ? "#fce8e8" : "#f4f7fb",
-          borderBottom: `1px solid ${hasErrors ? "#f5c2c7" : "#e8ecf0"}`,
+          background: hasErrors
+            ? isDark
+              ? "#2a0a0a"
+              : "#fce8e8"
+            : isDark
+              ? "#162032"
+              : "#f4f7fb",
+          borderBottom: `1px solid ${
+            hasErrors
+              ? isDark
+                ? "#4a1515"
+                : "#f5c2c7"
+              : isDark
+                ? "#2d4163"
+                : "#e8ecf0"
+          }`,
         }}
       >
         <span
           style={{
             fontSize: "0.75rem",
             fontWeight: 600,
-            color: hasErrors ? "#b02a37" : "#5a6a85",
+            color: hasErrors ? "#b02a37" : isDark ? "#94a3b8" : "#5a6a85",
             letterSpacing: "0.03em",
             textTransform: "uppercase",
           }}
@@ -821,27 +864,29 @@ export function DnsChangeForm({
 }: DnsChangeFormProps) {
   const [allowManualReview, setAllowManualReview] = useState(false);
   const [rowErrors, setRowErrors] = useState<string[][]>([]);
-  const [formStatus, setFormStatus] = useState<
-    "pendingSubmit" | "pendingConfirm"
-  >("pendingSubmit");
-  const [pendingFormData, setPendingFormData] =
-    useState<DnsChangeFormData | null>(null);
   const [csvAlert, setCsvAlert] = useState<{
     type: "success" | "danger";
     message: string;
   } | null>(null);
   const csvFileRef = useRef<HTMLInputElement>(null);
+  const [isDark, setIsDark] = useState<boolean>(
+    () => document.documentElement.getAttribute("data-vds-theme") === "dark",
+  );
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(
+        document.documentElement.getAttribute("data-vds-theme") === "dark",
+      );
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-vds-theme"],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   // Merge local + server errors
   const effectiveRowErrors = serverRowErrors ?? rowErrors;
-
-  // When server returns per-row errors, reset back to submit state
-  useEffect(() => {
-    if (serverRowErrors && serverRowErrors.some((e) => e.length > 0)) {
-      setFormStatus("pendingSubmit");
-      setPendingFormData(null);
-    }
-  }, [serverRowErrors]);
 
   // Detect owner group error from per-row server errors
   const ownerGroupError = (serverRowErrors ?? [])
@@ -872,16 +917,8 @@ export function DnsChangeForm({
     name: "changes",
   });
 
-  /** Step 1 — react-hook-form validation passes → switch to confirm view */
+  /** Submit form directly after validation */
   const handleFormSubmit = (data: DnsChangeFormData) => {
-    setPendingFormData(data);
-    setFormStatus("pendingConfirm");
-  };
-
-  /** Step 2 — user clicks Confirm → actually call the API */
-  const handleConfirmSubmit = () => {
-    if (!pendingFormData) return;
-    const data = pendingFormData;
     setRowErrors([]);
 
     // Expand A+PTR / AAAA+PTR into paired entries (mirrors portal formatData)
@@ -939,11 +976,6 @@ export function DnsChangeForm({
     );
   };
 
-  const handleCancelConfirm = () => {
-    setFormStatus("pendingSubmit");
-    setPendingFormData(null);
-  };
-
   /** Handle CSV file import */
   const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -980,8 +1012,8 @@ export function DnsChangeForm({
         {/* ── Section: Metadata ─────────────────────────────────── */}
         <div
           style={{
-            background: "#f8fafd",
-            border: "1px solid #e8ecf0",
+            background: isDark ? "#162032" : "#f8fafd",
+            border: `1px solid ${isDark ? "#2d4163" : "#e8ecf0"}`,
             borderRadius: "0.65rem",
             padding: "1.25rem 1.5rem",
             marginBottom: "1.5rem",
@@ -1071,7 +1103,7 @@ export function DnsChangeForm({
               <textarea
                 className="form-control form-control-sm"
                 rows={2}
-                placeholder="Brief description of this batch change…"
+                placeholder="Brief description of this batch change"
                 style={{
                   borderColor: "#dde3ec",
                   boxShadow: "none",
@@ -1273,9 +1305,9 @@ export function DnsChangeForm({
                 htmlFor="batchChangeCsv"
                 className="btn btn-sm mb-0"
                 style={{
-                  background: "#fff",
-                  border: "1px solid #d4dae3",
-                  color: "#4a5568",
+                  background: isDark ? "#1e293b" : "#fff",
+                  border: `1px solid ${isDark ? "#2d4163" : "#d4dae3"}`,
+                  color: isDark ? "#94a3b8" : "#4a5568",
                   borderRadius: "0.45rem",
                   padding: "0.33rem 0.8rem",
                   fontSize: "0.82rem",
@@ -1347,11 +1379,12 @@ export function DnsChangeForm({
           {fields.length === 0 ? (
             <div
               style={{
-                border: "2px dashed #dde3ec",
+                border: `2px dashed ${isDark ? "#2d4163" : "#dde3ec"}`,
                 borderRadius: "0.65rem",
                 padding: "2.5rem 1rem",
                 textAlign: "center",
-                color: "#9aacbe",
+                color: isDark ? "#3d5a7a" : "#9aacbe",
+                background: isDark ? "#1e293b" : "transparent",
               }}
             >
               <i
@@ -1386,158 +1419,93 @@ export function DnsChangeForm({
         <div
           style={{
             paddingTop: "1rem",
-            borderTop: "1px solid #e8ecf0",
+            borderTop: `1px solid ${isDark ? "#2d4163" : "#e8ecf0"}`,
           }}
         >
-          {formStatus === "pendingSubmit" ? (
-            /* ── Step 1: Submit button ── */
-            <div className="d-flex align-items-center gap-2">
-              <button
-                type="submit"
-                disabled={fields.length === 0}
-                style={{
-                  background:
-                    fields.length === 0
-                      ? "#c8d4e0"
-                      : "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
-                  border: "none",
-                  color: "#fff",
-                  borderRadius: "0.45rem",
-                  padding: "0.45rem 1.4rem",
-                  fontSize: "0.85rem",
-                  fontWeight: 600,
-                  boxShadow:
-                    fields.length === 0
-                      ? "none"
-                      : "0 2px 8px rgba(30,95,168,.25)",
-                  cursor: fields.length === 0 ? "not-allowed" : "pointer",
-                  transition: "all 0.2s",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-                onMouseEnter={(e) => {
-                  if (fields.length > 0)
-                    e.currentTarget.style.boxShadow =
-                      "0 3px 12px rgba(30,95,168,.35)";
-                }}
-                onMouseLeave={(e) => {
-                  if (fields.length > 0)
-                    e.currentTarget.style.boxShadow =
-                      "0 2px 8px rgba(30,95,168,.25)";
-                }}
-              >
-                <i className="bi bi-send-fill" />
-                Submit Batch Change
-              </button>
-              <button
-                type="button"
-                onClick={onCancel}
-                style={{
-                  background: "#fff",
-                  border: "1px solid #d4dae3",
-                  color: "#5a6a85",
-                  borderRadius: "0.45rem",
-                  padding: "0.45rem 1.1rem",
-                  fontSize: "0.85rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  transition: "all 0.15s",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#1e5fa8";
-                  e.currentTarget.style.color = "#1e5fa8";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "#d4dae3";
-                  e.currentTarget.style.color = "#5a6a85";
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            /* ── Step 2: Confirm panel ── */
-            <div
+          <div className="d-flex align-items-center gap-2">
+            <button
+              type="submit"
+              disabled={fields.length === 0 || isSubmitting}
               style={{
-                background: "#f8fafd",
-                border: "1px solid #dde3ec",
-                borderRadius: "0.55rem",
-                padding: "0.85rem 1.1rem",
+                background:
+                  fields.length === 0 || isSubmitting
+                    ? "#c8d4e0"
+                    : "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
+                border: "none",
+                color: "#fff",
+                borderRadius: "0.45rem",
+                padding: "0.45rem 1.4rem",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                boxShadow:
+                  fields.length === 0 || isSubmitting
+                    ? "none"
+                    : "0 2px 8px rgba(30,95,168,.25)",
+                cursor:
+                  fields.length === 0 || isSubmitting
+                    ? "not-allowed"
+                    : "pointer",
+                transition: "all 0.2s",
                 display: "flex",
                 alignItems: "center",
-                flexWrap: "wrap",
-                gap: "0.75rem",
+                gap: 6,
+              }}
+              onMouseEnter={(e) => {
+                if (fields.length > 0 && !isSubmitting)
+                  e.currentTarget.style.boxShadow =
+                    "0 3px 12px rgba(30,95,168,.35)";
+              }}
+              onMouseLeave={(e) => {
+                if (fields.length > 0 && !isSubmitting)
+                  e.currentTarget.style.boxShadow =
+                    "0 2px 8px rgba(30,95,168,.25)";
               }}
             >
-              <span
-                style={{
-                  fontSize: "0.85rem",
-                  color: "#4a5568",
-                  fontWeight: 500,
-                  flex: 1,
-                  minWidth: 200,
-                }}
-              >
-                <i className="bi bi-question-circle me-1 text-primary" />
-                Are you sure you want to submit this batch change request?
-              </span>
-              <div className="d-flex align-items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleCancelConfirm}
-                  disabled={isSubmitting}
-                  style={{
-                    background: "#fff",
-                    border: "1px solid #d4dae3",
-                    color: "#5a6a85",
-                    borderRadius: "0.45rem",
-                    padding: "0.4rem 1rem",
-                    fontSize: "0.85rem",
-                    fontWeight: 600,
-                    cursor: isSubmitting ? "not-allowed" : "pointer",
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmSubmit}
-                  disabled={isSubmitting}
-                  style={{
-                    background: isSubmitting
-                      ? "#c8d4e0"
-                      : "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
-                    border: "none",
-                    color: "#fff",
-                    borderRadius: "0.45rem",
-                    padding: "0.4rem 1.2rem",
-                    fontSize: "0.85rem",
-                    fontWeight: 600,
-                    boxShadow: isSubmitting
-                      ? "none"
-                      : "0 2px 8px rgba(30,95,168,.25)",
-                    cursor: isSubmitting ? "not-allowed" : "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm" />
-                      Submitting…
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-check-lg" />
-                      Confirm
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
+              {isSubmitting ? (
+                <>
+                  <span className="spinner-border spinner-border-sm" />
+                  Submitting…
+                </>
+              ) : (
+                <>
+                  <i className="bi bi-send-fill" />
+                  Submit Batch Change
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={isSubmitting}
+              style={{
+                background: isDark ? "#1e293b" : "#fff",
+                border: `1px solid ${isDark ? "#2d4163" : "#d4dae3"}`,
+                color: isDark ? "#94a3b8" : "#5a6a85",
+                borderRadius: "0.45rem",
+                padding: "0.45rem 1.1rem",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                cursor: isSubmitting ? "not-allowed" : "pointer",
+                transition: "all 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                if (!isSubmitting) {
+                  e.currentTarget.style.borderColor = "#1e5fa8";
+                  e.currentTarget.style.color = "#1e5fa8";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isSubmitting) {
+                  e.currentTarget.style.borderColor = isDark
+                    ? "#2d4163"
+                    : "#d4dae3";
+                  e.currentTarget.style.color = isDark ? "#94a3b8" : "#5a6a85";
+                }
+              }}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </form>
     </FormProvider>

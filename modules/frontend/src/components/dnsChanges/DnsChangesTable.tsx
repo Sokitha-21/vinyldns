@@ -26,17 +26,26 @@ interface DnsChangesTableProps {
   currentUserName?: string;
 }
 
-const STATUS_CONFIG: Record<string, { bg: string; label: string }> = {
-  Complete: { bg: "bg-success", label: "Complete" },
-  Failed: { bg: "bg-danger", label: "Failed" },
-  PartialFailure: { bg: "bg-warning text-dark", label: "Partial Failure" },
-  PendingProcessing: { bg: "bg-info text-dark", label: "Pending Processing" },
-  PendingReview: { bg: "bg-warning text-dark", label: "Pending Review" },
-  Pending: { bg: "bg-info text-dark", label: "Pending" },
-  Rejected: { bg: "bg-danger", label: "Rejected" },
-  Scheduled: { bg: "bg-primary", label: "Scheduled" },
-  Cancelled: { bg: "bg-secondary", label: "Cancelled" },
-};
+function changeStatusClass(status: string): string {
+  if (status === "Complete") return "vds-status-badge--success";
+  if (status === "Failed") return "vds-status-badge--danger";
+  if (status === "PartialFailure") return "vds-status-badge--warning";
+  if (status === "PendingProcessing") return "vds-status-badge--info";
+  if (status === "PendingReview") return "vds-status-badge--warning";
+  if (status === "Pending") return "vds-status-badge--info";
+  if (status === "Rejected") return "vds-status-badge--danger";
+  if (status === "Scheduled") return "vds-status-badge--info";
+  if (status === "Cancelled") return "vds-status-badge--secondary";
+  return "vds-status-badge--secondary";
+}
+function changeStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    PartialFailure: "Partial Failure",
+    PendingProcessing: "Pending Processing",
+    PendingReview: "Pending Review",
+  };
+  return map[status] ?? status;
+}
 
 function copyToClipboard(text: string) {
   void navigator.clipboard.writeText(text);
@@ -50,256 +59,128 @@ export function DnsChangesTable({
 }: DnsChangesTableProps) {
   if (changes.length === 0) {
     return (
-      <div
-        className="text-center py-5"
-        style={{
-          background: "linear-gradient(135deg, #0d6efd0a 0%, #ffffff 100%)",
-          border: "1px dashed #d0e4ff",
-          borderRadius: "0.75rem",
-        }}
-      >
-        <i
-          className="bi bi-list-ol text-primary"
-          style={{ fontSize: "2.5rem", opacity: 0.4 }}
-        />
-        <p className="mt-3 text-muted fw-semibold">No DNS changes found.</p>
-        <p className="text-muted small">
+      <div className="vds-empty-state">
+        <i className="bi bi-list-ol fs-1 mb-2" style={{ opacity: 0.4 }} />
+        <p className="mb-0 fw-semibold">No DNS changes found</p>
+        <small className="text-muted">
           Create a new batch change to get started.
-        </p>
+        </small>
       </div>
     );
   }
 
   return (
-    <div
-      className="card border-0"
-      style={{
-        borderRadius: "0.75rem",
-        boxShadow: "0 2px 12px rgba(13,110,253,.08)",
-        overflow: "hidden",
-      }}
-    >
-      <div className="table-responsive">
-        <table className="table table-hover align-middle mb-0">
-          <thead>
-            <tr
-              style={{
-                background: "#cfe0f5",
-                borderBottom: "2px solid #9ec5e0",
-              }}
-            >
-              <th
-                className="fw-semibold border-0 py-3"
-                style={{
-                  fontSize: "0.82rem",
-                  letterSpacing: "0.04em",
-                  background: "transparent",
-                  color: "#2c4a6e",
-                }}
-              >
-                SUBMITTED
-              </th>
-              {ignoreAccess && (
-                <th
-                  className="fw-semibold border-0 py-3"
-                  style={{
-                    fontSize: "0.82rem",
-                    letterSpacing: "0.04em",
-                    background: "transparent",
-                    color: "#2c4a6e",
-                  }}
-                >
-                  SUBMITTER
-                </th>
-              )}
-              <th
-                className="fw-semibold border-0 py-3"
-                style={{
-                  fontSize: "0.82rem",
-                  letterSpacing: "0.04em",
-                  background: "transparent",
-                  color: "#2c4a6e",
-                }}
-              >
-                ID
-              </th>
-              <th
-                className="fw-semibold border-0 py-3"
-                style={{
-                  fontSize: "0.82rem",
-                  letterSpacing: "0.04em",
-                  background: "transparent",
-                  color: "#2c4a6e",
-                }}
-              >
-                CHANGES
-              </th>
-              <th
-                className="fw-semibold border-0 py-3"
-                style={{
-                  fontSize: "0.82rem",
-                  letterSpacing: "0.04em",
-                  background: "transparent",
-                  color: "#2c4a6e",
-                }}
-              >
-                STATUS
-              </th>
-              <th
-                className="fw-semibold border-0 py-3"
-                style={{
-                  fontSize: "0.82rem",
-                  letterSpacing: "0.04em",
-                  background: "transparent",
-                  color: "#2c4a6e",
-                }}
-              >
-                DESCRIPTION
-              </th>
-              <th
-                className="fw-semibold border-0 py-3"
-                style={{
-                  fontSize: "0.82rem",
-                  letterSpacing: "0.04em",
-                  background: "transparent",
-                  color: "#2c4a6e",
-                }}
-              >
-                ACTIONS
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {changes.map((change, idx) => {
-              const statusCfg = STATUS_CONFIG[change.status] ?? {
-                bg: "bg-secondary",
-                label: change.status,
-              };
-              const canCancel =
-                change.approvalStatus === "PendingReview" &&
-                currentUserName === change.userName;
+    <div className="vds-zones-table-wrap">
+      <table className="vds-zones-table">
+        <thead>
+          <tr>
+            <th>SUBMITTED</th>
+            {ignoreAccess && <th>SUBMITTER</th>}
+            <th>ID</th>
+            <th>CHANGES</th>
+            <th>STATUS</th>
+            <th>DESCRIPTION</th>
+            <th>ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {changes.map((change) => {
+            const canCancel =
+              change.approvalStatus === "PendingReview" &&
+              currentUserName === change.userName;
 
-              return (
-                <tr
-                  key={change.id}
-                  style={{
-                    background: idx % 2 === 0 ? "#fff" : "#f8fbff",
-                    transition: "background 0.15s",
-                  }}
-                >
-                  <td className="small text-muted">
-                    {formatDateTime(change.createdTimestamp)}
-                  </td>
-                  {ignoreAccess && (
-                    <td>
-                      <span className="d-flex align-items-center gap-1">
-                        <i
-                          className="bi bi-person-circle text-muted"
-                          style={{ fontSize: "0.9rem" }}
-                        />
-                        <span className="small">{change.userName}</span>
-                      </span>
-                    </td>
-                  )}
+            return (
+              <tr key={change.id}>
+                <td className="vds-table-secondary vds-table-nowrap small">
+                  {formatDateTime(change.createdTimestamp)}
+                </td>
+                {ignoreAccess && (
                   <td>
-                    <div className="d-flex align-items-center gap-1">
-                      <Link
-                        to={`/dnschanges/${change.id}`}
-                        className="text-decoration-none small fw-semibold text-primary font-monospace"
-                      >
-                        {change.id.substring(0, 8)}…
-                      </Link>
+                    <span className="d-flex align-items-center gap-1">
+                      <i
+                        className="bi bi-person-circle vds-table-secondary"
+                        style={{ fontSize: "0.9rem" }}
+                      />
+                      <span className="small vds-table-secondary">
+                        {change.userName}
+                      </span>
+                    </span>
+                  </td>
+                )}
+                <td>
+                  <div className="d-flex align-items-center gap-1">
+                    <Link
+                      to={`/dnschanges/${change.id}`}
+                      className="text-decoration-none small fw-semibold font-monospace vds-table-primary"
+                    >
+                      {change.id.substring(0, 8)}…
+                    </Link>
+                    <button
+                      type="button"
+                      className="btn btn-link btn-sm p-0 vds-table-secondary"
+                      style={{ lineHeight: 1, fontSize: "0.78rem" }}
+                      title="Copy full ID to clipboard"
+                      onClick={() => copyToClipboard(change.id)}
+                    >
+                      <i className="bi bi-copy" />
+                    </button>
+                  </div>
+                </td>
+                <td>
+                  <span className="vds-count-badge">{change.totalChanges}</span>
+                </td>
+                <td>
+                  <span
+                    className={`vds-status-badge ${changeStatusClass(change.status)}`}
+                  >
+                    {changeStatusLabel(change.status)}
+                  </span>
+                </td>
+                <td
+                  className="vds-table-secondary small"
+                  style={{ maxWidth: 220 }}
+                >
+                  <span
+                    style={{
+                      display: "block",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      maxWidth: 200,
+                    }}
+                    title={change.comments ?? undefined}
+                  >
+                    {change.comments || (
+                      <span className="vds-table-placeholder">—</span>
+                    )}
+                  </span>
+                </td>
+                <td>
+                  <div className="d-flex gap-1 flex-nowrap">
+                    <Link
+                      to={`/dnschanges/${change.id}`}
+                      className="vds-action-btn vds-action-btn--view"
+                      title="View"
+                    >
+                      <i className="bi bi-eye-fill" />
+                    </Link>
+                    {canCancel && onCancel && (
                       <button
                         type="button"
-                        className="btn btn-link btn-sm p-0 text-muted"
-                        style={{ lineHeight: 1, fontSize: "0.78rem" }}
-                        title="Copy full ID to clipboard"
-                        onClick={() => copyToClipboard(change.id)}
+                        className="vds-action-btn vds-action-btn--cancel"
+                        title="Cancel"
+                        onClick={() => onCancel(change)}
                       >
-                        <i className="bi bi-copy" />
+                        <i className="bi bi-x-circle" />
                       </button>
-                    </div>
-                  </td>
-                  <td>
-                    <span
-                      className="badge rounded-pill"
-                      style={{
-                        background: "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
-                        color: "#fff",
-                        fontWeight: 600,
-                        fontSize: "0.8rem",
-                        padding: "0.35em 0.75em",
-                      }}
-                    >
-                      {change.totalChanges}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`badge rounded-pill ${statusCfg.bg}`}
-                      style={{ fontSize: "0.78rem", padding: "0.35em 0.75em" }}
-                    >
-                      {statusCfg.label}
-                    </span>
-                  </td>
-                  <td className="text-muted small" style={{ maxWidth: 220 }}>
-                    <span
-                      style={{
-                        display: "block",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        maxWidth: 200,
-                      }}
-                      title={change.comments ?? undefined}
-                    >
-                      {change.comments || (
-                        <span className="text-secondary">—</span>
-                      )}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="d-flex gap-1 flex-wrap">
-                      <Link
-                        to={`/dnschanges/${change.id}`}
-                        className="btn btn-sm"
-                        style={{
-                          background:
-                            "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
-                          color: "#fff",
-                          border: "none",
-                          fontSize: "0.78rem",
-                          padding: "0.28rem 0.7rem",
-                          borderRadius: "0.4rem",
-                          boxShadow: "0 2px 6px rgba(30,95,168,.3)",
-                        }}
-                      >
-                        <i className="bi bi-eye me-1" />
-                        View
-                      </Link>
-                      {canCancel && onCancel && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-warning"
-                          style={{
-                            fontSize: "0.78rem",
-                            padding: "0.28rem 0.7rem",
-                            borderRadius: "0.4rem",
-                          }}
-                          onClick={() => onCancel(change)}
-                        >
-                          <i className="bi bi-x-circle me-1" />
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

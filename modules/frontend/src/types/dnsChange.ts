@@ -39,9 +39,7 @@ export interface SingleChange {
   zoneName?: string;
   zoneId?: string;
   recordSetId?: string;
-  /** Client-side errors array (string or object with .message) */
   errors?: string[];
-  /** Server-side validation errors returned in the batch change response */
   validationErrors?: Array<ValidationError | string>;
   id: string;
   systemMessage?: string;

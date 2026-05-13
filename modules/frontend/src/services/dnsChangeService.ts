@@ -70,81 +70,29 @@ export const dnsChangeService = {
     return api.post(`${BASE}/${id}/reject`, data);
   },
 
-  /** Generate and download a CSV of the batch change's individual changes */
-  exportToCsv(change: import("../types/dnsChange").DnsChange): void {
-    const headers = [
-      "Change Type",
-      "Input Name",
-      "Recordset Name",
-      "Zone Name",
-      "Record Type",
-      "Record Data",
-      "TTL",
-      "Status",
-      "Additional Info",
-    ];
-
-    const rows = change.changes.map((c) => {
-      const rec = c.record ?? {};
-      let recordData = "";
-      switch (c.type) {
-        case "A":
-        case "AAAA":
-        case "A+PTR":
-        case "AAAA+PTR":
-          recordData = String(rec.address ?? "");
-          break;
-        case "CNAME":
-          recordData = String(rec.cname ?? "");
-          break;
-        case "PTR":
-          recordData = String(rec.ptrdname ?? "");
-          break;
-        case "TXT":
-        case "SPF":
-          recordData = String(rec.text ?? "");
-          break;
-        case "MX":
-          recordData = `pref:${rec.preference ?? ""} ex:${rec.exchange ?? ""}`;
-          break;
-        case "NS":
-          recordData = String(rec.nsdname ?? "");
-          break;
-        case "SRV":
-          recordData = `${rec.priority ?? ""} ${rec.weight ?? ""} ${rec.port ?? ""} ${rec.target ?? ""}`;
-          break;
-        case "NAPTR":
-          recordData = `${rec.order ?? ""} ${rec.preference ?? ""} ${rec.flags ?? ""}`;
-          break;
-        default:
-          recordData = JSON.stringify(rec);
-      }
-      const info = c.systemMessage ?? "";
-      return [
-        c.changeType,
-        c.inputName,
-        c.recordName ?? "",
-        c.zoneName ?? "",
-        c.type,
-        recordData,
-        c.ttl ?? "",
-        c.status,
-        info,
-      ];
+  exportToCsv(change: DnsChange) {
+    const changes = change.changes ?? [];
+    const header =
+      "Change Type,Record Type,Input Name,TTL,Record Data,Zone,Status";
+    const rows = changes.map((c) => {
+      const changeType = c.changeType ?? "";
+      const recordType = c.type ?? "";
+      const inputName = c.inputName ?? "";
+      const ttl = c.ttl != null ? String(c.ttl) : "";
+      const recordData = c.record ? JSON.stringify(c.record) : "";
+      const zone = c.zoneName ?? "";
+      const status = c.status ?? "";
+      return [changeType, recordType, inputName, ttl, recordData, zone, status]
+        .map((v) => `"${v.replace(/"/g, '""')}"`)
+        .join(",");
     });
-
-    const csvContent = [headers, ...rows]
-      .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `dns-change-${change.id}.csv`;
-    document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   },
 };
