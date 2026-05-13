@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import api, { urlBuilder } from './api';
+import api, { urlBuilder } from "./api";
 import type {
   RecordSet,
   RecordSetListResponse,
   RecordSetChangesResponse,
-} from '../types/record';
+} from "../types/record";
 
 export const recordsService = {
   listRecordSetData(
@@ -28,7 +28,7 @@ export const recordsService = {
     nameFilter?: string,
     typeFilter?: string,
     nameSort?: string,
-    ownerGroupFilter?: string
+    ownerGroupFilter?: string,
   ) {
     const params = {
       maxItems: limit,
@@ -38,7 +38,7 @@ export const recordsService = {
       nameSort: nameSort || undefined,
       recordOwnerGroupFilter: ownerGroupFilter || undefined,
     };
-    return api.get<RecordSetListResponse>(urlBuilder('/recordsets', params));
+    return api.get<RecordSetListResponse>(urlBuilder("/recordsets", params));
   },
 
   listRecordSetsByZone(
@@ -48,7 +48,7 @@ export const recordsService = {
     nameFilter?: string,
     typeFilter?: string,
     nameSort?: string,
-    recordTypeSort?: string
+    recordTypeSort?: string,
   ) {
     const params = {
       maxItems: limit,
@@ -59,27 +59,31 @@ export const recordsService = {
       recordTypeSort: recordTypeSort || undefined,
     };
     return api.get<RecordSetListResponse>(
-      urlBuilder(`/zones/${zoneId}/recordsets`, params)
+      urlBuilder(`/zones/${zoneId}/recordsets`, params),
     );
   },
 
   getRecordSet(zoneId: string, recordSetId: string) {
     return api.get<{ recordSet: RecordSet }>(
-      `/zones/${zoneId}/recordsets/${recordSetId}`
+      `/zones/${zoneId}/recordsets/${recordSetId}`,
     );
   },
 
   createRecordSet(zoneId: string, data: Partial<RecordSet>) {
     return api.post<{ recordSet: RecordSet }>(
       `/zones/${zoneId}/recordsets`,
-      data
+      data,
     );
   },
 
-  updateRecordSet(zoneId: string, recordSetId: string, data: Partial<RecordSet>) {
+  updateRecordSet(
+    zoneId: string,
+    recordSetId: string,
+    data: Partial<RecordSet>,
+  ) {
     return api.put<{ recordSet: RecordSet }>(
       `/zones/${zoneId}/recordsets/${recordSetId}`,
-      data
+      data,
     );
   },
 
@@ -87,22 +91,17 @@ export const recordsService = {
     return api.delete(`/zones/${zoneId}/recordsets/${recordSetId}`);
   },
 
-  getRecordSetChanges(
-    zoneId: string,
-    limit: number,
-    startFrom?: string
-  ) {
+  getRecordSetChanges(zoneId: string, limit: number, startFrom?: string) {
     const params = { maxItems: limit, startFrom };
     return api.get<RecordSetChangesResponse>(
-      urlBuilder(`/zones/${zoneId}/recordsetchanges`, params)
+      urlBuilder(`/zones/${zoneId}/recordsetchanges`, params),
     );
   },
 
   getRecordSuggestions(term: string) {
-    const params = { searchString: term, maxItems: 10 };
-    return api.get<Array<{ name: string; zone: string; type: string }>>(
-      urlBuilder('/recordsets/search', params)
-    );
+    // The real endpoint is /recordsets with recordNameFilter (required param)
+    const params = { recordNameFilter: term, maxItems: 10 };
+    return api.get<RecordSetListResponse>(urlBuilder("/recordsets", params));
   },
 
   listRecordSetChangeHistory(
@@ -110,7 +109,7 @@ export const recordsService = {
     limit: number,
     startFrom?: string,
     fqdn?: string,
-    recordType?: string
+    recordType?: string,
   ) {
     const params = {
       maxItems: limit,
@@ -119,7 +118,7 @@ export const recordsService = {
       recordType: recordType || undefined,
     };
     return api.get<{ changes: any[]; hasMore: boolean }>(
-      urlBuilder(`/recordsetchange/history`, params)
+      urlBuilder(`/recordsetchange/history`, params),
     );
   },
 };
