@@ -14,9 +14,16 @@
  * limitations under the License.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Group } from '../../types/group';
+
+type SortDir = 'asc' | 'desc' | null;
+function SortArrow({ dir }: { dir: SortDir }) {
+  if (dir === 'asc')  return <i className="bi bi-arrow-up"      style={{ fontSize: '0.7rem', color: '#2e5090', marginLeft: 3 }} />;
+  if (dir === 'desc') return <i className="bi bi-arrow-down"    style={{ fontSize: '0.7rem', color: '#2e5090', marginLeft: 3 }} />;
+  return                     <i className="bi bi-arrow-down-up" style={{ fontSize: '0.65rem', color: '#898a8b', marginLeft: 3, opacity: 0.7 }} />;
+}
 
 interface GroupsTableProps {
   groups: Group[];
@@ -28,6 +35,12 @@ interface GroupsTableProps {
 }
 
 export function GroupsTable({ groups, onDelete, onEdit, isDeleting, isGroupAdmin, currentUserId }: GroupsTableProps) {
+  const [nameSort, setNameSort] = useState<SortDir>(null);
+
+  const sortedGroups = nameSort
+    ? [...groups].sort((a, b) => (nameSort === 'asc' ? 1 : -1) * a.name.localeCompare(b.name))
+    : groups;
+
   if (groups.length === 0) {
     return (
       <div className="vds-empty-state">
@@ -46,7 +59,10 @@ export function GroupsTable({ groups, onDelete, onEdit, isDeleting, isGroupAdmin
       <table className="vds-groups-table">
         <thead>
           <tr>
-            <th>Group Name</th>
+            <th
+              onClick={() => setNameSort((d) => d === 'asc' ? 'desc' : 'asc')}
+              style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+            >Group Name <SortArrow dir={nameSort} /></th>
             <th>Email</th>
             <th>Description</th>
             <th>Your Role</th>
@@ -54,7 +70,7 @@ export function GroupsTable({ groups, onDelete, onEdit, isDeleting, isGroupAdmin
           </tr>
         </thead>
         <tbody>
-          {groups.map((group) => (
+          {sortedGroups.map((group) => (
             <tr key={group.id}>
               <td>
                 <div className="d-flex align-items-center gap-2">

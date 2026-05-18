@@ -335,13 +335,23 @@ export function GroupsPage() {
             <small className="text-muted">Manage DNS groups and their members</small>
           </div>
         </div>
-        <button
-          className="btn btn-primary d-flex align-items-center gap-2 vds-btn-primary-shadow vds-btn-nav"
-          onClick={() => { setShowForm(prev => { if (!prev) setEditGroup(null); return !prev; }); }}
-        >
-          <i className="bi bi-plus-circle-fill" />
-          New Group
-        </button>
+        <div className="d-flex align-items-center gap-2">
+          <button
+            className="btn btn-primary d-flex align-items-center gap-2 vds-btn-primary-shadow vds-btn-nav"
+            onClick={() => { setShowForm(prev => { if (!prev) setEditGroup(null); return !prev; }); }}
+          >
+            <i className="bi bi-plus-circle-fill" />
+            New Group
+          </button>
+          <button
+            id="refresh-group-button"
+            className="btn btn-sm d-flex align-items-center vds-btn-flat"
+            onClick={handleRefresh}
+            title="Refresh groups"
+          >
+            <i className="bi bi-arrow-clockwise" />
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -482,7 +492,7 @@ export function GroupsPage() {
                   />
                 </div>
                 {showSuggestions && (
-                  <ul className="list-group position-absolute w-100 shadow-lg vds-suggestions-list" style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                  <ul className="vds-suggestions-list list-group position-absolute w-100" style={{ maxHeight: '260px', overflowY: 'auto' }}>
                     {suggestions.slice(0, 10).map((name, i) => (
                       <li
                         key={name}
@@ -498,20 +508,15 @@ export function GroupsPage() {
 
               {/* ── Refresh ── */}
               <button
-                id="refresh-group-button"
-                className="btn btn-sm d-flex align-items-center gap-1 vds-btn-flat"
-                onClick={handleRefresh}
-              >
-                <i className="bi bi-arrow-clockwise" />
-                <span className="vds-btn-flat__label">Refresh</span>
-              </button>
-              <button
-                className="btn btn-sm d-flex align-items-center gap-1 vds-btn-flat"
+                type="button"
+                className="vds-cards-toggle-btn"
                 onClick={() => setShowCards((v) => !v)}
-                title={showCards ? 'Hide insight cards' : 'Show insight cards'}
               >
-                <i className={`bi ${showCards ? 'bi-eye-slash' : 'bi-eye'}`} />
-                <span className="vds-btn-flat__label">{showCards ? 'Hide Cards' : 'Show Cards'}</span>
+                <span className="vds-cards-toggle-btn__icon">
+                  <i className={`bi ${showCards ? 'bi-grid-fill' : 'bi-grid'}`} />
+                </span>
+                <span style={{ whiteSpace: 'nowrap' }}>{showCards ? 'Hide Cards' : 'Show Cards'}</span>
+                <span className={`vds-cards-toggle-btn__dot${showCards ? '' : ' vds-cards-toggle-btn__dot--off'}`} />
               </button>
 
             </div>
