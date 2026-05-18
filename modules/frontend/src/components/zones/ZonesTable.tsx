@@ -20,6 +20,8 @@ import type { Zone } from '../../types/zone';
 import { formatDateTime } from '../../utils/dateUtils';
 
 type SortDir = 'asc' | 'desc' | null;
+type SortCol = 'name' | 'adminGroup' | 'lastSync';
+
 function SortArrow({ dir }: { dir: SortDir }) {
   if (dir === 'asc')  return <i className="bi bi-arrow-up"      style={{ fontSize: '0.7rem', color: '#2e5090', marginLeft: 3 }} />;
   if (dir === 'desc') return <i className="bi bi-arrow-down"    style={{ fontSize: '0.7rem', color: '#2e5090', marginLeft: 3 }} />;
@@ -32,7 +34,16 @@ interface ZonesTableProps {
 }
 
 export function ZonesTable({ zones, showAllZones }: ZonesTableProps) {
-  const [lastSyncSort, setLastSyncSort] = useState<SortDir>(null);
+  const [sortState, setSortState] = useState<{ col: SortCol; dir: 'asc' | 'desc' } | null>(null);
+
+  const toggleSort = (col: SortCol) =>
+    setSortState((prev) =>
+      prev?.col === col
+        ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { col, dir: 'asc' }
+    );
+
+  const sortDir = (col: SortCol): SortDir => sortState?.col === col ? sortState.dir : null;
 
   if (zones.length === 0) {
     return (
@@ -58,10 +69,14 @@ export function ZonesTable({ zones, showAllZones }: ZonesTableProps) {
     return 'vds-zone-status-badge--pending';
   };
 
-  const sortedZones = lastSyncSort
-    ? [...zones].sort((a, b) =>
-        (lastSyncSort === 'asc' ? 1 : -1) *
-        (new Date(a.latestSync ?? '').getTime() - new Date(b.latestSync ?? '').getTime()))
+  const sortedZones = sortState
+    ? [...zones].sort((a, b) => {
+        const dir = sortState.dir === 'asc' ? 1 : -1;
+        if (sortState.col === 'name')       return dir * a.name.localeCompare(b.name);
+        if (sortState.col === 'adminGroup') return dir * (a.adminGroupName ?? '').localeCompare(b.adminGroupName ?? '');
+        if (sortState.col === 'lastSync')   return dir * (new Date(a.latestSync ?? '').getTime() - new Date(b.latestSync ?? '').getTime());
+        return 0;
+      })
     : zones;
 
   return (
@@ -69,14 +84,20 @@ export function ZonesTable({ zones, showAllZones }: ZonesTableProps) {
       <table className="vds-zones-table">
         <thead>
           <tr>
-            <th>Zone Name</th>
+            <th
+              onClick={() => toggleSort('name')}
+              style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+            >Zone Name <SortArrow dir={sortDir('name')} /></th>
             <th>Email</th>
-            <th>Admin Group</th>
+            <th
+              onClick={() => toggleSort('adminGroup')}
+              style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+            >Admin Group <SortArrow dir={sortDir('adminGroup')} /></th>
             <th>Status</th>
             <th
-              onClick={() => setLastSyncSort((d) => d === 'asc' ? 'desc' : 'asc')}
+              onClick={() => toggleSort('lastSync')}
               style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-            >Last Sync <SortArrow dir={lastSyncSort} /></th>
+            >Last Sync <SortArrow dir={sortDir('lastSync')} /></th>
             <th>Access</th>
             <th>Actions</th>
           </tr>

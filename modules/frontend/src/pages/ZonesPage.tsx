@@ -44,10 +44,12 @@ export function ZonesPage() {
   const [mainTab, setMainTab] = useState<MainTab>('myZones');
   const [abandonedSubTab, setAbandonedSubTab] = useState<AbandonedSubTab>('myAbandoned');
   const [tabFading, setTabFading] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   // ── Modals / forms ───────────────────────────────────────────────────────────
   const [showConnectForm, setShowConnectForm] = useState(false);
   const [showCards, setShowCards] = useState(true);
+
   // ── Per-tab search inputs (committed on Search / Enter) ──────────────────────
   const [myZonesInput,   setMyZonesInput]   = useState('');
   const [allZonesInput,  setAllZonesInput]  = useState('');
@@ -112,8 +114,7 @@ export function ZonesPage() {
   const myAbandoned  = useDeletedZones(false, mainTab === 'abandonedZones');
   const allAbandoned = useDeletedZones(true,  mainTab === 'abandonedZones');
 
-  const activeAbandonedHook =
-    abandonedSubTab === 'myAbandoned' ? myAbandoned : allAbandoned;
+  const activeAbandonedHook = abandonedSubTab === 'myAbandoned' ? myAbandoned : allAbandoned;
 
   // ── Backend IDs & groups (for ZoneForm) ──────────────────────────────────────
   const { data: groupsData } = useQuery({
@@ -168,7 +169,7 @@ export function ZonesPage() {
       const res = await zonesService.getZones(10, undefined, myZonesSuggestQuery, false, false, true);
       return res.data.zones ?? [];
     },
-    enabled: myZonesSuggestQuery.length > 0 && !myZonesSuggestQuery.includes('@'),
+    enabled: myZonesSuggestQuery.length > 0 && !myZonesByGroup,
   });
 
   const { data: allSuggestData } = useQuery({
@@ -177,7 +178,7 @@ export function ZonesPage() {
       const res = await zonesService.getZones(10, undefined, allZonesSuggestQuery, false, true, true);
       return res.data.zones ?? [];
     },
-    enabled: allZonesSuggestQuery.length > 0 && !allZonesSuggestQuery.includes('@'),
+    enabled: allZonesSuggestQuery.length > 0 && !allZonesByGroup,
   });
 
   const mySuggestions  = mySuggestData  ?? [];
@@ -191,11 +192,16 @@ export function ZonesPage() {
     const m = Math.floor((days % 365) / 30);
     return m > 0 ? `${y}y ${m}mo` : `${y}y`;
   };
-
+  
+  // displaySource: used for card counts and filter option detection only.
+  // When Hide PTR is on, use zonesForTab (API already excluded PTR via includeReverse=false).
+  // insightSource always fetches includeReverse=true.
   const insightSource = mainTab === 'allZones' ? (insightAllZones ?? []) : (insightMyZones ?? []);
   const zonesForTab   = mainTab === 'allZones' ? allZones.zones : myZones.zones;
   const filterSource  = insightSource.length > 0 ? insightSource : zonesForTab;
-
+  const activeHidePtr = mainTab === 'allZones' ? allZonesHidePtr : myZonesHidePtr;
+  const isPtr = (z: Zone) => z.name.includes('in-addr.arpa') || z.name.includes('ip6.arpa');
+  const displaySource = activeHidePtr ? zonesForTab : filterSource;
   const byGroupActive = mainTab === 'allZones' ? allZonesByGroup : myZonesByGroup;
 
   const isWithinRange = (dateStr: string | undefined, range: TimeRange, from: string, to: string): boolean => {
@@ -216,33 +222,39 @@ export function ZonesPage() {
     return true;
   };
 
-  const anyFilterActive = !!(emailFilter || statusFilter || accessFilter || zoneTimeRange !== 'all');
-  // When a name search is committed, use the suggestions data (ignoreAccess:true, includeReverse:true)
-  // as the display base — matching old portal behaviour so reverse and non-owned zones are found.
-  // Fall back to zonesForTab if suggestions haven't loaded yet.
+  const byGroupSearchActive = byGroupActive && !!emailFilter;
+  const anyFilterActive = !!((!byGroupSearchActive && emailFilter) || statusFilter || accessFilter || zoneTimeRange !== 'all');
+
   const activeNameQuery = mainTab === 'allZones' ? allZonesQuery : myZonesQuery;
   const activeSuggestions = mainTab === 'allZones' ? allSuggestions : mySuggestions;
-  const clientFilterBase = activeNameQuery
-    ? (activeSuggestions.length > 0 ? activeSuggestions : zonesForTab)
-    : filterSource;
-  const displayedZones = anyFilterActive
+  const clientFilterBase = byGroupActive
+    ? zonesForTab 
+    : (activeNameQuery
+        ? (activeSuggestions.length > 0 ? activeSuggestions : zonesForTab)
+        : activeHidePtr ? zonesForTab 
+        : filterSource);
+
+  const secondaryFilterActive = !!(statusFilter || accessFilter || zoneTimeRange !== 'all');
+  const displayedZones = (anyFilterActive || (byGroupSearchActive && secondaryFilterActive))
     ? clientFilterBase.filter((z) => {
-        const matchesSearch = !emailFilter || (
-          byGroupActive
-            ? (z.adminGroupName ?? '').toLowerCase().includes(emailFilter.toLowerCase())
-            : (
-                z.name.toLowerCase().includes(emailFilter.toLowerCase()) ||
-                z.email.toLowerCase().includes(emailFilter.toLowerCase())
-              )
-        );
+        const matchesSearch = byGroupActive
+          ? true  // server-side admin group filter already applied
+          : !emailFilter || z.name.toLowerCase().includes(emailFilter.toLowerCase());
+        const matchesPtr = !activeHidePtr || !isPtr(z);
         const matchesStatus = !statusFilter || z.status === statusFilter;
         const matchesAccess = !accessFilter || (accessFilter === 'shared' ? z.shared : !z.shared);
         const matchesTime = isWithinRange(z.latestSync, zoneTimeRange, zoneDateFrom, zoneDateTo);
-        return matchesSearch && matchesStatus && matchesAccess && matchesTime;
+        return matchesSearch && matchesPtr && matchesStatus && matchesAccess && matchesTime;
       })
     : null;
 
   const renderedZones = displayedZones ?? zonesForTab;
+
+  const searchBase = byGroupActive
+    ? zonesForTab   
+    : activeNameQuery
+      ? (activeSuggestions.length > 0 ? activeSuggestions : zonesForTab)  
+      : displaySource;  // no search — fall back to full display set
 
   // ── Abandoned zones client-side filtering ──────────────────────────────────────────
   const abandonedZonesRaw = activeAbandonedHook.deletedZones;
@@ -274,7 +286,7 @@ export function ZonesPage() {
   const cardSource: Zone[] =
     mainTab === 'abandonedZones'
       ? displayedAbandonedZones.map((i) => i.zoneChange.zone)
-      : (displayedZones ?? insightSource);
+      : (displayedZones ?? searchBase);
 
   const cardLoading =
     mainTab === 'abandonedZones' ? insightAbandonedData === undefined
@@ -324,9 +336,9 @@ export function ZonesPage() {
     PendingUpdate: 'Pending Update',
   };
 
-  const availableStatuses = Array.from(new Set(filterSource.map((z) => z.status))) as string[];
-  const hasShared  = renderedZones.some((z) => !!z.shared);
-  const hasPrivate = renderedZones.some((z) => !z.shared);
+  const availableStatuses = Array.from(new Set(searchBase.map((z) => z.status))) as string[];
+  const hasShared  = searchBase.some((z) => !!z.shared);
+  const hasPrivate = searchBase.some((z) => !z.shared);
   // ── Sync committed queries → hooks ───────────────────────────────────────────
   useEffect(() => { myZones.search(myZonesQuery, myZonesByGroup); },
     [myZonesQuery, myZonesByGroup]); 
@@ -339,14 +351,16 @@ export function ZonesPage() {
 
   // ── Debounce search inputs for suggestions ────────────────────────────────────
   useEffect(() => {
+    if (myZonesByGroup) return; 
     const timer = setTimeout(() => setMyZonesSuggestQuery(myZonesInput), 300);
     return () => clearTimeout(timer);
-  }, [myZonesInput]);
+  }, [myZonesInput, myZonesByGroup]);
 
   useEffect(() => {
+    if (allZonesByGroup) return; 
     const timer = setTimeout(() => setAllZonesSuggestQuery(allZonesInput), 300);
     return () => clearTimeout(timer);
-  }, [allZonesInput]);
+  }, [allZonesInput, allZonesByGroup]);
 
   // ── Outside-click handler for filter dropdowns ───────────────────────────────
   useEffect(() => {
@@ -429,23 +443,29 @@ export function ZonesPage() {
   // ── Search handlers ───────────────────────────────────────────────────────────
   const handleMyZonesSearch = useCallback(() => {
     setMySuggestionsOpen(false);
-    // Sync suggest query immediately so suggestions data is ready for display base
-    setMyZonesSuggestQuery(myZonesInput);
     setEmailFilter(myZonesInput);
-    if (!myZonesInput.includes('@')) setMyZonesQuery(myZonesInput);
-    else setMyZonesQuery('');
+    if (myZonesByGroup) {
+      setMyZonesQuery(myZonesInput);
+      setMyZonesSuggestQuery('');
+    } else {
+      setMyZonesSuggestQuery(myZonesInput);
+      setMyZonesQuery(myZonesInput);
+    }
     myZones.resetPaging();
-  }, [myZonesInput, myZones]);
+  }, [myZonesInput, myZonesByGroup, myZones]);
 
   const handleAllZonesSearch = useCallback(() => {
     setAllSuggestionsOpen(false);
-    // Sync suggest query immediately so suggestions data is ready for display base
-    setAllZonesSuggestQuery(allZonesInput);
     setEmailFilter(allZonesInput);
-    if (!allZonesInput.includes('@')) setAllZonesQuery(allZonesInput);
-    else setAllZonesQuery('');
+    if (allZonesByGroup) {
+      setAllZonesQuery(allZonesInput);
+      setAllZonesSuggestQuery('');
+    } else {
+      setAllZonesSuggestQuery(allZonesInput);
+      setAllZonesQuery(allZonesInput);
+    }
     allZones.resetPaging();
-  }, [allZonesInput, allZones]);
+  }, [allZonesInput, allZonesByGroup, allZones]);
 
   const handleAbandonedSearch = useCallback(() => {
     if (!abanByGroup && !abandonedInput.includes('@')) {
@@ -522,7 +542,7 @@ export function ZonesPage() {
       {/* ── Toolbar ── */}
       <div className="card mb-2 vds-toolbar-card">
         <div className="card-body py-2 px-3">
-          <div className="d-flex gap-3 flex-wrap align-items-center">
+          <div className="d-flex align-items-center gap-2">
 
             {/* Tab pills */}
             <div className="vds-pill-toggle">
@@ -549,8 +569,49 @@ export function ZonesPage() {
               </button>
             </div>
 
-            <div className="d-flex align-items-center gap-2 flex-wrap">
-
+            <div className="ms-auto d-flex align-items-center gap-2">
+              <button
+                className="vds-cards-toggle-btn"
+                onClick={() => setShowCards((v) => !v)}
+              >
+                <span className="vds-cards-toggle-btn__icon">
+                    <i className={`bi ${showCards ? 'bi-grid-fill' : 'bi-grid'}`} />
+                </span>
+                <span>{showCards ? 'Hide Cards' : 'Show Cards'}</span>
+                <span className={`vds-cards-toggle-btn__dot${showCards ? '' : ' vds-cards-toggle-btn__dot--off'}`} />
+              </button>
+              <button
+                type="button"
+                className="vds-cards-toggle-btn"
+                onClick={() => setShowFilters((v) => !v)}
+              >
+                <span className="vds-cards-toggle-btn__icon">
+                  <i className={`bi ${showFilters ? 'bi-x-lg' : 'bi-sliders'}`} />
+                </span>
+                <span>{showFilters ? 'Hide Filters' : 'Show Filters'}</span>
+                <span className={`vds-cards-toggle-btn__dot${showFilters ? '' : ' vds-cards-toggle-btn__dot--off'}`} />
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm vds-btn-flat d-flex align-items-center justify-content-center"
+                style={{ width: 32, height: 32, padding: 0, flexShrink: 0, borderRadius: '50%' }}
+                title="Refresh"
+                onClick={handleRefresh}
+              >
+                <i className="bi bi-arrow-clockwise" style={{ fontSize: '1rem' }} />
+              </button>
+            </div>
+          </div>
+          {/* ── Filters row (animated) ── */}
+          <div
+            style={{
+              maxHeight: showFilters ? '60px' : '0px',
+              opacity: showFilters ? 1 : 0,
+              overflow: showFilters ? 'visible' : 'hidden',
+              transition: 'max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease',
+            }}
+          >
+            <div className="d-flex align-items-center justify-content-end gap-2 pt-2" style={{ whiteSpace: 'nowrap' }}>
               {/* My Zones search + filters */}
               {mainTab === 'myZones' && (
                 <>
@@ -562,7 +623,7 @@ export function ZonesPage() {
                       <input
                         type="text"
                         className="form-control border-0 ps-0 shadow-none bg-transparent"
-                        placeholder="Search by name or email"
+                        placeholder={myZonesByGroup ? 'Search by admin group name' : 'Search zones by name'}
                         value={myZonesInput}
                         autoComplete="off"
                         onFocus={() => { if (myZonesInput.length > 0) setMySuggestionsOpen(true); }}
@@ -582,35 +643,72 @@ export function ZonesPage() {
                         }}
                       />
                     </div>
-                    {mySuggestionsOpen && mySuggestions.length > 0 && !myZonesInput.includes('@') && (
-                      <ul className="list-group position-absolute shadow" style={{ zIndex: 1060, top: 'calc(100% + 2px)', left: 0, minWidth: '100%', width: 'max-content', maxHeight: '260px', overflowY: 'auto', borderRadius: '0.55rem', border: '1px solid #d4dbe8' }}>
-                        {mySuggestions.slice(0, 10).map((z) => (
-                          <li
-                            key={z.id}
-                            className="list-group-item list-group-item-action py-2 px-3 d-flex align-items-center gap-2 vds-suggestion-item"
-                            style={{ cursor: 'pointer', fontSize: '0.82rem' }}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              setMyZonesInput(z.name);
-                              setEmailFilter(z.name);
-                              setMyZonesQuery(z.name);
-                              setMySuggestionsOpen(false);
-                              myZones.resetPaging();
-                            }}
-                          >
+                    {mySuggestionsOpen && (() => {
+                      if (myZonesByGroup) {
+                        const groupNames = (groupsData ?? [])
+                          .map((g) => g.name)
+                          .filter((n): n is string => !!n && n.toLowerCase().includes(myZonesInput.toLowerCase()))
+                          .slice(0, 10);
+                        if (groupNames.length === 0) return null;
+                        return (
+                          <ul className="vds-suggestions-list list-group position-absolute" style={{ left: 0, minWidth: '100%', width: 'max-content' }}>
+                            {groupNames.map((name) => (
+                              <li
+                                key={name}
+                                className="list-group-item list-group-item-action d-flex align-items-center gap-2 vds-suggestion-item"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setMyZonesInput(name);
+                                  setEmailFilter(name);
+                                  setMyZonesQuery(name);
+                                  setMySuggestionsOpen(false);
+                                  myZones.resetPaging();
+                                }}
+                              >
+                                <i className="bi bi-people text-muted" style={{ fontSize: '0.75rem', flexShrink: 0 }} />
+                                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      }
+                      if (mySuggestions.length === 0) return null;
+                      return (
+                        <ul className="vds-suggestions-list list-group position-absolute" style={{ left: 0, minWidth: '100%', width: 'max-content' }}>
+                          {mySuggestions.slice(0, 10).map((z) => (
+                            <li
+                              key={z.id}
+                              className="list-group-item list-group-item-action d-flex align-items-center gap-2 vds-suggestion-item"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setMyZonesInput(z.name);
+                                setEmailFilter(z.name);
+                                setMyZonesQuery(z.name);
+                                setMySuggestionsOpen(false);
+                                myZones.resetPaging();
+                              }}
+                            >
                             <i className="bi bi-diagram-3 text-muted" style={{ fontSize: '0.75rem', flexShrink: 0 }} />
                             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{z.name}</span>
-                            {z.shared && <span className="badge vds-badge-shared" style={{ fontSize: '0.65rem', flexShrink: 0 }}>shared</span>}
                           </li>
                         ))}
                       </ul>
-                    )}
+                    );
+                    })()}
                   </div>
+                      
 
                   {/* By Admin Group toggle */}
                   <button
                     className={`btn btn-sm d-flex align-items-center gap-1 vds-btn-flat${myZonesByGroup ? ' vds-btn-flat--active' : ''}`}
-                    onClick={() => { setMyZonesByGroup((v) => !v); myZones.resetPaging(); }}
+                    onClick={() => {
+                      setMyZonesByGroup((v) => !v);
+                      setMySuggestionsOpen(false);
+                      setMyZonesInput('');
+                      setMyZonesQuery('');
+                      setMyZonesSuggestQuery('');
+                      myZones.resetPaging();
+                    }}
                   >
                     <i className="bi bi-people" />
                     <span className="vds-btn-flat__label">By Admin Group</span>
@@ -703,7 +801,7 @@ export function ZonesPage() {
                       <input
                         type="text"
                         className="form-control border-0 ps-0 shadow-none bg-transparent"
-                        placeholder="Search by name or email"
+                        placeholder={allZonesByGroup ? 'Search by admin group name' : 'Search zones by name'}
                         value={allZonesInput}
                         autoComplete="off"
                         onFocus={() => { if (allZonesInput.length > 0) setAllSuggestionsOpen(true); }}
@@ -723,35 +821,71 @@ export function ZonesPage() {
                         }}
                       />
                     </div>
-                    {allSuggestionsOpen && allSuggestions.length > 0 && !allZonesInput.includes('@') && (
-                      <ul className="list-group position-absolute shadow" style={{ zIndex: 1060, top: 'calc(100% + 2px)', left: 0, minWidth: '100%', width: 'max-content', maxHeight: '260px', overflowY: 'auto', borderRadius: '0.55rem', border: '1px solid #d4dbe8' }}>
-                        {allSuggestions.slice(0, 10).map((z) => (
-                          <li
-                            key={z.id}
-                            className="list-group-item list-group-item-action py-2 px-3 d-flex align-items-center gap-2 vds-suggestion-item"
-                            style={{ cursor: 'pointer', fontSize: '0.82rem' }}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              setAllZonesInput(z.name);
-                              setEmailFilter(z.name);
-                              setAllZonesQuery(z.name);
-                              setAllSuggestionsOpen(false);
-                              allZones.resetPaging();
-                            }}
-                          >
-                            <i className="bi bi-diagram-3 text-muted" style={{ fontSize: '0.75rem', flexShrink: 0 }} />
-                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{z.name}</span>
-                            {z.shared && <span className="badge vds-badge-shared" style={{ fontSize: '0.65rem', flexShrink: 0 }}>shared</span>}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    {allSuggestionsOpen && (() => {
+                      if (allZonesByGroup) {
+                        const groupNames = (groupsData ?? [])
+                          .map((g) => g.name)
+                          .filter((n): n is string => !!n && n.toLowerCase().includes(allZonesInput.toLowerCase()))
+                          .slice(0, 10);
+                        if (groupNames.length === 0) return null;
+                        return (
+                          <ul className="vds-suggestions-list list-group position-absolute" style={{ left: 0, minWidth: '100%', width: 'max-content' }}>
+                            {groupNames.map((name) => (
+                              <li
+                                key={name}
+                                className="list-group-item list-group-item-action d-flex align-items-center gap-2 vds-suggestion-item"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setAllZonesInput(name);
+                                  setEmailFilter(name);
+                                  setAllZonesQuery(name);
+                                  setAllSuggestionsOpen(false);
+                                  allZones.resetPaging();
+                                }}
+                              >
+                                <i className="bi bi-people text-muted" style={{ fontSize: '0.75rem', flexShrink: 0 }} />
+                                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      }
+                      if (allSuggestions.length === 0) return null;
+                      return (
+                        <ul className="vds-suggestions-list list-group position-absolute" style={{ left: 0, minWidth: '100%', width: 'max-content' }}>
+                          {allSuggestions.slice(0, 10).map((z) => (
+                            <li
+                              key={z.id}
+                              className="list-group-item list-group-item-action d-flex align-items-center gap-2 vds-suggestion-item"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setAllZonesInput(z.name);
+                                setEmailFilter(z.name);
+                                setAllZonesQuery(z.name);
+                                setAllSuggestionsOpen(false);
+                                allZones.resetPaging();
+                              }}
+                            >
+                              <i className="bi bi-diagram-3 text-muted" style={{ fontSize: '0.75rem', flexShrink: 0 }} />
+                              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{z.name}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      );
+                    })()}
                   </div>
 
                   {/* By Admin Group toggle */}
                   <button
                     className={`btn btn-sm d-flex align-items-center gap-1 vds-btn-flat${allZonesByGroup ? ' vds-btn-flat--active' : ''}`}
-                    onClick={() => { setAllZonesByGroup((v) => !v); allZones.resetPaging(); }}
+                    onClick={() => {
+                      setAllZonesByGroup((v) => !v);
+                      setAllSuggestionsOpen(false);
+                      setAllZonesInput('');
+                      setAllZonesQuery('');
+                      setAllZonesSuggestQuery('');
+                      allZones.resetPaging();
+                    }}
                   >
                     <i className="bi bi-people" />
                     <span className="vds-btn-flat__label">By Admin Group</span>
@@ -986,21 +1120,6 @@ export function ZonesPage() {
                   onDateToChange={setAbanDateTo}
                 />
               )}
-              <button
-                className="btn btn-sm d-flex align-items-center gap-1 vds-btn-flat"
-                onClick={handleRefresh}
-              >
-                <i className="bi bi-arrow-clockwise" />
-                <span className="vds-btn-flat__label">Refresh</span>
-              </button>
-              <button
-                className="btn btn-sm d-flex align-items-center gap-1 vds-btn-flat"
-                onClick={() => setShowCards((v) => !v)}
-                title={showCards ? 'Hide insight cards' : 'Show insight cards'}
-              >
-                <i className={`bi ${showCards ? 'bi-eye-slash' : 'bi-eye'}`} />
-                <span className="vds-btn-flat__label">{showCards ? 'Hide Cards' : 'Show Cards'}</span>
-              </button>
             </div>
           </div>
         </div>
@@ -1367,7 +1486,7 @@ export function ZonesPage() {
         {mainTab === 'myZones' && (
           isLoadingCurrent ? <LoadingSpinner /> : (
             <>
-              {!anyFilterActive && (myZones.nextPageEnabled || myZones.prevPageEnabled) && (
+              {(!anyFilterActive || byGroupSearchActive) && (myZones.nextPageEnabled || myZones.prevPageEnabled) && (
                 <div className="mb-2">
                   <Pagination
                     onPrev={myZones.prevPage}
@@ -1382,7 +1501,7 @@ export function ZonesPage() {
                 zones={renderedZones}
                 showAllZones={false}
               />
-              {!anyFilterActive && (myZones.nextPageEnabled || myZones.prevPageEnabled) && (
+              {(!anyFilterActive || byGroupSearchActive) && (myZones.nextPageEnabled || myZones.prevPageEnabled) && (
                 <div className="mt-2">
                   <Pagination
                     onPrev={myZones.prevPage}
@@ -1401,7 +1520,7 @@ export function ZonesPage() {
         {mainTab === 'allZones' && (
           isLoadingCurrent ? <LoadingSpinner /> : (
             <>
-              {!anyFilterActive && (allZones.nextPageEnabled || allZones.prevPageEnabled) && (
+              {(!anyFilterActive || byGroupSearchActive) && (allZones.nextPageEnabled || allZones.prevPageEnabled) && (
                 <div className="mb-2">
                   <Pagination
                     onPrev={allZones.prevPage}
@@ -1416,7 +1535,7 @@ export function ZonesPage() {
                 zones={renderedZones}
                 showAllZones
               />
-              {!anyFilterActive && (allZones.nextPageEnabled || allZones.prevPageEnabled) && (
+              {(!anyFilterActive || byGroupSearchActive) && (allZones.nextPageEnabled || allZones.prevPageEnabled) && (
                 <div className="mt-2">
                   <Pagination
                     onPrev={allZones.prevPage}
