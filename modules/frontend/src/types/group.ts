@@ -44,6 +44,14 @@ export interface GroupListResponse {
   ignoreAccess?: boolean;
 }
 
+export interface GroupCount {
+  totalCount: number;
+  myGroupCount: number;
+  adminGroupCount: number;
+  memberOnlyGroupCount: number;
+  noRoleGroupCount: number;
+}
+
 export interface GroupChange {
   newGroup?: Group;
   oldGroup?: Group;

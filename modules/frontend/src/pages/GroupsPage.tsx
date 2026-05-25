@@ -18,7 +18,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GroupsTable } from '../components/groups/GroupsTable';
 import { GroupForm } from '../components/groups/GroupForm';
-import { Pagination } from '../components/common/Pagination';
+import { Pagination, PaginatedSection } from '../components/common/Pagination';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { useGroups } from '../hooks/useGroups';
 import { groupsService } from '../services/groupsService';
@@ -44,10 +44,11 @@ export function GroupsPage() {
   const [tabFading, setTabFading] = useState(false);
   const [showCards, setShowCards] = useState(true);
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
+  const [filterPage, setFilterPage] = useState(0);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
   const justSelectedRef = useRef(false);
-
+  const FILTER_PAGE_SIZE = 100;
   const activeQuery = ignoreAccess ? allGroupsQuery : myGroupsQuery;
 
   const {
@@ -57,7 +58,7 @@ export function GroupsPage() {
     prevPage,
     nextPageEnabled,
     prevPageEnabled,
-    getPanelTitle,
+    pageNum,
     createGroup,
     updateGroup,
     deleteGroup,
@@ -83,6 +84,14 @@ export function GroupsPage() {
     },
   });
 
+  const { data: groupCountData } = useQuery({
+    queryKey: ['groups-count'],
+    queryFn: async () => {
+      const res = await groupsService.countGroups();
+      return res.data;
+    },
+  });
+
   const insightGroupIdsSample = (insightMyGroups ?? []).slice(0, 10).map((g) => g.id);
 
   const { data: recentChangesCount } = useQuery({
@@ -102,16 +111,32 @@ export function GroupsPage() {
     enabled: insightGroupIdsSample.length > 0,
   });
 
-  const insightMyCount   = insightMyGroups?.length ?? null;
-  const insightAllCount  = insightAllGroups?.length ?? null;
-  const insightMgdCount  = insightMyGroups
-    ? insightMyGroups.filter((g) => g.admins.some((a) => a.id === profile?.id)).length
-    : null;
-  const insightMemberOnlyCount = insightMyCount !== null && insightMgdCount !== null ? insightMyCount - insightMgdCount : null;
+  const insightMyCount         = groupCountData?.myGroupCount ?? null;
+  const insightAllCount        = groupCountData?.totalCount ?? null;
+  const insightMgdCount        = groupCountData?.adminGroupCount ?? null;
+  const insightMemberOnlyCount = groupCountData?.memberOnlyGroupCount ?? null;
   const insightNotMemberCount  = insightAllCount !== null && insightMyCount !== null ? insightAllCount - insightMyCount : null;
   const insightSoleAdminCount  = insightMyGroups
     ? insightMyGroups.filter((g) => g.admins.some((a) => a.id === profile?.id) && g.admins.length === 1).length
     : null;
+
+  //debug
+  useEffect(() => {
+    if (!insightMyGroups || !groupCountData) return;
+    const memberGroups = insightMyGroups.filter(
+      (g) => g.members?.some((m) => m.id === profile?.id) && !g.admins.some((a) => a.id === profile?.id)
+    );
+    console.debug('[Groups] API counts:', groupCountData);
+    console.debug('[Groups] Member-only groups in loaded insight data:', memberGroups.map((g) => ({ id: g.id, name: g.name })));
+    if ((groupCountData.memberOnlyGroupCount ?? 0) !== memberGroups.length) {
+      console.warn(
+        `[Groups] Member count mismatch — API says ${groupCountData.memberOnlyGroupCount}, ` +
+        `but only ${memberGroups.length} found in loaded insight data (capped at 1000). ` +
+        `Missing groups are alphabetically beyond position 1000.`
+      );
+    }
+  }, [insightMyGroups, groupCountData, profile?.id]);
+
   useEffect(() => {
     if (justSelectedRef.current) {
       justSelectedRef.current = false;
@@ -262,8 +287,14 @@ export function GroupsPage() {
   };
 
   const insightSource = ignoreAccess ? (insightAllGroups ?? []) : (insightMyGroups ?? []);
+  const isActualAdmin  = (g: Group) => g.admins.some((a) => a.id === profile?.id);
+  const isActualMember = (g: Group) => g.members?.some((m) => m.id === profile?.id) ?? false;
+  const hasAdminRole    = (insightMgdCount ?? 0) > 0;
+  const hasMemberRole   = (insightMemberOnlyCount ?? 0) > 0;
+  const tabShowsAllGroups = ignoreAccess || Boolean(profile?.isSuper);
+  const hasNoRoleInData = tabShowsAllGroups && (groupCountData?.noRoleGroupCount ?? 0) > 0;
 
- const searchFilteredGroups = searchFilter
+  const searchFilteredGroups = searchFilter
     ? insightSource.filter((g) =>
         g.name.toLowerCase().includes(searchFilter.toLowerCase())
       )
@@ -271,27 +302,12 @@ export function GroupsPage() {
     ? insightSource
     : groups;
 
-  const roleFilterBase = searchFilter ? searchFilteredGroups : insightSource;
-
-  const hasAdminRole = roleFilterBase.some(
-    (g) => g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper)
-  );
-  const hasMemberRole = roleFilterBase.some((g) => {
-    const isAdminRole = g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper);
-    return (g.members?.some((m) => m.id === profile?.id) ?? false) && !isAdminRole;
-  });
-  const hasNoRoleInData = roleFilterBase.some((g) => {
-    const isAdminRole = g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper);
-    return !(g.members?.some((m) => m.id === profile?.id) ?? false) && !isAdminRole;
-  });
-
+  
   const displayedGroups = roleFilter
-    ? searchFilteredGroups.filter((g) => {
-        const isAdminRole = g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper);
-        const isMemberRole = g.members?.some((m) => m.id === profile?.id);
-        if (roleFilter === 'admin') return isAdminRole;
-        if (roleFilter === 'member') return isMemberRole && !isAdminRole;
-        if (roleFilter === 'norole') return !isMemberRole && !isAdminRole;
+    ? groups.filter((g) => {
+        if (roleFilter === 'admin')  return isActualAdmin(g);
+        if (roleFilter === 'member') return isActualMember(g) && !isActualAdmin(g);
+        if (roleFilter === 'norole') return !isActualAdmin(g) && !isActualMember(g);
         return true;
       })
     : searchFilteredGroups;
@@ -299,23 +315,23 @@ export function GroupsPage() {
   const roleFilterLabel: Record<string, string> = { admin: 'Admin', member: 'Member', norole: 'No Role' };
 
   const anyFilterActive = !!(roleFilter || searchFilter);
-  const cardAdminFiltered = displayedGroups.filter(
-    (g) => g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper)
-  ).length;
+
+  // Reset client-side filter page when filter changes
+  React.useEffect(() => { setFilterPage(0); }, [roleFilter, searchFilter]);
+  const cardAdminFiltered = displayedGroups.filter((g) => isActualAdmin(g)).length;
   const cardMemberOnlyFiltered = displayedGroups.filter(
-    (g) =>
-      g.members?.some((m) => m.id === profile?.id) &&
-      !g.admins.some((a) => a.id === profile?.id) &&
-      !profile?.isSuper
+    (g) => isActualMember(g) && !isActualAdmin(g)
   ).length;
   const cardSoleAdminFiltered = displayedGroups.filter(
-    (g) =>
-      (g.admins.some((a) => a.id === profile?.id) || Boolean(profile?.isSuper)) &&
-      g.admins.length === 1
+    (g) => isActualAdmin(g) && g.admins.length === 1
   ).length;
 
-  
-  const cardCount      = anyFilterActive ? displayedGroups.length  : (ignoreAccess ? insightAllCount  : insightMyCount);
+  const cardCount =
+    roleFilter === 'norole'  ? (groupCountData?.noRoleGroupCount ?? null)
+    : roleFilter === 'admin'  ? insightMgdCount
+    : roleFilter === 'member' ? insightMemberOnlyCount
+    : anyFilterActive         ? displayedGroups.length
+    : (ignoreAccess ? insightAllCount : insightMyCount);
   const cardAdminCount = anyFilterActive ? cardAdminFiltered        : insightMgdCount;
   const cardMemberOnly = anyFilterActive ? cardMemberOnlyFiltered   : insightMemberOnlyCount;
   const cardSoleAdmin  = anyFilterActive ? cardSoleAdminFiltered    : insightSoleAdminCount;
@@ -720,31 +736,83 @@ export function GroupsPage() {
         <LoadingSpinner />
       ) : (
         <>
-          {(!anyFilterActive && (nextPageEnabled || prevPageEnabled)) && (
-            <Pagination
-              onPrev={prevPage}
-              onNext={nextPage}
-              prevEnabled={prevPageEnabled}
-              nextEnabled={nextPageEnabled}
-              panelTitle={getPanelTitle()}
-            />
-          )}
-          <GroupsTable
-            groups={displayedGroups}
-            onDelete={handleDelete}
-            onEdit={(g) => { setEditGroup(g); setShowForm(false); }}
-            isDeleting={isDeleting}
-            isGroupAdmin={isGroupAdmin}
-            currentUserId={profile?.id}
-          />
-          {(!anyFilterActive && (nextPageEnabled || prevPageEnabled)) && (
-            <Pagination
-              onPrev={prevPage}
-              onNext={nextPage}
-              prevEnabled={prevPageEnabled}
-              nextEnabled={nextPageEnabled}
-              panelTitle={getPanelTitle()}
-            />
+          {(anyFilterActive && !roleFilter) ? (
+            // Client-side pagination for search-only filtered results (no role filter)
+            (() => {
+              const totalFiltered = displayedGroups.length;
+              const totalFilterPages = Math.ceil(totalFiltered / FILTER_PAGE_SIZE);
+              const pagedGroups = displayedGroups.slice(
+                filterPage * FILTER_PAGE_SIZE,
+                (filterPage + 1) * FILTER_PAGE_SIZE
+              );
+              const filterPanelTitle = totalFiltered > 0
+                ? `${filterPage * FILTER_PAGE_SIZE + 1}\u2013${Math.min((filterPage + 1) * FILTER_PAGE_SIZE, totalFiltered)} of ${totalFiltered}`
+                : '';
+              return (
+                <PaginatedSection
+                  show={totalFilterPages > 1}
+                  onPrev={() => setFilterPage((p) => Math.max(0, p - 1))}
+                  onNext={() => setFilterPage((p) => Math.min(totalFilterPages - 1, p + 1))}
+                  prevEnabled={filterPage > 0}
+                  nextEnabled={filterPage < totalFilterPages - 1}
+                  panelTitle={filterPanelTitle}
+                >
+                  <GroupsTable
+                    groups={pagedGroups}
+                    onDelete={handleDelete}
+                    onEdit={(g) => { setEditGroup(g); setShowForm(false); }}
+                    isDeleting={isDeleting}
+                    isGroupAdmin={isGroupAdmin}
+                    currentUserId={profile?.id}
+                  />
+                  </PaginatedSection>
+              );
+            })()
+          ) : (
+            // Server-side pagination (no filter, or any role filter — all use server pages)
+            (() => {
+              const serverTotal =
+                roleFilter === 'norole'  ? (groupCountData?.noRoleGroupCount ?? 0)
+                : roleFilter === 'admin'  ? (insightMgdCount ?? 0)
+                : roleFilter === 'member' ? (insightMemberOnlyCount ?? 0)
+                : ignoreAccess ? (insightAllCount ?? 0) : (insightMyCount ?? 0);
+              const serverStart = pageNum * 100 + 1;
+              const serverEnd   = Math.min((pageNum + 1) * 100, serverTotal);
+              const serverPanelTitle = serverTotal > 0
+                ? `${serverStart}\u2013${serverEnd} of ${serverTotal}`
+                : '';
+              const roleFilterLabels: Record<string, string> = { admin: 'Admin', member: 'Member', norole: 'No Role' };
+              const emptyMsg = roleFilter
+                ? `No ${roleFilterLabels[roleFilter]} groups on this page`
+                : undefined;
+              const emptySub = roleFilter
+                ? `Your matching groups may be on a different page\u2014use Next or Previous to find them.`
+                : undefined;
+              const showPagination = roleFilter
+                ? serverTotal > 100
+                : (nextPageEnabled || prevPageEnabled);
+              return (
+                <PaginatedSection
+                  show={showPagination}
+                  onPrev={prevPage}
+                  onNext={nextPage}
+                  prevEnabled={prevPageEnabled}
+                  nextEnabled={nextPageEnabled}
+                  panelTitle={serverPanelTitle}
+                >
+                  <GroupsTable
+                    groups={displayedGroups}
+                    onDelete={handleDelete}
+                    onEdit={(g) => { setEditGroup(g); setShowForm(false); }}
+                    isDeleting={isDeleting}
+                    isGroupAdmin={isGroupAdmin}
+                    currentUserId={profile?.id}
+                    emptyMessage={emptyMsg}
+                    emptySubtitle={emptySub}
+                  />
+                  </PaginatedSection>
+              );
+            })()
           )}
         </>
       )}

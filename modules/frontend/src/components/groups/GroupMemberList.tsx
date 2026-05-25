@@ -23,9 +23,11 @@ interface GroupMemberListProps {
   onRemove?: (memberId: string) => void;
   onToggleAdmin?: (memberId: string, makeAdmin: boolean) => void;
   canManage?: boolean;
+  isTogglingAdmin?: boolean;
+  togglingMemberId?: string;
 }
 
-export function GroupMemberList({ members, admins, onRemove, onToggleAdmin, canManage }: GroupMemberListProps) {
+export function GroupMemberList({ members, admins, onRemove, onToggleAdmin, canManage, isTogglingAdmin, togglingMemberId  }: GroupMemberListProps) {
   const adminIds = new Set(admins.map((a) => a.id));
 
   const formatName = (member: GroupMember) => {
@@ -67,15 +69,18 @@ export function GroupMemberList({ members, admins, onRemove, onToggleAdmin, canM
                   <td className="vds-table-secondary">{formatName(member)}</td>
                   <td className="vds-table-secondary">{member.email ?? '—'}</td>
                   <td>
-                    <div className="form-check form-switch mb-0">
+                    <div className="form-check form-switch mb-0 d-flex align-items-center gap-2">
                       <input
                         className="form-check-input"
                         type="checkbox"
                         role="switch"
                         checked={isAdminMember}
-                        disabled={!canManage}
+                        disabled={!canManage || isTogglingAdmin}
                         onChange={(e) => onToggleAdmin?.(member.id, e.target.checked)}
                       />
+                      {isTogglingAdmin && togglingMemberId === member.id && (
+                        <span className="spinner-border spinner-border-sm text-primary" role="status" aria-label="Updating…" />
+                      )}
                     </div>
                   </td>
                   <td>

@@ -127,8 +127,21 @@ export function GroupDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['group', id] });
       void queryClient.invalidateQueries({ queryKey: ['group-members', id] });
     },
-    onError: () => addAlert('danger', 'Failed to update admin status'),
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: string | { errors?: string[] } } };
+      const data = e?.response?.data;
+      let msg = 'Failed to update admin status';
+      if (data && typeof data === 'object' && 'errors' in data && Array.isArray(data.errors) && data.errors.length > 0) {
+        msg = data.errors.join(' ');
+      } else if (typeof data === 'string' && data.trim().length > 0) {
+        msg = data.replace(/^"|"$/g, '');
+      }
+      addAlert('danger', msg);
+    },
   });
+  const togglingMemberId = toggleAdminMutation.isPending
+    ? (toggleAdminMutation.variables as { memberId: string } | undefined)?.memberId
+    : undefined;
 
   const currentUserMember = memberListData?.find((m) => m.id === profile?.id);
   const isGroupAdmin =
@@ -382,6 +395,8 @@ export function GroupDetailPage() {
                   toggleAdminMutation.mutate({ memberId, makeAdmin })
                 }
                 canManage={isGroupAdmin}
+                isTogglingAdmin={toggleAdminMutation.isPending}
+                togglingMemberId={togglingMemberId}
               />
             )}
           </div>

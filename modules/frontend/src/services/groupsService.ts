@@ -15,7 +15,7 @@
  */
 
 import api, { urlBuilder } from './api';
-import type { Group, GroupListResponse, GroupMember, GroupChangesResponse } from '../types/group';
+import type { Group, GroupListResponse, GroupMember, GroupChangesResponse, GroupCount } from '../types/group';
 
 export const groupsService = {
   createGroup(data: Partial<Group>) {
@@ -81,5 +81,9 @@ export const groupsService = {
     return api.get<GroupChangesResponse>(
       urlBuilder(`/groups/${groupId}/activity`, params)
     );
+  },
+
+  countGroups() {
+    return api.get<GroupCount>('/groups/count');
   },
 };

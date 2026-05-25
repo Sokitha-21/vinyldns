@@ -103,6 +103,7 @@ export function useGroups(ignoreAccess = false, query = '') {
     nextPageEnabled: Boolean(data?.nextId),
     prevPageEnabled,
     getPanelTitle,
+    pageNum: paging.pageNum,
     resetPaging,
     createGroup: createGroupMutation.mutate,
     updateGroup: updateGroupMutation.mutate,

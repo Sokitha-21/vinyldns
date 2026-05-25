@@ -32,9 +32,11 @@ interface GroupsTableProps {
   isDeleting: boolean;
   isGroupAdmin: (group: Group) => boolean;
   currentUserId?: string;
+  emptyMessage?: string;
+  emptySubtitle?: string;
 }
 
-export function GroupsTable({ groups, onDelete, onEdit, isDeleting, isGroupAdmin, currentUserId }: GroupsTableProps) {
+export function GroupsTable({ groups, onDelete, onEdit, isDeleting, isGroupAdmin, currentUserId, emptyMessage, emptySubtitle }: GroupsTableProps) {
   const [nameSort, setNameSort] = useState<SortDir>(null);
 
   const sortedGroups = nameSort
@@ -45,8 +47,8 @@ export function GroupsTable({ groups, onDelete, onEdit, isDeleting, isGroupAdmin
     return (
       <div className="vds-empty-state">
         <i className="bi bi-people fs-1 mb-2" style={{ opacity: 0.4 }} />
-        <p className="mb-0 fw-semibold">No groups found</p>
-        <small className="text-muted">Create a group to get started.</small>
+        <p className="mb-0 fw-semibold">{emptyMessage ?? 'No groups found'}</p>
+        <small className="text-muted">{emptySubtitle ?? 'Create a group to get started.'}</small>
       </div>
     );
   }
