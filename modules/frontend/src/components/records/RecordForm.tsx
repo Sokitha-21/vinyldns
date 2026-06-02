@@ -118,7 +118,6 @@ export function RecordForm({ zoneId, zoneName, initialData, onSubmit, onCancel, 
       nsText: '', ptrText: '',
     });
   };
-
   const isSingle = SINGLE_RECORD_TYPES.includes(selectedType);
 
   return (
