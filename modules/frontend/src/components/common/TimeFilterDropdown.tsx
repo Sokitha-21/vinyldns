@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 
 export type TimeRange = 'all' | '1d' | '7d' | '30d' | '90d' | 'custom';
 
@@ -55,15 +56,45 @@ export function TimeFilterDropdown({
   value, dateFrom, dateTo, onChange, onDateFromChange, onDateToChange,
 }: TimeFilterDropdownProps) {
   const [open, setOpen] = useState(false);
+  const [panelPos, setPanelPos] = useState({ top: 0, right: 0 });
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
+  // Recalculate position from the button's live viewport rect
+  const updatePos = () => {
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPanelPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+    }
+  };
+
+  // Close on outside click 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as HTMLElement;
+      if (
+        ref.current && !ref.current.contains(target) &&
+        !target.closest('[data-time-filter-panel]')
+      ) {
+        setOpen(false);
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Track scroll/resize while open so panel follows the button
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = () => updatePos();
+    const onResize = () => updatePos();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [open]); 
 
   const isActive = value !== 'all';
   const btnLabel =
@@ -71,6 +102,7 @@ export function TimeFilterDropdown({
       ? `${dateFrom || '…'} – ${dateTo || '…'}`
       : LABELS[value];
 
+  // ── Renders one option card cell ──────────────────────────────────────────
   const renderCell = (opt: { range: TimeRange; icon: string; label: string; desc: string }) => {
     const selected = value === opt.range;
     return (
@@ -129,10 +161,14 @@ export function TimeFilterDropdown({
     <div ref={ref} className="position-relative" style={{ display: 'inline-block' }}>
       {/* ── Trigger button ── */}
       <button
+        ref={btnRef}
         type="button"
         className={`btn btn-sm d-flex align-items-center gap-2 vds-btn-flat${isActive ? ' vds-btn-flat--active' : ''}`}
         style={{ height: 30, fontSize: '0.8rem', paddingLeft: 10, paddingRight: 8, fontWeight: isActive ? 600 : 400 }}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (!open) updatePos();
+          setOpen((o) => !o);
+        }}
       >
         <i className="bi bi-calendar3" style={{ fontSize: '0.78rem', color: isActive ? '#2e5090' : undefined }} />
         <span style={{ whiteSpace: 'nowrap' }}>{btnLabel}</span>
@@ -144,20 +180,22 @@ export function TimeFilterDropdown({
         <i className={`bi bi-chevron-${open ? 'up' : 'down'}`} style={{ fontSize: '0.6rem', opacity: 0.55, marginLeft: 2 }} />
       </button>
 
-      {/* ── Dropdown panel ── */}
-      {open && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(100% + 6px)',
-          right: 0,
-          zIndex: 1200,
-          width: 320,
-          background: '#fff',
-          borderRadius: '0.9rem',
-          boxShadow: '0 12px 40px rgba(20,40,90,0.2), 0 2px 8px rgba(0,0,0,0.07)',
-          border: '1px solid #d4dbe8',
-          overflow: 'hidden',
-        }}>
+      {/* ── Dropdown panel — rendered in body via portal to escape overflow clipping ── */}
+      {open && ReactDOM.createPortal(
+        <div
+          data-time-filter-panel
+          style={{
+            position: 'fixed',
+            top: panelPos.top,
+            right: panelPos.right,
+            zIndex: 1200,
+            width: 320,
+            background: '#fff',
+            borderRadius: '0.9rem',
+            boxShadow: '0 12px 40px rgba(20,40,90,0.2), 0 2px 8px rgba(0,0,0,0.07)',
+            border: '1px solid #d4dbe8',
+            overflow: 'hidden',
+          }}>
           {/* Gradient header */}
           <div style={{
             background: 'linear-gradient(90deg,#1e3a5f 0%,#2e5090 100%)',
@@ -170,6 +208,7 @@ export function TimeFilterDropdown({
             </span>
           </div>
 
+          {/* 2-column grid of option cards */}
           <div style={{ padding: '8px 10px 4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
             {GRID.map((row, ri) => (
               <div key={ri} style={{ display: 'flex', gap: 4 }}>
@@ -178,6 +217,7 @@ export function TimeFilterDropdown({
             ))}
           </div>
 
+          {/* Custom date range – expands below grid when Custom is selected */}
           {value === 'custom' && (
             <div style={{
               margin: '6px 12px 8px',
@@ -227,6 +267,7 @@ export function TimeFilterDropdown({
             </div>
           )}
 
+          {/* Clear footer */}
           {isActive && (
             <div style={{ padding: '6px 12px 10px', borderTop: '1px solid #eef0f5' }}>
               <button type="button"
@@ -244,7 +285,8 @@ export function TimeFilterDropdown({
               </button>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -22,26 +22,63 @@ interface PaginationProps {
   prevEnabled: boolean;
   nextEnabled: boolean;
   panelTitle?: string;
+  rangeLabel?: string;
 }
 
-export function Pagination({ onPrev, onNext, prevEnabled, nextEnabled, panelTitle }: PaginationProps) {
+interface PaginatedSectionProps extends PaginationProps {
+  show: boolean;
+  children: React.ReactNode;
+}
+
+/**
+ * Renders a top Pagination bar, then children, then a bottom Pagination bar.
+ * Both bars are only rendered when `show` is true.
+ */
+export function PaginatedSection({ show, children, ...paginationProps }: PaginatedSectionProps) {
   return (
-    <div className="d-flex align-items-center gap-2 mt-3">
-      {panelTitle && <span className="text-muted small">{panelTitle}</span>}
-      <button
-        className="btn btn-outline-secondary btn-sm"
-        onClick={onPrev}
-        disabled={!prevEnabled}
-      >
-        <i className="bi bi-chevron-left" /> Previous
-      </button>
-      <button
-        className="btn btn-outline-secondary btn-sm"
-        onClick={onNext}
-        disabled={!nextEnabled}
-      >
-        Next <i className="bi bi-chevron-right" />
-      </button>
+    <>
+      {show && <Pagination {...paginationProps} />}
+      {children}
+      {show && <Pagination {...paginationProps} />}
+    </>
+  );
+}
+
+export function Pagination({ onPrev, onNext, prevEnabled, nextEnabled, panelTitle, rangeLabel }: PaginationProps) {
+  const showPrev = prevEnabled;
+  const showNext = nextEnabled;
+  const label = rangeLabel ?? panelTitle;
+
+  return (
+    <div className="d-flex justify-content-end align-items-center gap-2 my-2" style={{ minHeight: 32 }}>
+      {showPrev && (
+        <button
+          className="vds-pagination-btn"
+          onClick={onPrev}
+        >
+          <i className="bi bi-chevron-left" style={{ fontSize: '0.75rem' }} />
+          <span>Previous</span>
+        </button>
+      )}
+      {label && (
+        <span
+          className="vds-pagination-label"
+          style={{ opacity: showPrev || showNext ? 1 : 0, pointerEvents: 'none' }}
+        >
+          {!rangeLabel && <i className="bi bi-layers" style={{ fontSize: '0.7rem', marginRight: 3 }} />}
+          {label}
+        </span>
+      )}
+      {showNext && (
+        <button
+          className="vds-pagination-btn"
+          onClick={onNext}
+        >
+          <span>Next</span>
+          <i className="bi bi-chevron-right" style={{ fontSize: '0.75rem' }} />
+        </button>
+      )}
     </div>
   );
 }
+
