@@ -66,23 +66,8 @@ export function GroupsPage() {
     isUpdating,
     isDeleting,
     resetPaging,
+    setRoleFilter: setHookRoleFilter,
   } = useGroups(ignoreAccess, activeQuery);
-
-  const { data: insightMyGroups } = useQuery({
-    queryKey: ['insight-my-groups'],
-    queryFn: async () => {
-      const res = await groupsService.getGroups(false, undefined, 1000);
-      return res.data.groups ?? [];
-    },
-  });
-
-  const { data: insightAllGroups } = useQuery({
-    queryKey: ['insight-all-groups'],
-    queryFn: async () => {
-      const res = await groupsService.getGroups(true, undefined, 1000);
-      return res.data.groups ?? [];
-    },
-  });
 
   const { data: groupCountData } = useQuery({
     queryKey: ['groups-count'],
@@ -90,9 +75,11 @@ export function GroupsPage() {
       const res = await groupsService.countGroups();
       return res.data;
     },
+    staleTime: 5 * 60 * 1000,  // treat as fresh for 5 min — avoids re-fetching on every tab switch/focus
   });
 
-  const insightGroupIdsSample = (insightMyGroups ?? []).slice(0, 10).map((g) => g.id);
+  // Use IDs from the currently displayed page — no extra API call needed.
+  const insightGroupIdsSample = groups.map((g) => g.id);
 
   const { data: recentChangesCount } = useQuery({
     queryKey: ['insight-recent-changes', insightGroupIdsSample],
@@ -116,27 +103,8 @@ export function GroupsPage() {
   const insightMgdCount        = groupCountData?.adminGroupCount ?? null;
   const insightMemberOnlyCount = groupCountData?.memberOnlyGroupCount ?? null;
   const insightNotMemberCount  = insightAllCount !== null && insightMyCount !== null ? insightAllCount - insightMyCount : null;
-  const insightSoleAdminCount  = insightMyGroups
-    ? insightMyGroups.filter((g) => g.admins.some((a) => a.id === profile?.id) && g.admins.length === 1).length
-    : null;
-
-  //debug
-  useEffect(() => {
-    if (!insightMyGroups || !groupCountData) return;
-    const memberGroups = insightMyGroups.filter(
-      (g) => g.members?.some((m) => m.id === profile?.id) && !g.admins.some((a) => a.id === profile?.id)
-    );
-    console.debug('[Groups] API counts:', groupCountData);
-    console.debug('[Groups] Member-only groups in loaded insight data:', memberGroups.map((g) => ({ id: g.id, name: g.name })));
-    if ((groupCountData.memberOnlyGroupCount ?? 0) !== memberGroups.length) {
-      console.warn(
-        `[Groups] Member count mismatch — API says ${groupCountData.memberOnlyGroupCount}, ` +
-        `but only ${memberGroups.length} found in loaded insight data (capped at 1000). ` +
-        `Missing groups are alphabetically beyond position 1000.`
-      );
-    }
-  }, [insightMyGroups, groupCountData, profile?.id]);
-
+  const soleAdminCount         = groupCountData?.soleAdminGroupCount ?? null;
+  
   useEffect(() => {
     if (justSelectedRef.current) {
       justSelectedRef.current = false;
@@ -218,9 +186,11 @@ export function GroupsPage() {
     );
   };
 
+  const apiRoleFilter = roleFilter === 'admin' ? 0 : roleFilter === 'member' ? 1 : roleFilter === 'norole' ? 2 : undefined;
+  
+  useEffect(() => { setHookRoleFilter(apiRoleFilter); }, [roleFilter]);
+
   useEffect(() => {
-    resetPaging();
-    setSearchInput(ignoreAccess ? allGroupsQuery : myGroupsQuery);
     setSuggestions([]);
     setShowSuggestions(false);
   }, [ignoreAccess]);
@@ -238,6 +208,7 @@ export function GroupsPage() {
     setRoleFilter(null);
     resetPaging();
     queryClient.invalidateQueries({ queryKey: ['groups'] });
+    void queryClient.invalidateQueries({ queryKey: ['groups-count'] });
   }, [ignoreAccess, resetPaging, queryClient]);
 
   const handleTabSwitch = useCallback((newIgnoreAccess: boolean) => {
@@ -286,7 +257,6 @@ export function GroupsPage() {
     }
   };
 
-  const insightSource = ignoreAccess ? (insightAllGroups ?? []) : (insightMyGroups ?? []);
   const isActualAdmin  = (g: Group) => g.admins.some((a) => a.id === profile?.id);
   const isActualMember = (g: Group) => g.members?.some((m) => m.id === profile?.id) ?? false;
   const hasAdminRole    = (insightMgdCount ?? 0) > 0;
@@ -294,36 +264,22 @@ export function GroupsPage() {
   const tabShowsAllGroups = ignoreAccess || Boolean(profile?.isSuper);
   const hasNoRoleInData = tabShowsAllGroups && (groupCountData?.noRoleGroupCount ?? 0) > 0;
 
-  const searchFilteredGroups = searchFilter
-    ? insightSource.filter((g) =>
-        g.name.toLowerCase().includes(searchFilter.toLowerCase())
-      )
-    : roleFilter
-    ? insightSource
-    : groups;
-
-  
+  const searchFilteredGroups = searchFilter ? groups : groups;
   const displayedGroups = roleFilter
-    ? groups.filter((g) => {
-        if (roleFilter === 'admin')  return isActualAdmin(g);
-        if (roleFilter === 'member') return isActualMember(g) && !isActualAdmin(g);
-        if (roleFilter === 'norole') return !isActualAdmin(g) && !isActualMember(g);
-        return true;
-      })
+    ? groups  // server already filtered by role
     : searchFilteredGroups;
 
   const roleFilterLabel: Record<string, string> = { admin: 'Admin', member: 'Member', norole: 'No Role' };
 
   const anyFilterActive = !!(roleFilter || searchFilter);
+  const hasGroups = anyFilterActive || ((ignoreAccess ? (insightAllCount ?? 0) : (insightMyCount ?? 0)) > 0);
+
 
   // Reset client-side filter page when filter changes
   React.useEffect(() => { setFilterPage(0); }, [roleFilter, searchFilter]);
   const cardAdminFiltered = displayedGroups.filter((g) => isActualAdmin(g)).length;
   const cardMemberOnlyFiltered = displayedGroups.filter(
     (g) => isActualMember(g) && !isActualAdmin(g)
-  ).length;
-  const cardSoleAdminFiltered = displayedGroups.filter(
-    (g) => isActualAdmin(g) && g.admins.length === 1
   ).length;
 
   const cardCount =
@@ -334,7 +290,7 @@ export function GroupsPage() {
     : (ignoreAccess ? insightAllCount : insightMyCount);
   const cardAdminCount = anyFilterActive ? cardAdminFiltered        : insightMgdCount;
   const cardMemberOnly = anyFilterActive ? cardMemberOnlyFiltered   : insightMemberOnlyCount;
-  const cardSoleAdmin  = anyFilterActive ? cardSoleAdminFiltered    : insightSoleAdminCount;
+  const cardSoleAdmin  = soleAdminCount;
   // Denominator for progress bar (% of filtered set or full set)
   const cardBaseCount  = anyFilterActive ? displayedGroups.length   : (insightMyCount ?? 0);
 
@@ -600,17 +556,19 @@ export function GroupsPage() {
               </div>
               <span className="vds-insight-label vds-insight-label--blue">Total Groups</span>
               <span className="vds-insight-value vds-insight-value--blue">
-                {cardCount ?? <span className="vds-insight-skeleton vds-insight-skeleton--blue" />}
+                {hasGroups ? (cardCount ?? <span className="vds-insight-skeleton vds-insight-skeleton--blue" />) : '–'}
               </span>
             </div>
             <div className="vds-insight-body vds-insight-body--blue">
               <div className="vds-insight-stat-label">Platform-wide</div>
               <div className="vds-insight-stat-label vds-insight-stat-label--right">User belong to</div>
-              <div className="vds-insight-stat-value vds-insight-stat-value--blue">{insightAllCount ?? '…'}</div>
-              <div className="vds-insight-stat-value vds-insight-stat-value--blue vds-insight-stat-value--right">{insightMyCount ?? '…'}</div>
+              <div className="vds-insight-stat-value vds-insight-stat-value--blue">{hasGroups ? (insightAllCount ?? '…') : '–'}</div>
+              <div className="vds-insight-stat-value vds-insight-stat-value--blue vds-insight-stat-value--right">{hasGroups ? (insightMyCount ?? '…') : '–'}</div>
               <div className="vds-insight-footnote">
                 <i className="bi bi-person-x me-1 vds-icon-blue-dim" />
-                Not a member of {insightNotMemberCount !== null ? insightNotMemberCount : '…'} groups
+                {hasGroups
+                  ? <>Not a member of {insightNotMemberCount !== null ? insightNotMemberCount : '…'} groups</>
+                  : 'No groups yet'}
               </div>
             </div>
           </div>
@@ -627,12 +585,12 @@ export function GroupsPage() {
                 </div>
                 <span className="vds-insight-label vds-insight-label--purple">Member Only</span>
                 <span className="vds-insight-value vds-insight-value--purple">
-                  {(anyFilterActive ? cardMemberOnly : insightMemberOnlyCount) ?? <span className="vds-insight-skeleton vds-insight-skeleton--purple" />}
+                  {hasGroups ? ((anyFilterActive ? cardMemberOnly : insightMemberOnlyCount) ?? <span className="vds-insight-skeleton vds-insight-skeleton--purple" />) : '–'}
                 </span>
               </div>
               <div className="vds-insight-body vds-insight-body--purple">
                 <div className="vds-insight-stat-label" style={{ gridColumn: '1 / -1' }}>My groups</div>
-                <div className="vds-insight-stat-value vds-insight-stat-value--purple" style={{ gridColumn: '1 / -1' }}>{insightMyCount ?? '…'}</div>
+                <div className="vds-insight-stat-value vds-insight-stat-value--purple" style={{ gridColumn: '1 / -1' }}>{hasGroups ? (insightMyCount ?? '…') : '–'}</div>
                 <div className="vds-insight-footnote">
                   <i className="bi bi-eye me-1 vds-icon-purple-dim" />
                   Groups where you're a member but not an admin
@@ -674,7 +632,7 @@ export function GroupsPage() {
               </div>
               <span className="vds-insight-label vds-insight-label--amber">I Manage</span>
               <span className="vds-insight-value vds-insight-value--amber">
-                {cardAdminCount ?? <span className="vds-insight-skeleton vds-insight-skeleton--amber" />}
+                {hasGroups ? (cardAdminCount ?? <span className="vds-insight-skeleton vds-insight-skeleton--amber" />) : '–'}
               </span>
             </div>
             <div className="vds-insight-body-amber-outer">
@@ -722,10 +680,19 @@ export function GroupsPage() {
               <div className="vds-insight-stat-label">Timeframe</div>
               <div className="vds-insight-stat-label vds-insight-stat-label--right">Groups scanned</div>
               <div className="vds-insight-stat-value vds-insight-stat-value--teal">Last 7 days</div>
-              <div className="vds-insight-stat-value vds-insight-stat-value--teal vds-insight-stat-value--right">{insightGroupIdsSample.length} / {insightMyCount ?? '…'}</div>
+              <div className="vds-insight-stat-value vds-insight-stat-value--teal vds-insight-stat-value--right">
+                {profile?.isSuper ? insightGroupIdsSample.length : Math.min(insightGroupIdsSample.length, insightMyCount ?? 0)}
+                {' / '}
+                {(profile?.isSuper && ignoreAccess ? insightAllCount : insightMyCount) ?? '…'}
+              </div>
               <div className="vds-insight-footnote">
                 <i className="bi bi-info-circle me-1 vds-icon-teal-dim" />
-                {insightGroupIdsSample.length < (insightMyCount ?? 0) ? 'First 10 groups scanned for activity' : 'All your groups scanned'}
+                {profile?.isSuper
+                  ? <>Scanned {pageNum * 100 + 1}–{pageNum * 100 + insightGroupIdsSample.length} of {(ignoreAccess ? insightAllCount : insightMyCount) ?? '…'} groups</>
+                  : ignoreAccess
+                    ? <>You belong to {insightMyCount ?? '…'} of {insightAllCount ?? '…'} groups — only those can be scanned</>
+                    : (insightGroupIdsSample.length < (insightMyCount ?? 0) ? 'First 10 groups scanned for activity' : 'All your groups scanned')
+                }
               </div>
             </div>
           </div>

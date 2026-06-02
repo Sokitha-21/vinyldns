@@ -64,7 +64,9 @@ export const groupsService = {
     limit?: number,
     startFrom?: string,
     ignoreAccess?: boolean,
-    query?: string
+    query?: string,
+    roleFilter?: number          // 0=admin, 1=member, 2=norole
+  
   ) {
     const params = {
       maxItems: limit,
@@ -72,6 +74,7 @@ export const groupsService = {
       groupNameFilter: query || undefined,
       ignoreAccess,
       abridged: true,
+      roleFilter,
     };
     return api.get<GroupListResponse>(urlBuilder('/groups', params));
   },

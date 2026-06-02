@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { groupsService } from '../services/groupsService';
 import { usePaging } from './usePaging';
@@ -35,19 +35,22 @@ function getErrorMessage(error: { response?: { data?: string | { errors?: string
 }
 
 export function useGroups(ignoreAccess = false, query = '') {
+  const [roleFilter, setRoleFilterState] = useState<number | undefined>(undefined);
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
     nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['groups', ignoreAccess, query, paging.next],
+    queryKey: ['groups', ignoreAccess, query, roleFilter, paging.next],
+    staleTime: 0,
     queryFn: async () => {
       const res = await groupsService.getGroupsAbridged(
         paging.maxItems,
         paging.next as string | undefined,
         ignoreAccess,
-        query
+        query,
+        roleFilter
       );
       return res.data;
     },
@@ -57,6 +60,7 @@ export function useGroups(ignoreAccess = false, query = '') {
     mutationFn: (group: Partial<Group>) => groupsService.createGroup(group),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['groups'] });
+      void queryClient.invalidateQueries({ queryKey: ['groups-count'] });
       addAlert('success', 'Group created successfully');
     },
     onError: (err: unknown) => {
@@ -69,6 +73,7 @@ export function useGroups(ignoreAccess = false, query = '') {
       groupsService.updateGroup(id, group),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['groups'] });
+      void queryClient.invalidateQueries({ queryKey: ['groups-count'] });
       addAlert('success', 'Group updated successfully');
     },
     onError: (err: unknown) => {
@@ -80,6 +85,7 @@ export function useGroups(ignoreAccess = false, query = '') {
     mutationFn: (id: string) => groupsService.deleteGroup(id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['groups'] });
+      void queryClient.invalidateQueries({ queryKey: ['groups-count'] });
       addAlert('success', 'Group deleted successfully');
     },
     onError: (err: unknown) => {
@@ -105,6 +111,8 @@ export function useGroups(ignoreAccess = false, query = '') {
     getPanelTitle,
     pageNum: paging.pageNum,
     resetPaging,
+    roleFilter,
+    setRoleFilter: (f: number | undefined) => { setRoleFilterState(f); resetPaging(); },
     createGroup: createGroupMutation.mutate,
     updateGroup: updateGroupMutation.mutate,
     deleteGroup: deleteGroupMutation.mutate,

@@ -50,6 +50,7 @@ export interface GroupCount {
   adminGroupCount: number;
   memberOnlyGroupCount: number;
   noRoleGroupCount: number;
+  soleAdminGroupCount: number;
 }
 
 export interface GroupChange {
