@@ -99,6 +99,29 @@ export interface ZoneChange {
   id: string;
 }
 
+export interface ZoneCount {
+  totalCount: number;
+  myZonesCount: number;
+  sharedCount: number;
+  privateCount: number;
+  activeCount: number;
+  syncingCount: number;
+  abandonedCount: number;
+  ptrCount: number;
+  sharedPtrCount: number;
+  privatePtrCount: number;
+  abandonedPtrCount: number;
+  abandonedSharedCount: number;
+  myActiveCount: number;
+  mySyncingCount: number;
+  mySharedCount: number;
+  myPrivateCount: number;
+  myPtrCount: number;
+  myAbandonedCount: number;
+  myAbandonedPtrCount: number;
+  myAbandonedSharedCount: number;
+}
+
 export interface ZoneChangesResponse {
   zoneChanges: ZoneChange[];
   startFrom?: string;

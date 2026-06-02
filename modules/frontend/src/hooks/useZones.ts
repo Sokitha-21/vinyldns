@@ -26,11 +26,12 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
   const [searchByAdminGroup, setSearchByAdminGroup] = useState(false);
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
     nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
+  const [accessFilter, setAccessFilter] = useState<number | undefined>(undefined);
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['zones', ignoreAccess, includeReverse, query, searchByAdminGroup, paging.next],
+    queryKey: ['zones', ignoreAccess, includeReverse, query, searchByAdminGroup, accessFilter, paging.next],
     queryFn: async () => {
       const res = await zonesService.getZones(
         paging.maxItems,
@@ -38,7 +39,8 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
         query,
         searchByAdminGroup,
         ignoreAccess,
-        includeReverse
+        includeReverse,
+        accessFilter
       );
       return res.data;
     },
@@ -104,10 +106,13 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
     isLoading,
     query,
     search,
+    accessFilter,
+    setAccessFilter: (f: number | undefined) => { setAccessFilter(f); resetPaging(); },
     nextPage,
     prevPage,
     nextPageEnabled: Boolean(data?.nextId),
     prevPageEnabled,
+    pageNum: paging.pageNum,
     getPanelTitle,
     resetPaging,
     createZone: createZoneMutation.mutate,
@@ -121,17 +126,19 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
 
 export function useDeletedZones(ignoreAccess = false, enabled = true) {
   const [query, setQuery] = useState('');
+  const [accessFilter, setAccessFilter] = useState<number | undefined>(undefined);
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
     prevPageEnabled, getPanelTitle } = usePaging(100);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['deleted-zones', ignoreAccess, query, paging.next],
+    queryKey: ['deleted-zones', ignoreAccess, query, accessFilter, paging.next],
     queryFn: async () => {
       const res = await zonesService.getDeletedZones(
         paging.maxItems,
         paging.next as string | undefined,
         query,
-        ignoreAccess
+        ignoreAccess,
+        accessFilter
       );
       return res.data;
     },
@@ -163,8 +170,10 @@ export function useDeletedZones(ignoreAccess = false, enabled = true) {
     prevPage,
     nextPageEnabled: Boolean(data?.nextId),
     prevPageEnabled,
+    pageNum: paging.pageNum,
     getPanelTitle,
     resetPaging,
+    setAccessFilter: (f: number | undefined) => { setAccessFilter(f); resetPaging(); },
   };
 }
 

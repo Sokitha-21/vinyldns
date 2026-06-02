@@ -28,9 +28,11 @@ function SortArrow({ dir }: { dir: SortDir }) {
 
 interface AbandonedZonesTableProps {
   zones: DeletedZoneChange[];
+  emptyMessage?: string;
+  emptySubtitle?: string;
 }
 
-export function AbandonedZonesTable({ zones }: AbandonedZonesTableProps) {
+export function AbandonedZonesTable({ zones, emptyMessage, emptySubtitle }: AbandonedZonesTableProps) {
   const [createdSort, setCreatedSort] = useState<SortDir>(null);
   const [abandonedSort, setAbandonedSort] = useState<SortDir>(null);
 
@@ -38,8 +40,8 @@ export function AbandonedZonesTable({ zones }: AbandonedZonesTableProps) {
     return (
       <div className="vds-empty-state">
         <i className="bi bi-trash3 fs-1 mb-2" style={{ opacity: 0.4 }} />
-        <p className="mb-0 fw-semibold">No abandoned zones found</p>
-        <small className="text-muted">Deleted zones will appear here.</small>
+        <p className="mb-0 fw-semibold">{emptyMessage ?? 'No abandoned zones found'}</p>
+        <small className="text-muted">{emptySubtitle ?? 'Deleted zones will appear here.'}</small>
       </div>
     );
   }

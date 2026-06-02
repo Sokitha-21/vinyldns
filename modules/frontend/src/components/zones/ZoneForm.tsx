@@ -15,6 +15,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { GroupCombobox } from './GroupCombobox';
 import { useForm } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import { groupsService } from '../../services/groupsService';
@@ -75,6 +76,7 @@ export function ZoneForm({
     reset,
     setValue,
     watch,
+    control,
     formState: { errors },
   } = useForm<Zone>({ defaultValues: initialData ?? {} });
 
@@ -120,6 +122,7 @@ export function ZoneForm({
   const transServer   = watch('transferConnection.primaryServer');
   const connDirty     = !!(connKeyName || connServer);
   const transDirty    = !!(transKeyName || transServer);
+  const adminGroupId  = watch('adminGroupId');
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="vds-zone-form">
@@ -207,28 +210,23 @@ export function ZoneForm({
           <label className="vds-zone-form__label">
             Admin Group <span className="text-danger">*</span>
           </label>
-          <select
-            className={`form-select vds-zone-form__input ${errors.adminGroupId ? 'is-invalid' : ''}`}
-            {...register('adminGroupId', { required: 'Admin group is required' })}
-          >
-            <option value="">— Select a group —</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}{g.description ? ` (${g.description})` : ''}
-              </option>
-            ))}
-          </select>
-          {errors.adminGroupId
-            ? <div className="invalid-feedback">{errors.adminGroupId.message}</div>
-            : <FieldHelp text="The VinylDNS group given admin rights to this zone. All users in this group can manage all records." />
-          }
+          <input type="hidden" {...register('adminGroupId', { required: 'Admin group is required' })} />
+          <GroupCombobox
+            groups={groups}
+            value={adminGroupId ?? ''}
+            onChange={(id) => setValue('adminGroupId', id, { shouldValidate: true })}
+            invalid={!!errors.adminGroupId}
+            errorMessage={errors.adminGroupId?.message}
+          />
+          {!errors.adminGroupId && (
+            <FieldHelp text="The VinylDNS group given admin rights to this zone. All users in this group can manage all records." />
+          )}
         </div>
 
         {/* Backend ID */}
         <div className="col-md-4">
           <label className="vds-zone-form__label">Backend ID (Optional)</label>
-          <select className="form-select vds-zone-form__input" {...register('backendId')}>
-            <option value="">— Default —</option>
+          <select className="form-select vds-zone-form__input" {...register('backendId')} defaultValue="default">
             {backendIds.map((id) => (
               <option key={id} value={id}>{id}</option>
             ))}
@@ -426,7 +424,16 @@ export function ZoneForm({
         <button
           type="button"
           className="btn vds-zone-form__reset-btn"
-          onClick={() => reset(initialData ?? {})}
+          onClick={() => {
+            reset(initialData ? { ...initialData } : {
+              name: '', email: '', adminGroupId: '', backendId: 'default',
+              connection: { keyName: '', key: '', algorithm: '', primaryServer: '' },
+              transferConnection: { keyName: '', key: '', algorithm: '', primaryServer: '' },
+            });
+            setValue('adminGroupId', initialData?.adminGroupId ?? '');
+            setConnOpen(false);
+            setTransferOpen(false);
+          }}
         >
           <i className="bi bi-arrow-counterclockwise me-1" />Clear Form
         </button>

@@ -31,9 +31,11 @@ function SortArrow({ dir }: { dir: SortDir }) {
 interface ZonesTableProps {
   zones: Zone[];
   showAllZones?: boolean;
+  emptyMessage?: string;
+  emptySubtitle?: string;
 }
 
-export function ZonesTable({ zones, showAllZones }: ZonesTableProps) {
+export function ZonesTable({ zones, showAllZones, emptyMessage, emptySubtitle }: ZonesTableProps) {
   const [sortState, setSortState] = useState<{ col: SortCol; dir: 'asc' | 'desc' } | null>(null);
 
   const toggleSort = (col: SortCol) =>
@@ -49,11 +51,11 @@ export function ZonesTable({ zones, showAllZones }: ZonesTableProps) {
     return (
       <div className="vds-empty-state">
         <i className="bi bi-diagram-3 fs-1 mb-2" style={{ opacity: 0.4 }} />
-        <p className="mb-0 fw-semibold">No zones found</p>
+        <p className="mb-0 fw-semibold">{emptyMessage ?? 'No zones found'}</p>
         <small className="text-muted">
-          {showAllZones
+          {emptySubtitle ?? (showAllZones
             ? 'No zones match the search criteria.'
-            : 'You do not own any zones. You can manage records in shared zones through DNS Changes.'}
+            : 'You do not own any zones. You can manage records in shared zones through DNS Changes.')}
         </small>
       </div>
     );

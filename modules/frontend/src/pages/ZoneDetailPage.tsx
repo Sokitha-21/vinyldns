@@ -17,6 +17,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { GroupCombobox } from '../components/zones/GroupCombobox';
 import { useBreadcrumbs } from '../contexts/BreadcrumbContext';
 import { useProfile } from '../contexts/ProfileContext';
 import { zonesService } from '../services/zonesService';
@@ -124,6 +125,7 @@ export function ZoneDetailPage() {
   const [aclRuleModal, setAclRuleModal] = useState<AclRuleForm | null>(null);
   const [aclDeleteModal, setAclDeleteModal] = useState<{ index: number } | null>(null);
   const [zoneTabAlert, setZoneTabAlert] = useState<{ type: 'success' | 'danger'; msg: string } | null>(null);
+  const [aclAlert, setAclAlert] = useState<{ type: 'success' | 'danger'; msg: string } | null>(null);
   const [syncSchedule, setSyncSchedule] = useState('');
   const [syncScheduleRemove, setSyncScheduleRemove] = useState(false);
   const [syncScheduleMode, setSyncScheduleMode] = useState<'idle' | 'confirm'>('idle');
@@ -193,9 +195,9 @@ export function ZoneDetailPage() {
   );
 
   const { data: groupsData } = useQuery({
-    queryKey: ['all-groups'],
+    queryKey: ['all-groups', isSuper],
     queryFn: async () => {
-      const res = await groupsService.getGroups(true, '');
+      const res = await groupsService.getGroups(isSuper, '', 3000);
       return res.data.groups ?? [];
     },
     enabled: isZoneAdmin || Boolean(zoneData?.shared), // load for zone admins and shared zones
@@ -298,12 +300,21 @@ export function ZoneDetailPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['zone', id] });
       setAclRuleModal(null);
-      setZoneTabAlert({ type: 'success', msg: 'ACL rule saved.' });
-      setTimeout(() => setZoneTabAlert(null), 3000);
+      setAclAlert({ type: 'success', msg: 'ACL rule saved.' });
+      setTimeout(() => setAclAlert(null), 3000);
     },
-    onError: () => {
-      setZoneTabAlert({ type: 'danger', msg: 'Failed to save ACL rule. Check the username / group and try again.' });
-      setTimeout(() => setZoneTabAlert(null), 5000);
+    onError: (err: unknown) => {
+      const error = err as { response?: { data?: string | { errors?: string[] }; statusText?: string; status?: number } };
+      const data = error.response?.data;
+      let msg = 'Failed to save ACL rule.';
+      if (data && typeof data === 'object' && 'errors' in data && Array.isArray(data.errors)) {
+        msg = data.errors.join('\n');
+      } else if (typeof data === 'string') {
+        msg = data.replace(/^"|"$/g, '');
+      }
+      setAclRuleModal(null);
+      setAclAlert({ type: 'danger', msg });
+      setTimeout(() => setAclAlert(null), 8000);
     },
   });
 
@@ -317,12 +328,13 @@ export function ZoneDetailPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['zone', id] });
       setAclDeleteModal(null);
-      setZoneTabAlert({ type: 'success', msg: 'ACL rule deleted.' });
-      setTimeout(() => setZoneTabAlert(null), 3000);
+      setAclAlert({ type: 'success', msg: 'ACL rule deleted.' });
+      setTimeout(() => setAclAlert(null), 3000);
     },
     onError: () => {
-      setZoneTabAlert({ type: 'danger', msg: 'Failed to delete ACL rule.' });
-      setTimeout(() => setZoneTabAlert(null), 5000);
+      setAclDeleteModal(null);
+      setAclAlert({ type: 'danger', msg: 'Failed to delete ACL rule.' });
+      setTimeout(() => setAclAlert(null), 5000);
     },
   });
 
@@ -554,7 +566,7 @@ export function ZoneDetailPage() {
 
   useEffect(() => {
     if (zoneData) {
-      setZoneFormData({ ...zoneData });
+      setZoneFormData({ ...zoneData, adminGroupId: '' });
       setZoneConnOpen(Boolean(zoneData.connection?.keyName || zoneData.connection?.primaryServer));
       setZoneTransferOpen(Boolean(zoneData.transferConnection?.keyName || zoneData.transferConnection?.primaryServer));
       const cron = zoneData.recurrenceSchedule ?? '';
@@ -1621,15 +1633,11 @@ export function ZoneDetailPage() {
                       {/* Admin Group */}
                       <div className="mb-3">
                         <label className="vds-zone-form__label">Admin Group</label>
-                        <select
-                          className="form-select vds-zone-form__input"
+                        <GroupCombobox
+                          groups={groupsData ?? []}
                           value={zoneFormData.adminGroupId}
-                          onChange={e => setZoneFormData(prev => prev ? { ...prev, adminGroupId: e.target.value } : prev)}
-                        >
-                          {(groupsData ?? []).map(g => (
-                            <option key={g.id} value={g.id}>{g.name}{g.description ? ` (${g.description})` : ''}</option>
-                          ))}
-                        </select>
+                          onChange={(id) => setZoneFormData(prev => prev ? { ...prev, adminGroupId: id } : prev)}
+                        />
                         {zoneFormData.adminGroupId && (
                           <Link
                             to={`/groups/${zoneFormData.adminGroupId}`}
@@ -1909,6 +1917,13 @@ export function ZoneDetailPage() {
             </div>
             {zoneAclOpen && (
             <div className="vds-zones-table-wrap">
+              {aclAlert && (
+                <div className={`alert alert-${aclAlert.type} alert-dismissible d-flex align-items-center gap-2 mb-0`} role="alert" style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none' }}>
+                  <i className={`bi ${aclAlert.type === 'success' ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill'}`} />
+                  {aclAlert.msg}
+                  <button type="button" className="btn-close ms-auto" onClick={() => setAclAlert(null)} />
+                </div>
+              )}
               <table className="vds-zones-table">
                 <thead>
                   <tr>
@@ -2433,7 +2448,7 @@ export function ZoneDetailPage() {
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-secondary me-auto"
-                      onClick={() => setAclRuleModal(prev => prev ? { ...prev, rule: { priority: 'User', accessLevel: 'Read', recordTypes: [] } } : null)}
+                      onClick={() => setAclRuleModal(prev => prev ? { ...prev, rule: { priority: 'User', accessLevel: 'Read', recordTypes: [], userName: undefined, groupId: undefined, recordMask: undefined, description: undefined } } : null)}
                     >
                       <i className="bi bi-arrow-counterclockwise me-1" />Clear Form
                     </button>
@@ -2534,7 +2549,7 @@ export function ZoneDetailPage() {
       {aclModal && (
         <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
           onMouseDown={(e) => { if (e.target === e.currentTarget) setAclModal(null); }}>
-          <div className="modal-dialog modal-dialog-centered modal-lg">
+          <div className="modal-dialog modal-dialog-centered modal-lg" style={{ maxWidth: '820px' }}>
             <div className="modal-content">
               <div className="modal-header" style={{ background: 'linear-gradient(90deg,#1e3a5f 0%,#2a4d7f 100%)', color: '#fff' }}>
                 <h5 className="modal-title fw-semibold d-flex align-items-center gap-2">
