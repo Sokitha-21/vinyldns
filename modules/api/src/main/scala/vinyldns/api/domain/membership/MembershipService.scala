@@ -201,17 +201,18 @@ class MembershipService(
       maxItems: Int,
       authPrincipal: AuthPrincipal,
       ignoreAccess: Boolean,
-      abridged: Boolean = false
+      abridged: Boolean = false,
+      roleFilter: Option[Int] = None
   ): Result[ListMyGroupsResponse] = {
     val groupsCall =
-      if (authPrincipal.isSystemAdmin || ignoreAccess) {
+      if (authPrincipal.isSystemAdmin || ignoreAccess || roleFilter.contains(2)) {
         groupRepo.getAllGroups()
       } else {
         groupRepo.getGroups(authPrincipal.memberGroupIds.toSet)
       }
 
     groupsCall.map { grp =>
-      pageListGroupsResponse(grp.toList, groupNameFilter, startFrom, maxItems, ignoreAccess, abridged, authPrincipal)
+      pageListGroupsResponse(grp.toList, groupNameFilter, startFrom, maxItems, ignoreAccess, abridged, authPrincipal, roleFilter)
     }
   }.toResult
 
@@ -222,9 +223,17 @@ class MembershipService(
       maxItems: Int,
       ignoreAccess: Boolean,
       abridged: Boolean = false,
-      authPrincipal: AuthPrincipal
+      authPrincipal: AuthPrincipal,
+      roleFilter: Option[Int] = None
     ): ListMyGroupsResponse = {
-    val allMyGroups = allGroups
+    val userId = authPrincipal.signedInUser.id
+    val roleFiltered = roleFilter match {
+      case Some(0) => allGroups.filter(g => g.adminUserIds.contains(userId))
+      case Some(1) => allGroups.filter(g => g.memberIds.contains(userId) && !g.adminUserIds.contains(userId))
+      case Some(2) => allGroups.filter(g => !g.memberIds.contains(userId))
+      case _       => allGroups
+    }
+    val allMyGroups = roleFiltered
       .filter(_.status == GroupStatus.Active)
       .sortBy(_.name.toLowerCase)
       .map(x => GroupInfo.fromGroup(x, abridged, Some(authPrincipal)))
@@ -378,6 +387,39 @@ class MembershipService(
     userRepo
       .getUsers(userIds, startFrom, pageSize)
       .toResult[ListUsersResults]
+
+  def countGroups(auth: AuthPrincipal): Result[GroupCount] = {
+    val userId = auth.signedInUser.id
+    val allGroupsIO = groupRepo.getAllGroups()
+      .map(_.filter(_.status == GroupStatus.Active))
+    val myGroupsIO =
+      if (auth.isSystemAdmin) {
+        groupRepo.getAllGroups().map(_.filter(_.status == GroupStatus.Active))
+      } else {
+        groupRepo.getGroups(auth.memberGroupIds.toSet)
+          .map(_.filter(_.status == GroupStatus.Active))
+      }
+
+    val actualMemberGroupsIO =
+      if (auth.isSystemAdmin) {
+        groupRepo.getAllGroups().map(_.filter(_.status == GroupStatus.Active))
+      } else {
+        groupRepo.getGroups(auth.memberGroupIds.toSet)
+          .map(_.filter(_.status == GroupStatus.Active))
+      }
+
+    (for {
+      allGroups    <- allGroupsIO
+      myGroups     <- myGroupsIO
+      actualGroups <- actualMemberGroupsIO
+      totalCount           = allGroups.size
+      myGroupCount         = myGroups.size
+      adminGroupCount      = actualGroups.count(_.adminUserIds.contains(userId))
+      memberOnlyGroupCount = actualGroups.count(g => g.memberIds.contains(userId) && !g.adminUserIds.contains(userId))
+      noRoleGroupCount     = totalCount - adminGroupCount - memberOnlyGroupCount
+      soleAdminGroupCount  = actualGroups.count(g => g.adminUserIds.contains(userId) && g.adminUserIds.size == 1)
+    } yield GroupCount(totalCount, myGroupCount, adminGroupCount, memberOnlyGroupCount, noRoleGroupCount, soleAdminGroupCount)).toResult
+  }
 
   def getExistingUser(userId: String): Result[User] =
     userRepo
