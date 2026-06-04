@@ -192,7 +192,7 @@ class MySqlZoneChangeRepository
           }
 
           startFrom.foreach { cursorName =>
-            sb.append(" AND zc.zone_name > ?")
+            sb.append(" AND zc.zone_name >= ?")
             extraBindParams += cursorName
           }
 
