@@ -227,9 +227,9 @@ def test_list_zones_ignore_access_success_with_name_filter(shared_zone_test_cont
 
 def test_list_zones_access_filter_shared_only(shared_zone_test_context):
     """
-    Test that only shared zones are returned when accessFilter=1
+    Test that only shared zones are returned when accessFilter=0
     """
-    result = shared_zone_test_context.ok_vinyldns_client.list_zones(ignore_access=True, access_filter=1, status=200)
+    result = shared_zone_test_context.ok_vinyldns_client.list_zones(ignore_access=True, access_filter=0, status=200)
     zones = result["zones"]
 
     assert_that(len(zones), greater_than_or_equal_to(1))
@@ -239,9 +239,9 @@ def test_list_zones_access_filter_shared_only(shared_zone_test_context):
 
 def test_list_zones_access_filter_private_only(shared_zone_test_context):
     """
-    Test that only private zones are returned when accessFilter=0
+    Test that only private zones are returned when accessFilter=1
     """
-    result = shared_zone_test_context.ok_vinyldns_client.list_zones(ignore_access=True, access_filter=0, status=200)
+    result = shared_zone_test_context.ok_vinyldns_client.list_zones(ignore_access=True, access_filter=1, status=200)
     zones = result["zones"]
 
     assert_that(len(zones), greater_than_or_equal_to(1))
