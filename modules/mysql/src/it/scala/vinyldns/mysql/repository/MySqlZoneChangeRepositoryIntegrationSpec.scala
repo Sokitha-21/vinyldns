@@ -422,11 +422,11 @@ class MySqlZoneChangeRepositoryIntegrationSpec
       val listDeletedZones = repo.listDeletedZones(okUserAuth).unsafeRunSync()
 
       val expectedPageOne = List(listDeletedZones.zoneDeleted(0))
-      val expectedPageOneNext = Some(listDeletedZones.zoneDeleted(1).zone.id)
+      val expectedPageOneNext = Some(listDeletedZones.zoneDeleted(1).zone.name)
       val expectedPageTwo = List(listDeletedZones.zoneDeleted(1))
-      val expectedPageTwoNext = Some(listDeletedZones.zoneDeleted(2).zone.id)
+      val expectedPageTwoNext = Some(listDeletedZones.zoneDeleted(2).zone.name)
       val expectedPageThree = List(listDeletedZones.zoneDeleted(2))
-      val expectedPageThreeNext = Some(listDeletedZones.zoneDeleted(3).zone.id)
+      val expectedPageThreeNext = Some(listDeletedZones.zoneDeleted(3).zone.name)
 
       // get first page
       val pageOne = repo.listDeletedZones(okUserAuth,startFrom = None, maxItems = 1 ).unsafeRunSync()
