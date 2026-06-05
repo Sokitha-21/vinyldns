@@ -636,10 +636,7 @@ h1.h3 {
   border-color: rgba(30,95,168,0.3) !important;
   box-shadow: 0 4px 18px rgba(0,0,0,0.35);
 }
-  background: #1a2840;
-  border-color: rgba(127,168,216,0.2);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-}
+
 [data-vds-theme="dark"] .vds-suggestions-list .list-group-item {
   background: transparent;
   color: #c8d8ee;
