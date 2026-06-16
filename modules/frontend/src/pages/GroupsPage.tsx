@@ -508,7 +508,6 @@ export function GroupsPage() {
                   </ul>
                 )}
               </div>
-
               {/* ── Refresh ── */}
               <button
                 type="button"
