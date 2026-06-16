@@ -97,6 +97,8 @@ export function TimeFilterDropdown({
   }, [open]); 
 
   const isActive = value !== 'all';
+  const isDark = document.documentElement.getAttribute('data-vds-theme') === 'dark';
+
   const btnLabel =
     value === 'custom' && (dateFrom || dateTo)
       ? `${dateFrom || '…'} – ${dateTo || '…'}`
@@ -116,7 +118,7 @@ export function TimeFilterDropdown({
           borderRadius: '0.5rem',
           background: selected
             ? 'linear-gradient(135deg,rgba(30,58,95,0.11) 0%,rgba(46,80,144,0.16) 100%)'
-            : 'rgba(246,248,252,0.95)',
+            : isDark ? 'rgba(22,34,54,0.8)' : 'rgba(246,248,252,0.95)',
           padding: '5px 4px 4px',
           display: 'flex',
           flexDirection: 'row',
@@ -129,12 +131,12 @@ export function TimeFilterDropdown({
           position: 'relative',
         }}
         onMouseEnter={(e) => {
-          if (!selected) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(46,80,144,0.07)';
+          if (!selected) (e.currentTarget as HTMLButtonElement).style.background = isDark ? 'rgba(30,50,80,0.7)' : 'rgba(46,80,144,0.07)';
         }}
         onMouseLeave={(e) => {
           (e.currentTarget as HTMLButtonElement).style.background = selected
             ? 'linear-gradient(135deg,rgba(30,58,95,0.11) 0%,rgba(46,80,144,0.16) 100%)'
-            : 'rgba(246,248,252,0.95)';
+            : isDark ? 'rgba(22,34,54,0.8)' : 'rgba(246,248,252,0.95)';
         }}
       >
         <div style={{
@@ -145,7 +147,7 @@ export function TimeFilterDropdown({
         }}>
           <i className={`bi ${opt.icon}`} style={{ fontSize: '0.62rem', color: selected ? '#c8deff' : '#506080' }} />
         </div>
-        <span style={{ fontSize: '0.7rem', fontWeight: selected ? 700 : 500, color: selected ? '#1e3a5f' : '#344563', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: '0.7rem', fontWeight: selected ? 700 : 500, color: selected ? (isDark ? '#c8e0ff' : '#1e3a5f') : (isDark ? '#8ab0d8' : '#344563'), lineHeight: 1.2, whiteSpace: 'nowrap' }}>
           {opt.label}
         </span>
         {selected && (
@@ -190,10 +192,10 @@ export function TimeFilterDropdown({
             right: panelPos.right,
             zIndex: 1200,
             width: 320,
-            background: '#fff',
+            background: isDark ? '#1a2840' : '#fff',
             borderRadius: '0.9rem',
-            boxShadow: '0 12px 40px rgba(20,40,90,0.2), 0 2px 8px rgba(0,0,0,0.07)',
-            border: '1px solid #d4dbe8',
+            boxShadow: isDark ? '0 12px 40px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.3)' : '0 12px 40px rgba(20,40,90,0.2), 0 2px 8px rgba(0,0,0,0.07)',
+            border: isDark ? '1px solid rgba(127,168,216,0.2)' : '1px solid #d4dbe8',
             overflow: 'hidden',
           }}>
           {/* Gradient header */}
@@ -269,7 +271,7 @@ export function TimeFilterDropdown({
 
           {/* Clear footer */}
           {isActive && (
-            <div style={{ padding: '6px 12px 10px', borderTop: '1px solid #eef0f5' }}>
+            <div style={{ padding: '6px 12px 10px', borderTop: isDark ? '1px solid rgba(127,168,216,0.12)' : '1px solid #eef0f5' }}>
               <button type="button"
                 style={{
                   width: '100%',
