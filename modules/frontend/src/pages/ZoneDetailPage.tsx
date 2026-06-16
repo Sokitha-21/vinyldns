@@ -2624,7 +2624,6 @@ export function ZoneDetailPage() {
           </div>
         </div>
       )}
-
       {/* ── Record Set Viewer Modal ── */}
       {viewingRecordSet && (
         <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
