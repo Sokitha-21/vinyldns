@@ -327,38 +327,69 @@ export function GroupsPage() {
       </div>
 
       {showForm && (
-        <div className="card mb-4 vds-form-card">
-          <div className="card-header vds-form-card__header vds-form-card__header--create d-flex align-items-center gap-2">
-            <i className="bi bi-plus-circle" />
-            Create New Group
+        <>
+          <div
+            className="modal fade show d-block"
+            tabIndex={-1}
+            role="dialog"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowForm(false); }}
+          >
+            <div className="modal-dialog modal-dialog-centered" role="document">
+              <div className="modal-content">
+                <div className="modal-header" style={{ background: 'linear-gradient(90deg, #1e5fa8, #0d1b3e)', color: '#fff' }}>
+                  <h5 className="modal-title d-flex align-items-center gap-2">
+                    <i className="bi bi-plus-circle" />
+                    Create New Group
+                  </h5>
+                  <button type="button" className="btn-close btn-close-white" onClick={() => setShowForm(false)} />
+                </div>
+                <div className="modal-body">
+                  <GroupForm
+                    onSubmit={handleCreate}
+                    onCancel={() => setShowForm(false)}
+                    isSubmitting={isCreating}
+                    mode="create"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="card-body bg-white vds-form-card__body">
-            <GroupForm
-              onSubmit={handleCreate}
-              onCancel={() => setShowForm(false)}
-              isSubmitting={isCreating}
-              mode="create"
-            />
-          </div>
-        </div>
+          <div className="modal-backdrop fade show" style={{ backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', opacity: 0.7 }} />
+        </>
       )}
 
+      {/* ── Edit Group modal ── */}
       {editGroup && (
-        <div className="card mb-4 vds-form-card vds-form-card--edit">
-          <div className="card-header vds-form-card__header vds-form-card__header--edit d-flex align-items-center gap-2">
-            <i className="bi bi-pencil-square" />
-            Edit Group: {editGroup.name}
+        <>
+          <div
+            className="modal fade show d-block"
+            tabIndex={-1}
+            role="dialog"
+            onClick={(e) => { if (e.target === e.currentTarget) setEditGroup(null); }}
+          >
+            <div className="modal-dialog modal-dialog-centered" role="document">
+              <div className="modal-content">
+                <div className="modal-header" style={{ background: 'linear-gradient(90deg, #3a6db5, #1e3a6e)', color: '#fff' }}>
+                  <h5 className="modal-title d-flex align-items-center gap-2">
+                    <i className="bi bi-pencil-square" />
+                    Edit Group: {editGroup.name}
+                  </h5>
+                  <button type="button" className="btn-close btn-close-white" onClick={() => setEditGroup(null)} />
+                </div>
+                <div className="modal-body">
+                  <GroupForm
+                    initialData={editGroup}
+                    onSubmit={handleUpdate}
+                    onCancel={() => setEditGroup(null)}
+                    isSubmitting={isUpdating}
+                    mode="edit"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="card-body bg-white vds-form-card__body">
-            <GroupForm
-              initialData={editGroup}
-              onSubmit={handleUpdate}
-              onCancel={() => setEditGroup(null)}
-              isSubmitting={isUpdating}
-              mode="edit"
-            />
-          </div>
-        </div>
+          <div className="modal-backdrop fade show" style={{ backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', opacity: 0.7 }} />
+        </>
       )}
 
       {/* ── Toolbar ── */}
