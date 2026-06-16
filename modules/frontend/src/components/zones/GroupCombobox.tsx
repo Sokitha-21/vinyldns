@@ -13,6 +13,8 @@ export function GroupCombobox({ groups, value, onChange, invalid, errorMessage }
   const [search, setSearch] = useState('');
   const [open, setOpen]     = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const isDark = document.documentElement.getAttribute('data-vds-theme') === 'dark';
+
 
   const selected = groups.find((g) => g.id === value);
   const filtered = search
@@ -54,10 +56,13 @@ export function GroupCombobox({ groups, value, onChange, invalid, errorMessage }
       {open && (
         <div style={{
           position: 'absolute', zIndex: 1050, left: 0, right: 0, top: '100%',
-          background: '#fff', border: '1px solid #ced4da', borderRadius: '0.375rem',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.12)', maxHeight: 240, display: 'flex', flexDirection: 'column',
+          background: isDark ? '#1a2840' : '#fff',
+          border: isDark ? '1px solid rgba(127,168,216,0.2)' : '1px solid #ced4da',
+          borderRadius: '0.375rem',
+          boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.55)' : '0 4px 12px rgba(0,0,0,0.12)',
+          maxHeight: 240, display: 'flex', flexDirection: 'column',
         }}>
-          <div style={{ padding: '6px 8px', borderBottom: '1px solid #e9ecef' }}>
+          <div style={{ padding: '6px 8px', borderBottom: isDark ? '1px solid rgba(127,168,216,0.12)' : '1px solid #e9ecef' }}>
             <input
               autoFocus
               type="text"
@@ -70,20 +75,23 @@ export function GroupCombobox({ groups, value, onChange, invalid, errorMessage }
           </div>
           <div style={{ overflowY: 'auto', flex: 1 }}>
             <div
-              style={{ padding: '6px 12px', cursor: 'pointer', color: '#6c757d' }}
+              style={{ padding: '6px 12px', cursor: 'pointer', color: isDark ? '#5a7898' : '#6c757d' }}
               onMouseDown={() => { onChange(''); setOpen(false); setSearch(''); }}
             >
               — Select a group —
             </div>
             {filtered.length === 0 && (
-              <div style={{ padding: '6px 12px', color: '#6c757d', fontStyle: 'italic' }}>No groups match</div>
+              <div style={{ padding: '6px 12px', color: isDark ? '#5a7898' : '#6c757d', fontStyle: 'italic' }}>No groups match</div>
             )}
             {filtered.map((g) => (
               <div
                 key={g.id}
                 style={{
                   padding: '6px 12px', cursor: 'pointer',
-                  background: g.id === value ? '#e8f4ff' : undefined,
+                  background: g.id === value
+                    ? (isDark ? 'rgba(30,95,168,0.25)' : '#e8f4ff')
+                    : undefined,
+                  color: isDark ? (g.id === value ? '#90c2f0' : '#c8d8ee') : undefined,
                   fontWeight: g.id === value ? 600 : undefined,
                 }}
                 onMouseDown={() => { onChange(g.id); setOpen(false); setSearch(''); }}
