@@ -705,28 +705,50 @@ export function ZoneDetailPage() {
       {/* ── Manage Records ── */}
       {activeTab === 'records' && (
         <>
-          {/* Record form */}
+          {/* ── Record form modal ── */}
           {(showRecordForm || editRecord) && (
-            <div className={`card mb-3 vds-form-card${editRecord ? ' vds-form-card--edit' : ''}`}>
-              <div className={`card-header vds-form-card__header ${editRecord ? 'vds-form-card__header--edit' : 'vds-form-card__header--create'} d-flex align-items-center gap-2`}>
-                <i className={`bi ${editRecord ? 'bi-pencil-square' : 'bi-plus-circle'}`} />
-                {editRecord ? `Edit: ${editRecord.name} (${editRecord.type})` : 'Add DNS Record'}
+            <>
+              <div
+                className="modal fade show d-block"
+                tabIndex={-1}
+                role="dialog"
+                onClick={(e) => { if (e.target === e.currentTarget) { setShowRecordForm(false); setEditRecord(null); } }}
+              >
+                <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
+                  <div className="modal-content">
+                    <div
+                      className="modal-header"
+                      style={{ background: editRecord ? 'linear-gradient(90deg, #3a6db5, #1e3a6e)' : 'linear-gradient(90deg, #1e5fa8, #0d1b3e)', color: '#fff' }}
+                    >
+                      <h5 className="modal-title d-flex align-items-center gap-2">
+                        <i className={`bi ${editRecord ? 'bi-pencil-square' : 'bi-plus-circle'}`} />
+                        {editRecord ? `Edit: ${editRecord.name} (${editRecord.type})` : 'Add DNS Record'}
+                      </h5>
+                      <button
+                        type="button"
+                        className="btn-close btn-close-white"
+                        onClick={() => { setShowRecordForm(false); setEditRecord(null); }}
+                      />
+                    </div>
+                    <div className="modal-body">
+                      <RecordForm
+                        zoneId={id}
+                        zoneName={zoneData.name}
+                        initialData={editRecord ?? undefined}
+                        onSubmit={editRecord ? handleUpdateRecord : handleCreateRecord}
+                        onCancel={() => { setShowRecordForm(false); setEditRecord(null); }}
+                        mode={editRecord ? 'edit' : 'create'}
+                        isSharedZone={zoneData?.shared ?? false}
+                        isReverseZone={zoneData.name.endsWith('in-addr.arpa.') || zoneData.name.endsWith('ip6.arpa.')}
+                        isLoading={editRecord ? isUpdatePending : isCreatePending}
+                        allGroups={groupsData ?? []}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="card-body bg-white vds-form-card__body">
-                <RecordForm
-                  zoneId={id}
-                  zoneName={zoneData.name}
-                  initialData={editRecord ?? undefined}
-                  onSubmit={editRecord ? handleUpdateRecord : handleCreateRecord}
-                  onCancel={() => { setShowRecordForm(false); setEditRecord(null); }}
-                  mode={editRecord ? 'edit' : 'create'}
-                  isSharedZone={zoneData?.shared ?? false}
-                  isReverseZone={zoneData.name.endsWith('in-addr.arpa.') || zoneData.name.endsWith('ip6.arpa.')}
-                  isLoading={editRecord ? isUpdatePending : isCreatePending}
-                  allGroups={groupsData ?? []}
-                />
-              </div>
-            </div>
+              <div className="modal-backdrop fade show" style={{ backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', opacity: 0.7 }} />
+            </>
           )}
 
           {recordsLoading ? <LoadingSpinner /> : (
@@ -2141,7 +2163,7 @@ export function ZoneDetailPage() {
                     <i className="bi bi-globe2" />Convert to UTC time
                   </button>
                   {showUtcConverter && (
-                    <div className="p-3 rounded-3 border d-flex align-items-center gap-3 flex-wrap" style={{ background: '#f8fafc' }}>
+                    <div className="p-3 rounded-3 border d-flex align-items-center gap-3 flex-wrap vds-utc-converter-box" style={{ background: '#f8fafc' }}>
                       <div>
                         <label className="vds-zone-form__label">Your local time</label>
                         <input
@@ -2171,7 +2193,7 @@ export function ZoneDetailPage() {
                       <div style={{ marginBottom: '1.3rem' }}>
                         <label className="vds-zone-form__label">UTC equivalent</label>
                         <div
-                          className="form-control vds-zone-form__input d-flex align-items-center gap-2"
+                          className="form-control vds-zone-form__input d-flex align-items-center gap-2 vds-utc-output-box"
                           style={{ width: 160, background: '#f0f6ff', fontWeight: 700, color: '#1e3a5f', fontSize: '1.05rem' }}
                         >
                           <i className="bi bi-globe2 text-muted" style={{ fontSize: '0.85rem' }} />
@@ -2618,7 +2640,7 @@ export function ZoneDetailPage() {
               </div>
               <div className="modal-body p-0">
                 {/* Summary row */}
-                <div className="d-flex gap-3 flex-wrap px-4 py-3" style={{ background: '#f4f7fb', borderBottom: '1px solid #e3eaf4' }}>
+                <div className="d-flex gap-3 flex-wrap px-4 py-3 vds-modal-summary-row" style={{ background: '#f4f7fb', borderBottom: '1px solid #e3eaf4' }}>
                   <div>
                     <div className="text-muted" style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Name</div>
                     <div className="fw-semibold">{viewingRecordSet.rs.name}</div>

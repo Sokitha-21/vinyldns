@@ -713,27 +713,41 @@ export function ZonesPage() {
         )}
       </div>
 
-      {/* ── Connect Zone form ── */}
+      {/* ── Connect Zone modal ── */}
       {showConnectForm && (
-        <div className="card mb-4 vds-form-card">
-          <div className="card-header vds-form-card__header vds-form-card__header--create d-flex align-items-center gap-2">
-            <i className="bi bi-plug" />
-            Connect to Zone
+        <>
+          <div
+            className="modal fade show d-block"
+            tabIndex={-1}
+            role="dialog"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowConnectForm(false); }}
+          >
+            <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
+              <div className="modal-content">
+                <div className="modal-header" style={{ background: 'linear-gradient(90deg, #1e5fa8, #0d1b3e)', color: '#fff' }}>
+                  <h5 className="modal-title d-flex align-items-center gap-2">
+                    <i className="bi bi-plug-fill" />
+                    Connect to Zone
+                  </h5>
+                  <button type="button" className="btn-close btn-close-white" onClick={() => setShowConnectForm(false)} />
+                </div>
+                <div className="modal-body">
+                  <ZoneForm
+                    groups={groupsData ?? []}
+                    backendIds={backendIds ?? []}
+                    onSubmit={handleCreate}
+                    onCancel={() => setShowConnectForm(false)}
+                    isSubmitting={myZones.isCreating}
+                    mode="create"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="card-body bg-white vds-form-card__body">
-            <ZoneForm
-              groups={groupsData ?? []}
-              backendIds={backendIds ?? []}
-              onSubmit={handleCreate}
-              onCancel={() => setShowConnectForm(false)}
-              isSubmitting={myZones.isCreating}
-              mode="create"
-            />
-          </div>
-        </div>
+          <div className="modal-backdrop fade show" style={{ backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)', opacity: 0.7 }} />
+        </>
       )}
-
-
+      
       {/* ── Toolbar ── */}
       <div className="card mb-2 vds-toolbar-card">
         <div className="card-body py-2 px-3">
