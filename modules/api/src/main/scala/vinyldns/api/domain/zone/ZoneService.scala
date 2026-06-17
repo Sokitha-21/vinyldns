@@ -16,7 +16,7 @@
 
 package vinyldns.api.domain.zone
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import vinyldns.api.domain.access.AccessValidationsAlgebra
 import vinyldns.api.Interfaces
@@ -73,6 +73,9 @@ class ZoneService(
     crypto: CryptoAlgebra,
     membershipService:MembershipService
 ) extends ZoneServiceAlgebra {
+
+  private implicit val cs: ContextShift[IO] =
+    IO.contextShift(scala.concurrent.ExecutionContext.global)
 
   import accessValidation._
   import zoneValidations._
@@ -495,7 +498,7 @@ class ZoneService(
       zoneChangeRepository.countAllAbandonedStats(),
       if (isPrivileged) IO.pure((0, 0, 0, 0)) else zoneRepository.countAllUserZoneStats(auth),
       if (isPrivileged) IO.pure((0, 0, 0)) else zoneChangeRepository.countAllAbandonedStatsForUser(auth)
-    ).mapN { (globalZone, globalAbandoned, userZoneStats, userAbandonedStats) =>
+    ).parMapN { (globalZone, globalAbandoned, userZoneStats, userAbandonedStats) =>
       val (total, shared, ptr, sharedPtr, privatePtr, syncing) = globalZone
       val (abandoned, abandonedPtr, abandonedShared) = globalAbandoned
       val (myTotal, myShared, myPtr, mySyncing) =

@@ -16,7 +16,7 @@
 
 package vinyldns.api.domain.membership
 
-import cats.effect.IO
+import cats.effect.{ContextShift, IO}
 import cats.implicits._
 import scalikejdbc.DB
 import vinyldns.api.Interfaces._
@@ -52,6 +52,9 @@ class MembershipService(
     recordSetRepo: RecordSetRepository,
     validDomains: ValidEmailConfig
 ) extends MembershipServiceAlgebra with TransactionProvider {
+
+  private implicit val cs: ContextShift[IO] =
+    IO.contextShift(scala.concurrent.ExecutionContext.global)
 
   import MembershipValidations._
 
@@ -390,35 +393,33 @@ class MembershipService(
 
   def countGroups(auth: AuthPrincipal): Result[GroupCount] = {
     val userId = auth.signedInUser.id
-    val allGroupsIO = groupRepo.getAllGroups()
-      .map(_.filter(_.status == GroupStatus.Active))
-    val myGroupsIO =
-      if (auth.isSystemAdmin) {
-        groupRepo.getAllGroups().map(_.filter(_.status == GroupStatus.Active))
-      } else {
-        groupRepo.getGroups(auth.memberGroupIds.toSet)
-          .map(_.filter(_.status == GroupStatus.Active))
-      }
 
-    val actualMemberGroupsIO =
-      if (auth.isSystemAdmin) {
-        groupRepo.getAllGroups().map(_.filter(_.status == GroupStatus.Active))
-      } else {
-        groupRepo.getGroups(auth.memberGroupIds.toSet)
-          .map(_.filter(_.status == GroupStatus.Active))
-      }
+    if (auth.isSystemAdmin) {
+      groupRepo.getAllGroups()
+        .map { groups =>
+          val activeGroups         = groups.filter(_.status == GroupStatus.Active)
+          val totalCount           = activeGroups.size
+          val adminGroupCount      = activeGroups.count(_.adminUserIds.contains(userId))
+          val memberOnlyGroupCount = activeGroups.count(g => g.memberIds.contains(userId) && !g.adminUserIds.contains(userId))
+          val noRoleGroupCount     = totalCount - adminGroupCount - memberOnlyGroupCount
+          val soleAdminGroupCount  = activeGroups.count(g => g.adminUserIds.contains(userId) && g.adminUserIds.size == 1)
+          GroupCount(totalCount, totalCount, adminGroupCount, memberOnlyGroupCount, noRoleGroupCount, soleAdminGroupCount)
+        }
+        .toResult
+    } else {
+      val allGroupsIO    = groupRepo.getAllGroups().map(_.filter(_.status == GroupStatus.Active))
+      val memberGroupsIO = groupRepo.getGroups(auth.memberGroupIds.toSet).map(_.filter(_.status == GroupStatus.Active))
 
-    (for {
-      allGroups    <- allGroupsIO
-      myGroups     <- myGroupsIO
-      actualGroups <- actualMemberGroupsIO
-      totalCount           = allGroups.size
-      myGroupCount         = myGroups.size
-      adminGroupCount      = actualGroups.count(_.adminUserIds.contains(userId))
-      memberOnlyGroupCount = actualGroups.count(g => g.memberIds.contains(userId) && !g.adminUserIds.contains(userId))
-      noRoleGroupCount     = totalCount - adminGroupCount - memberOnlyGroupCount
-      soleAdminGroupCount  = actualGroups.count(g => g.adminUserIds.contains(userId) && g.adminUserIds.size == 1)
-    } yield GroupCount(totalCount, myGroupCount, adminGroupCount, memberOnlyGroupCount, noRoleGroupCount, soleAdminGroupCount)).toResult
+      (allGroupsIO, memberGroupsIO).parMapN { (allGroups, memberGroups) =>
+        val totalCount           = allGroups.size
+        val myGroupCount         = memberGroups.size
+        val adminGroupCount      = memberGroups.count(_.adminUserIds.contains(userId))
+        val memberOnlyGroupCount = memberGroups.count(g => g.memberIds.contains(userId) && !g.adminUserIds.contains(userId))
+        val noRoleGroupCount     = totalCount - adminGroupCount - memberOnlyGroupCount
+        val soleAdminGroupCount  = memberGroups.count(g => g.adminUserIds.contains(userId) && g.adminUserIds.size == 1)
+        GroupCount(totalCount, myGroupCount, adminGroupCount, memberOnlyGroupCount, noRoleGroupCount, soleAdminGroupCount)
+      }.toResult
+    }
   }
 
   def getExistingUser(userId: String): Result[User] =
