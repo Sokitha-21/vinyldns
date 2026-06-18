@@ -22,6 +22,7 @@ export interface GroupMember {
   email?: string;
   created?: string;
   lockStatus?: string;
+  isAdmin?: boolean;
 }
 
 export interface Group {
@@ -43,11 +44,22 @@ export interface GroupListResponse {
   ignoreAccess?: boolean;
 }
 
+export interface GroupCount {
+  totalCount: number;
+  myGroupCount: number;
+  adminGroupCount: number;
+  memberOnlyGroupCount: number;
+  noRoleGroupCount: number;
+  soleAdminGroupCount: number;
+}
+
 export interface GroupChange {
   newGroup?: Group;
   oldGroup?: Group;
   changeType: string;
   userId: string;
+  userName?: string;
+  groupChangeMessage?: string;
   id: string;
   created: string;
 }
