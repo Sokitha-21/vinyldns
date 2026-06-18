@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { groupsService } from '../services/groupsService';
 import { usePaging } from './usePaging';
 import { useAlerts } from '../contexts/AlertContext';
 import type { Group } from '../types/group';
+import type { PagingState } from '../types/common';
 
 function getErrorMessage(error: { response?: { data?: string | { errors?: string[] }; statusText?: string; status?: number } }): string {
   const status = error.response?.status ?? 0;
@@ -34,10 +35,11 @@ function getErrorMessage(error: { response?: { data?: string | { errors?: string
   return msg;
 }
 
-export function useGroups(ignoreAccess = false, query = '') {
+export function useGroups(ignoreAccess = false, query = '', initialPaging?: Partial<PagingState>) {
   const [roleFilter, setRoleFilterState] = useState<number | undefined>(undefined);
+  const lastRoleFilter = useRef<number | undefined>(undefined);
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
-    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
+    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100, initialPaging);
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
@@ -110,9 +112,15 @@ export function useGroups(ignoreAccess = false, query = '') {
     prevPageEnabled,
     getPanelTitle,
     pageNum: paging.pageNum,
+    paging,
     resetPaging,
     roleFilter,
-    setRoleFilter: (f: number | undefined) => { setRoleFilterState(f); resetPaging(); },
+    setRoleFilter: (f: number | undefined) => {
+      if (lastRoleFilter.current === f) return;
+      lastRoleFilter.current = f;
+      setRoleFilterState(f);
+      resetPaging();
+    },
     createGroup: createGroupMutation.mutate,
     updateGroup: updateGroupMutation.mutate,
     deleteGroup: deleteGroupMutation.mutate,

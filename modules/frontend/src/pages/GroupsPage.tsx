@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GroupsTable } from '../components/groups/GroupsTable';
 import { GroupForm } from '../components/groups/GroupForm';
@@ -28,7 +29,16 @@ import type { Group } from '../types/group';
 export function GroupsPage() {
   const { profile } = useProfile();
   const queryClient = useQueryClient();
-  const [ignoreAccess, setIgnoreAccess] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Restore tab + paging cursor from URL on mount (set by sync effect below)
+  const initTab = searchParams.get('tab') === 'all';
+  const initPaging = (() => {
+    const next = searchParams.get('next') ?? undefined;
+    const pn = parseInt(searchParams.get('pn') ?? '0', 10);
+    const sk = (searchParams.get('sk') ?? '').split(',').filter(Boolean);
+    return (next || pn > 0) ? { next, pageNum: pn, startKeys: sk } : undefined;
+  })();
+  const [ignoreAccess, setIgnoreAccess] = useState(initTab);
   const [showForm, setShowForm] = useState(false);
   const [editGroup, setEditGroup] = useState<Group | null>(null);
   const [groupToDelete, setGroupToDelete] = useState<Group | null>(null);
@@ -59,6 +69,7 @@ export function GroupsPage() {
     nextPageEnabled,
     prevPageEnabled,
     pageNum,
+    paging,
     createGroup,
     updateGroup,
     deleteGroup,
@@ -67,7 +78,18 @@ export function GroupsPage() {
     isDeleting,
     resetPaging,
     setRoleFilter: setHookRoleFilter,
-  } = useGroups(ignoreAccess, activeQuery);
+  } = useGroups(ignoreAccess, activeQuery, initPaging);
+
+  const startKeysStr = paging.startKeys.filter(Boolean).map(String).join(',');
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (ignoreAccess) params.tab = 'all';
+    if (paging.next != null) params.next = String(paging.next);
+    if (paging.pageNum > 0) params.pn = String(paging.pageNum);
+    if (startKeysStr) params.sk = startKeysStr;
+    setSearchParams(params, { replace: true });
+  }, [ignoreAccess, paging.next, paging.pageNum, startKeysStr]); 
+
 
   const { data: groupCountData } = useQuery({
     queryKey: ['groups-count'],
@@ -76,26 +98,6 @@ export function GroupsPage() {
       return res.data;
     },
     staleTime: 5 * 60 * 1000,  // treat as fresh for 5 min — avoids re-fetching on every tab switch/focus
-  });
-
-  // Use IDs from the currently displayed page — no extra API call needed.
-  const insightGroupIdsSample = groups.map((g) => g.id);
-
-  const { data: recentChangesCount } = useQuery({
-    queryKey: ['insight-recent-changes', insightGroupIdsSample],
-    queryFn: async () => {
-      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      const results = await Promise.all(
-        insightGroupIdsSample.map((gid) =>
-          groupsService.getGroupChanges(gid, 20).catch(() => ({ data: { changes: [] } }))
-        )
-      );
-      return results.reduce((total, res) => {
-        const changes = (res.data as { changes?: Array<{ created: string }> }).changes ?? [];
-        return total + changes.filter((c) => c.created && new Date(c.created).getTime() > sevenDaysAgo).length;
-      }, 0);
-    },
-    enabled: insightGroupIdsSample.length > 0,
   });
 
   const insightMyCount         = groupCountData?.myGroupCount ?? null;
@@ -576,9 +578,9 @@ export function GroupsPage() {
       <div className={`vds-tab-content${tabFading ? ' vds-tab-content--fading' : ''}`}>
 
       {/* ── Insight cards ── */}
-      {showCards && <div className="row g-2 mb-3 align-items-stretch">
+      {showCards && <div className="row g-2 align-items-stretch justify-content-evenly vds-groups-insight-row">
         {/* Total Groups */}
-        <div className="col-6 col-md-3 d-flex">
+        <div className="col-6 col-md-3 d-flex" style={{ maxWidth: '30.333333%' }}>
           <div className="rounded-3 px-3 py-2 w-100 d-flex flex-column vds-insight-card vds-insight-card--blue">
             <div className="d-flex align-items-center gap-2 mb-1">
               <div className="rounded-2 vds-insight-icon vds-insight-icon--blue">
@@ -605,7 +607,7 @@ export function GroupsPage() {
         </div>
 
         {/* My Groups tab */}
-        <div className="col-6 col-md-3 d-flex">
+        <div className="col-6 col-md-4 d-flex" style={{ maxWidth: '30.333333%' }}>
           {!ignoreAccess ? (
             /* ── My Groups tab: Member Only ── */
             <div className="rounded-3 px-3 py-2 w-100 d-flex flex-column vds-insight-card vds-insight-card--purple">
@@ -654,7 +656,7 @@ export function GroupsPage() {
         </div>
 
         {/* I Manage */}
-        <div className="col-6 col-md-3 d-flex">
+        <div className="col-6 col-md-4 d-flex" style={{ maxWidth: '30.333333%' }}>
           <div className="rounded-3 px-3 py-2 w-100 d-flex flex-column vds-insight-card vds-insight-card--amber">
             <div className="d-flex align-items-center gap-2 mb-1">
               <div className="rounded-2 vds-insight-icon vds-insight-icon--amber">
@@ -690,40 +692,6 @@ export function GroupsPage() {
               ) : (
                 <div className="vds-insight-no-data">No groups managed yet</div>
               )}
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Changes */}
-        <div className="col-6 col-md-3 d-flex">
-          <div className="rounded-3 px-3 py-2 w-100 d-flex flex-column vds-insight-card vds-insight-card--teal">
-            <div className="d-flex align-items-center gap-2 mb-1">
-              <div className="rounded-2 vds-insight-icon vds-insight-icon--teal">
-                <i className="bi bi-clock-history" />
-              </div>
-              <span className="vds-insight-label vds-insight-label--teal">Recent Changes</span>
-              <span className="vds-insight-value vds-insight-value--teal">
-                {recentChangesCount !== undefined ? recentChangesCount : <span className="vds-insight-skeleton vds-insight-skeleton--teal" />}
-              </span>
-            </div>
-            <div className="vds-insight-body vds-insight-body--teal">
-              <div className="vds-insight-stat-label">Timeframe</div>
-              <div className="vds-insight-stat-label vds-insight-stat-label--right">Groups scanned</div>
-              <div className="vds-insight-stat-value vds-insight-stat-value--teal">Last 7 days</div>
-              <div className="vds-insight-stat-value vds-insight-stat-value--teal vds-insight-stat-value--right">
-                {profile?.isSuper ? insightGroupIdsSample.length : Math.min(insightGroupIdsSample.length, insightMyCount ?? 0)}
-                {' / '}
-                {(profile?.isSuper && ignoreAccess ? insightAllCount : insightMyCount) ?? '…'}
-              </div>
-              <div className="vds-insight-footnote">
-                <i className="bi bi-info-circle me-1 vds-icon-teal-dim" />
-                {profile?.isSuper
-                  ? <>Scanned {pageNum * 100 + 1}–{pageNum * 100 + insightGroupIdsSample.length} of {(ignoreAccess ? insightAllCount : insightMyCount) ?? '…'} groups</>
-                  : ignoreAccess
-                    ? <>You belong to {insightMyCount ?? '…'} of {insightAllCount ?? '…'} groups — only those can be scanned</>
-                    : (insightGroupIdsSample.length < (insightMyCount ?? 0) ? 'First 10 groups scanned for activity' : 'All your groups scanned')
-                }
-              </div>
             </div>
           </div>
         </div>

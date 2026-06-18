@@ -15,7 +15,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { groupsService } from '../services/groupsService';
 import { profileService } from '../services/profileService';
@@ -38,6 +38,7 @@ function SortArrow({ dir }: { dir: SortDir }) {
 
 export function GroupDetailPage() {
   const { id = '' } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { addAlert } = useAlerts();
   const { setCrumbs } = useBreadcrumbs();
   const { profile, loading: profileLoading } = useProfile();
@@ -229,13 +230,14 @@ export function GroupDetailPage() {
             <small className="text-muted">{group.email}</small>
           </div>
         </div>
-        <Link
-          to="/groups"
+        <button
+          type="button"
           className="btn btn-sm d-flex align-items-center gap-1 vds-btn-nav"
+          onClick={() => navigate(-1)}
         >
           <i className="bi bi-arrow-left" />
           Back to Groups
-        </Link>
+        </button>
       </div>
 
       {/* ── Email validation notice ── */}
