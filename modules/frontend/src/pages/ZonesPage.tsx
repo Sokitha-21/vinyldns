@@ -117,7 +117,6 @@ export function ZonesPage() {
   
   const myAbandoned  = useDeletedZones(false, true);  // always enabled so deletedZones.length is available as fallback
   const allAbandoned = useDeletedZones(true,  mainTab === 'abandonedZones');
-
   const activeAbandonedHook = abandonedSubTab === 'myAbandoned' ? myAbandoned : allAbandoned;
 
   // Sync mainTab + active tab paging cursor to URL so back-navigation restores state
