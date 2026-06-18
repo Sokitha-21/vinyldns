@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ZonesTable } from '../components/zones/ZonesTable';
 import { AbandonedZonesTable } from '../components/zones/AbandonedZonesTable';
@@ -39,9 +40,21 @@ export function ZonesPage() {
   const { profile } = useProfile();
   const isSuper = profile?.isSuper ?? false;
   const isSupport = profile?.isSupport ?? false;
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Restore tab + paging cursor from URL on mount
+  const initMainTab = (['myZones', 'allZones', 'abandonedZones'].includes(searchParams.get('tab') ?? '')
+    ? searchParams.get('tab') as MainTab
+    : 'myZones');
+  const initPaging = (() => {
+    const next = searchParams.get('next') ?? undefined;
+    const pn = parseInt(searchParams.get('pn') ?? '0', 10);
+    const sk = (searchParams.get('sk') ?? '').split(',').filter(Boolean);
+    return (next || pn > 0) ? { next, pageNum: pn, startKeys: sk } : undefined;
+  })();
 
   // ── Tab state ────────────────────────────────────────────────────────────────
-  const [mainTab, setMainTab] = useState<MainTab>('myZones');
+  const [mainTab, setMainTab] = useState<MainTab>(initMainTab);
   const [abandonedSubTab, setAbandonedSubTab] = useState<AbandonedSubTab>('myAbandoned');
   const [tabFading, setTabFading] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
@@ -98,14 +111,28 @@ export function ZonesPage() {
   const [abanDateTo, setAbanDateTo] = useState('');
 
   // ── Zones hooks ───────────────────────────────────────────────────────────────
-  const myZones = useZones(false, !myZonesHidePtr);
-  const allZones = useZones(true,  !allZonesHidePtr);
+  const myZones  = useZones(false, !myZonesHidePtr, initMainTab === 'myZones'  ? initPaging : undefined);
+  const allZones = useZones(true,  !allZonesHidePtr, initMainTab === 'allZones' ? initPaging : undefined);
 
   
   const myAbandoned  = useDeletedZones(false, true);  // always enabled so deletedZones.length is available as fallback
   const allAbandoned = useDeletedZones(true,  mainTab === 'abandonedZones');
 
   const activeAbandonedHook = abandonedSubTab === 'myAbandoned' ? myAbandoned : allAbandoned;
+
+  // Sync mainTab + active tab paging cursor to URL so back-navigation restores state
+  const activePaging = mainTab === 'allZones' ? allZones.paging : myZones.paging;
+  const zonesStartKeysStr = activePaging.startKeys.filter(Boolean).map(String).join(',');
+  useEffect(() => {
+    const params: Record<string, string> = {};
+    if (mainTab !== 'myZones') params.tab = mainTab;
+    if (mainTab !== 'abandonedZones') {
+      if (activePaging.next != null) params.next = String(activePaging.next);
+      if (activePaging.pageNum > 0) params.pn = String(activePaging.pageNum);
+      if (zonesStartKeysStr) params.sk = zonesStartKeysStr;
+    }
+    setSearchParams(params, { replace: true });
+  }, [mainTab, activePaging.next, activePaging.pageNum, zonesStartKeysStr]); 
 
   // ── Backend IDs & groups (for ZoneForm) ──────────────────────────────────────
   // Super users see all groups (ignoreAccess=true); support and regular users

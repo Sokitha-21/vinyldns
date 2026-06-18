@@ -18,12 +18,12 @@ import { useState, useCallback } from 'react';
 import type { PagingState } from '../types/common';
 
 /** Mirrors the Angular pagingService behaviour */
-export function usePaging(maxItems = 100) {
+export function usePaging(maxItems = 100, initialState?: Partial<PagingState>) {
   const [paging, setPaging] = useState<PagingState>({
     maxItems,
-    pageNum: 0,
-    startKeys: [],
-    next: undefined,
+    pageNum: initialState?.pageNum ?? 0,
+    startKeys: initialState?.startKeys ?? [],
+    next: initialState?.next,
   });
 
   const nextPageUpdate = useCallback(

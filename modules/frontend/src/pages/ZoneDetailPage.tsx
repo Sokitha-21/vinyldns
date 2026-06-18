@@ -605,10 +605,10 @@ export function ZoneDetailPage() {
             <small className="text-muted">{zoneData.email}</small>
           </div>
         </div>
-        <Link to="/zones" className="btn btn-sm d-flex align-items-center gap-1 vds-btn-nav">
+        <button type="button" className="btn btn-sm d-flex align-items-center gap-1 vds-btn-nav" onClick={() => navigate(-1)}>
           <i className="bi bi-arrow-left" />
           Back to Zones
-        </Link>
+        </button>
       </div>
 
       <div className="vds-zone-meta-strip mb-3">

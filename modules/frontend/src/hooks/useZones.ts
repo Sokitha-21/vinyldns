@@ -14,19 +14,22 @@
  * limitations under the License.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { zonesService } from '../services/zonesService';
 import { usePaging } from './usePaging';
 import { useAlerts } from '../contexts/AlertContext';
 import type { Zone, DeletedZoneChange } from '../types/zone';
+import type { PagingState } from '../types/common';
 
-export function useZones(ignoreAccess = false, includeReverse = true) {
+export function useZones(ignoreAccess = false, includeReverse = true, initialPaging?: Partial<PagingState>) {
   const [query, setQuery] = useState('');
   const [searchByAdminGroup, setSearchByAdminGroup] = useState(false);
-  const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
-    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
   const [accessFilter, setAccessFilter] = useState<number | undefined>(undefined);
+  const lastSearch = useRef({ query: '', byAdminGroup: false });
+  const lastAccessFilter = useRef<number | undefined>(undefined);
+  const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
+    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100, initialPaging);
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
@@ -86,6 +89,8 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
 
   const search = useCallback(
     (q: string, byAdminGroup = false) => {
+      if (lastSearch.current.query === q && lastSearch.current.byAdminGroup === byAdminGroup) return;
+      lastSearch.current = { query: q, byAdminGroup };
       setQuery(q);
       setSearchByAdminGroup(byAdminGroup);
       resetPaging();
@@ -107,12 +112,18 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
     query,
     search,
     accessFilter,
-    setAccessFilter: (f: number | undefined) => { setAccessFilter(f); resetPaging(); },
+    setAccessFilter: (f: number | undefined) => {
+      if (lastAccessFilter.current === f) return;
+      lastAccessFilter.current = f;
+      setAccessFilter(f);
+      resetPaging();
+    },
     nextPage,
     prevPage,
     nextPageEnabled: Boolean(data?.nextId),
     prevPageEnabled,
     pageNum: paging.pageNum,
+    paging,
     getPanelTitle,
     resetPaging,
     createZone: createZoneMutation.mutate,
