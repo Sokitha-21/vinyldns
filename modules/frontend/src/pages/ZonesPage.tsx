@@ -186,7 +186,6 @@ export function ZonesPage() {
     },
   });
   const insightAbandonedCount = zonesCount?.abandonedCount ?? null;
-
   const insightMyCount  = zonesCount?.myZonesCount ?? null;
   const insightAllCount = zonesCount?.totalCount   ?? null;
 
