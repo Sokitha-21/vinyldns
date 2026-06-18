@@ -95,6 +95,7 @@ export function ZonesPage() {
   const [allSuggestionsOpen, setAllSuggestionsOpen] = useState(false);
   const mySuggestionsRef  = useRef<HTMLDivElement>(null);
   const allSuggestionsRef = useRef<HTMLDivElement>(null);
+
   // Debounced values for suggestions queries
   const [myZonesSuggestQuery,  setMyZonesSuggestQuery]  = useState('');
   const [allZonesSuggestQuery, setAllZonesSuggestQuery] = useState('');
@@ -188,7 +189,6 @@ export function ZonesPage() {
   const insightAbandonedCount = zonesCount?.abandonedCount ?? null;
   const insightMyCount  = zonesCount?.myZonesCount ?? null;
   const insightAllCount = zonesCount?.totalCount   ?? null;
-
 
   // ── Search suggestions queries (ignoreAccess + includeReverse like old portal) ─
   const { data: mySuggestData } = useQuery({
