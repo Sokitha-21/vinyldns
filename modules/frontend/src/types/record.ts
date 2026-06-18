@@ -64,6 +64,19 @@ export interface RecordData {
   value?: string;
 }
 
+export type OwnershipTransferStatus =
+  | 'AutoApproved'
+  | 'Cancelled'
+  | 'ManuallyApproved'
+  | 'ManuallyRejected'
+  | 'Requested'
+  | 'PendingReview';
+
+export interface RecordSetGroupChange {
+  ownershipTransferStatus?: OwnershipTransferStatus;
+  requestedOwnerGroupId?: string | null;
+}
+
 export interface RecordSet {
   id: string;
   zoneId: string;
@@ -75,9 +88,9 @@ export interface RecordSet {
   updated?: string;
   ttl: number;
   records: RecordData[];
-  account?: string;
-  accessLevel?: string;
   ownerGroupId?: string;
+  ownerGroupName?: string;
+  recordSetGroupChange?: RecordSetGroupChange;
 }
 
 export interface RecordSetListResponse {
@@ -96,6 +109,8 @@ export interface RecordSetChange {
   userId: string;
   id: string;
   zoneId: string;
+  updates?: { recordSet?: RecordSet };
+  userName?: string;
 }
 
 export interface RecordSetChangesResponse {
