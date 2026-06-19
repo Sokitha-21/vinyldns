@@ -578,7 +578,7 @@ export function GroupsPage() {
       <div className={`vds-tab-content${tabFading ? ' vds-tab-content--fading' : ''}`}>
 
       {/* ── Insight cards ── */}
-      {showCards && <div className="row g-2 align-items-stretch justify-content-evenly vds-groups-insight-row">
+      {showCards && <div className="row mb-2 g-2 align-items-stretch justify-content-evenly vds-groups-insight-row">
         {/* Total Groups */}
         <div className="col-6 col-md-3 d-flex" style={{ maxWidth: '30.333333%' }}>
           <div className="rounded-3 px-3 py-2 w-100 d-flex flex-column vds-insight-card vds-insight-card--blue">
