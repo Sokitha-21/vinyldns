@@ -28,9 +28,10 @@ import org.scalatest.{BeforeAndAfterEach, EitherValues}
 import vinyldns.api.config.ValidEmailConfig
 import vinyldns.api.domain.access.AccessValidations
 import vinyldns.api.domain.membership.{EmailValidationError, MembershipService}
-import vinyldns.core.domain.record.RecordSetRepository
+import vinyldns.core.domain.record.{RecordChangeRepository, RecordSetCacheRepository, RecordSetRepository}
 //import vinyldns.api.domain.membership.{EmailValidationError, MembershipService}
-import vinyldns.api.repository.TestDataLoader
+import vinyldns.api.repository.{ApiDataAccessor, TestDataLoader}
+import vinyldns.core.domain.batch.BatchChangeRepository
 import vinyldns.core.domain.auth.AuthPrincipal
 import vinyldns.core.domain.membership._
 import vinyldns.core.domain.zone._
@@ -64,6 +65,9 @@ class ZoneServiceSpec
   private val mockMembershipRepo = mock[MembershipRepository]
   private val mockGroupChangeRepo = mock[GroupChangeRepository]
   private val mockRecordSetRepo = mock[RecordSetRepository]
+  private val mockRecordChangeRepo = mock[RecordChangeRepository]
+  private val mockRecordSetCacheRepo = mock[RecordSetCacheRepository]
+  private val mockBatchChangeRepo = mock[BatchChangeRepository]
   private val mockValidEmailConfig = ValidEmailConfig(valid_domains = List("test.com", "*dummy.com"),2)
   private val mockValidEmailConfigNew = ValidEmailConfig(valid_domains = List(),2)
   private val mockMembershipService = new MembershipService(mockGroupRepo,
@@ -1421,6 +1425,121 @@ class ZoneServiceSpec
 
       result.changeType shouldBe ZoneChangeType.Update
       result.zone.acl.rules.size shouldBe 0
+    }
+  }
+
+  "create a ZoneService via apply companion object" in {
+    val dataAccessor = ApiDataAccessor(
+      mockUserRepo,
+      mockGroupRepo,
+      mockMembershipRepo,
+      mockGroupChangeRepo,
+      mockRecordSetRepo,
+      mockRecordChangeRepo,
+      mockRecordSetCacheRepo,
+      mockZoneChangeRepo,
+      mockZoneRepo,
+      mockBatchChangeRepo
+    )
+    val service = ZoneService(
+      dataAccessor,
+      TestConnectionValidator,
+      mockMessageQueue,
+      new ZoneValidations(1000),
+      new AccessValidations(),
+      mockBackendResolver,
+      NoOpCrypto.instance,
+      mockMembershipService
+    )
+    service shouldBe a[ZoneService]
+  }
+
+  "ListDeletedZones" should {
+    "return Unknown user name if user cannot be found" in {
+      doReturn(IO.pure(ListDeletedZonesChangeResults(List(abcDeletedZoneChange))))
+        .when(mockZoneChangeRepo)
+        .listDeletedZones(abcAuth, None, None, 100, false, None)
+      doReturn(IO.pure(Set(abcGroup))).when(mockGroupRepo).getGroups(any[Set[String]])
+      doReturn(IO.pure(ListUsersResults(Seq.empty, None)))
+        .when(mockUserRepo)
+        .getUsers(any[Set[String]], any[Option[String]], any[Option[Int]])
+
+      val result: ListDeletedZoneChangesResponse =
+        underTest.listDeletedZones(abcAuth).value.unsafeRunSync().toOption.get
+      result.zonesDeletedInfo.head.userName shouldBe "Unknown user name"
+    }
+  }
+
+  "countZones" should {
+    "return correct counts for a privileged (super) user" in {
+      doReturn(IO.pure((10, 3, 2, 1, 1, 4))).when(mockZoneRepo).countAllGlobalZoneStats()
+      doReturn(IO.pure((5, 1, 2))).when(mockZoneChangeRepo).countAllAbandonedStats()
+
+      val result = underTest.countZones(superUserAuth).value.unsafeRunSync().toOption.get
+      result.totalCount             shouldBe 10
+      result.myZonesCount           shouldBe 10
+      result.sharedCount            shouldBe 3
+      result.privateCount           shouldBe 7
+      result.activeCount            shouldBe 6
+      result.syncingCount           shouldBe 4
+      result.abandonedCount         shouldBe 5
+      result.ptrCount               shouldBe 2
+      result.sharedPtrCount         shouldBe 1
+      result.privatePtrCount        shouldBe 1
+      result.abandonedPtrCount      shouldBe 1
+      result.abandonedSharedCount   shouldBe 2
+      result.myActiveCount          shouldBe 6
+      result.mySyncingCount         shouldBe 4
+      result.mySharedCount          shouldBe 3
+      result.myPrivateCount         shouldBe 7
+      result.myPtrCount             shouldBe 2
+      result.myAbandonedCount       shouldBe 5
+      result.myAbandonedPtrCount    shouldBe 1
+      result.myAbandonedSharedCount shouldBe 2
+    }
+
+    "return correct counts for a privileged (support) user" in {
+      doReturn(IO.pure((10, 3, 2, 1, 1, 4))).when(mockZoneRepo).countAllGlobalZoneStats()
+      doReturn(IO.pure((5, 1, 2))).when(mockZoneChangeRepo).countAllAbandonedStats()
+
+      val result = underTest.countZones(supportUserAuth).value.unsafeRunSync().toOption.get
+      result.totalCount   shouldBe 10
+      result.myZonesCount shouldBe 10
+      result.mySharedCount shouldBe 3
+      result.myPtrCount   shouldBe 2
+    }
+
+    "return correct counts for a regular (non-privileged) user" in {
+      doReturn(IO.pure((10, 3, 2, 1, 1, 4))).when(mockZoneRepo).countAllGlobalZoneStats()
+      doReturn(IO.pure((5, 1, 2))).when(mockZoneChangeRepo).countAllAbandonedStats()
+      doReturn(IO.pure((6, 1, 1, 2)))
+        .when(mockZoneRepo)
+        .countAllUserZoneStats(any[AuthPrincipal])
+      doReturn(IO.pure((3, 0, 1)))
+        .when(mockZoneChangeRepo)
+        .countAllAbandonedStatsForUser(any[AuthPrincipal])
+
+      val result = underTest.countZones(okAuth).value.unsafeRunSync().toOption.get
+      result.totalCount             shouldBe 10
+      result.myZonesCount           shouldBe 6
+      result.sharedCount            shouldBe 3
+      result.privateCount           shouldBe 7
+      result.activeCount            shouldBe 6
+      result.syncingCount           shouldBe 4
+      result.abandonedCount         shouldBe 5
+      result.ptrCount               shouldBe 2
+      result.sharedPtrCount         shouldBe 1
+      result.privatePtrCount        shouldBe 1
+      result.abandonedPtrCount      shouldBe 1
+      result.abandonedSharedCount   shouldBe 2
+      result.myActiveCount          shouldBe 4
+      result.mySyncingCount         shouldBe 2
+      result.mySharedCount          shouldBe 1
+      result.myPrivateCount         shouldBe 5
+      result.myPtrCount             shouldBe 1
+      result.myAbandonedCount       shouldBe 3
+      result.myAbandonedPtrCount    shouldBe 0
+      result.myAbandonedSharedCount shouldBe 1
     }
   }
 }

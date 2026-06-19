@@ -525,5 +525,120 @@ class MySqlZoneChangeRepositoryIntegrationSpec
       // dummy user can not access the revoked zone
       repo.listDeletedZones(dummyAuth).unsafeRunSync().zoneDeleted shouldBe empty
     }
+
+    "listDeletedZones filters by shared zones when accessFilter is Some(0)" in {
+      val okUserAuth = AuthPrincipal(signedInUser = okUser, memberGroupIds = groups.map(_.id))
+
+      val sharedZone   = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "shared-deleted.", shared = true, status = ZoneStatus.Deleted)
+      val privateZone  = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "private-deleted.", shared = false, status = ZoneStatus.Deleted)
+
+      val sharedChange  = ZoneChange(sharedZone,  sharedZone.account,  ZoneChangeType.Create, ZoneChangeStatus.Synced)
+      val privateChange = ZoneChange(privateZone, privateZone.account, ZoneChangeType.Create, ZoneChangeStatus.Synced)
+
+      saveZoneChanges(Seq(sharedChange, privateChange)).unsafeRunSync()
+
+      val result = repo.listDeletedZones(okUserAuth, ignoreAccess = true, accessFilter = Some(0)).unsafeRunSync()
+      result.zoneDeleted should contain only sharedChange
+    }
+
+    "listDeletedZones filters by private zones when accessFilter is Some(1)" in {
+      val okUserAuth = AuthPrincipal(signedInUser = okUser, memberGroupIds = groups.map(_.id))
+
+      val sharedZone   = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "shared-deleted2.", shared = true, status = ZoneStatus.Deleted)
+      val privateZone  = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "private-deleted2.", shared = false, status = ZoneStatus.Deleted)
+
+      val sharedChange  = ZoneChange(sharedZone,  sharedZone.account,  ZoneChangeType.Create, ZoneChangeStatus.Synced)
+      val privateChange = ZoneChange(privateZone, privateZone.account, ZoneChangeType.Create, ZoneChangeStatus.Synced)
+
+      saveZoneChanges(Seq(sharedChange, privateChange)).unsafeRunSync()
+
+      val result = repo.listDeletedZones(okUserAuth, ignoreAccess = true, accessFilter = Some(1)).unsafeRunSync()
+      result.zoneDeleted should contain only privateChange
+    }
+
+    "listDeletedZones filters by zone name using wildcard (*)" in {
+      val okUserAuth = AuthPrincipal(signedInUser = okUser, memberGroupIds = groups.map(_.id))
+
+      val zone1 = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "wildcard-match-1.", status = ZoneStatus.Deleted)
+      val zone2 = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "wildcard-match-2.", status = ZoneStatus.Deleted)
+      val zone3 = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "no-match-zone.", status = ZoneStatus.Deleted)
+
+      val changes = Seq(zone1, zone2, zone3).map(z =>
+        ZoneChange(z, z.account, ZoneChangeType.Create, ZoneChangeStatus.Synced))
+
+      saveZoneChanges(changes).unsafeRunSync()
+
+      val result = repo.listDeletedZones(okUserAuth, zoneNameFilter = Some("wildcard*"), ignoreAccess = true).unsafeRunSync()
+      result.zoneDeleted.map(_.zone.name) should contain allOf("wildcard-match-1.", "wildcard-match-2.")
+      result.zoneDeleted.map(_.zone.name) should not contain "no-match-zone."
+    }
+
+    "countAllAbandonedStats returns correct totals" in {
+      val okUserAuth = AuthPrincipal(signedInUser = okUser, memberGroupIds = groups.map(_.id))
+
+      val abandonedZone    = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "abandoned-forward.", status = ZoneStatus.Deleted)
+      val abandonedPtr     = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "abandoned.in-addr.arpa.", status = ZoneStatus.Deleted)
+      val abandonedShared  = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "abandoned-shared.", shared = true, status = ZoneStatus.Deleted)
+      // an active zone — should NOT be counted as abandoned
+      val activeZone       = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "active-not-abandoned.", status = ZoneStatus.Active)
+
+      val abandonedChanges = Seq(abandonedZone, abandonedPtr, abandonedShared).map(z =>
+        ZoneChange(z, z.account, ZoneChangeType.Create, ZoneChangeStatus.Synced))
+
+      // save active zone into the zone table so it is excluded from abandoned counts
+      zoneRepo.save(activeZone).unsafeRunSync()
+      saveZoneChanges(abandonedChanges).unsafeRunSync()
+
+      val (abandoned, abandonedPtrCount, abandonedSharedCount) =
+        repo.countAllAbandonedStats().unsafeRunSync()
+
+      abandoned          shouldBe 3
+      abandonedPtrCount  shouldBe 1
+      abandonedSharedCount shouldBe 1
+    }
+
+    "countAllAbandonedStatsForUser returns correct per-user totals" in {
+      val userId  = okUser.id
+      val userAcl = ZoneACL(rules = Set(ACLRule(accessLevel = AccessLevel.Read, userId = Some(userId))))
+
+      val myAbandoned = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "user-abandoned.", acl = userAcl, status = ZoneStatus.Deleted)
+      val myAbandonedPtr = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "user-abandoned.in-addr.arpa.", acl = userAcl, status = ZoneStatus.Deleted)
+      val otherAbandoned = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "other-abandoned.", status = ZoneStatus.Deleted)
+
+      val myChanges = Seq(myAbandoned, myAbandonedPtr).map(z =>
+        ZoneChange(z, z.account, ZoneChangeType.Create, ZoneChangeStatus.Synced))
+      val otherChange = ZoneChange(otherAbandoned, otherAbandoned.account, ZoneChangeType.Create, ZoneChangeStatus.Synced)
+
+      // save the zones so zone_access entries exist for the user
+      zoneRepo.save(myAbandoned).unsafeRunSync()
+      zoneRepo.save(myAbandonedPtr).unsafeRunSync()
+      // now delete them so they appear as abandoned
+      zoneRepo.deleteTx(myAbandoned).unsafeRunSync()
+      zoneRepo.deleteTx(myAbandonedPtr).unsafeRunSync()
+
+      saveZoneChanges(myChanges ++ Seq(otherChange)).unsafeRunSync()
+
+      val auth = AuthPrincipal(signedInUser = okUser, memberGroupIds = Seq.empty)
+      val (myTotal, myAbandonedPtrCount, myAbandonedSharedCount) =
+        repo.countAllAbandonedStatsForUser(auth).unsafeRunSync()
+
+      myTotal              shouldBe 2
+      myAbandonedPtrCount  shouldBe 1
+      myAbandonedSharedCount shouldBe 0
+    }
   }
 }
