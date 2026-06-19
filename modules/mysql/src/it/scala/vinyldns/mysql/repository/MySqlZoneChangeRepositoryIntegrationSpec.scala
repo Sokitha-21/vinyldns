@@ -587,14 +587,12 @@ class MySqlZoneChangeRepositoryIntegrationSpec
         name = "abandoned.in-addr.arpa.", status = ZoneStatus.Deleted)
       val abandonedShared  = testZone.head.copy(id = UUID.randomUUID().toString,
         name = "abandoned-shared.", shared = true, status = ZoneStatus.Deleted)
-      // an active zone — should NOT be counted as abandoned
       val activeZone       = testZone.head.copy(id = UUID.randomUUID().toString,
         name = "active-not-abandoned.", status = ZoneStatus.Active)
 
       val abandonedChanges = Seq(abandonedZone, abandonedPtr, abandonedShared).map(z =>
         ZoneChange(z, z.account, ZoneChangeType.Create, ZoneChangeStatus.Synced))
 
-      // save active zone into the zone table so it is excluded from abandoned counts
       zoneRepo.save(activeZone).unsafeRunSync()
       saveZoneChanges(abandonedChanges).unsafeRunSync()
 
@@ -610,23 +608,22 @@ class MySqlZoneChangeRepositoryIntegrationSpec
       val userId  = okUser.id
       val userAcl = ZoneACL(rules = Set(ACLRule(accessLevel = AccessLevel.Read, userId = Some(userId))))
 
-      val myAbandoned = testZone.head.copy(id = UUID.randomUUID().toString,
-        name = "user-abandoned.", acl = userAcl, status = ZoneStatus.Deleted)
+      val myAbandoned    = testZone.head.copy(id = UUID.randomUUID().toString,
+        name = "user-abandoned.", acl = userAcl)
       val myAbandonedPtr = testZone.head.copy(id = UUID.randomUUID().toString,
-        name = "user-abandoned.in-addr.arpa.", acl = userAcl, status = ZoneStatus.Deleted)
+        name = "user-abandoned.in-addr.arpa.", acl = userAcl)
       val otherAbandoned = testZone.head.copy(id = UUID.randomUUID().toString,
-        name = "other-abandoned.", status = ZoneStatus.Deleted)
+        name = "other-abandoned.")
 
-      val myChanges = Seq(myAbandoned, myAbandonedPtr).map(z =>
-        ZoneChange(z, z.account, ZoneChangeType.Create, ZoneChangeStatus.Synced))
-      val otherChange = ZoneChange(otherAbandoned, otherAbandoned.account, ZoneChangeType.Create, ZoneChangeStatus.Synced)
-
-      // save the zones so zone_access entries exist for the user
       zoneRepo.save(myAbandoned).unsafeRunSync()
       zoneRepo.save(myAbandonedPtr).unsafeRunSync()
-      // now delete them so they appear as abandoned
       zoneRepo.deleteTx(myAbandoned).unsafeRunSync()
       zoneRepo.deleteTx(myAbandonedPtr).unsafeRunSync()
+
+      val myChanges = Seq(myAbandoned, myAbandonedPtr).map { z =>
+        ZoneChange(z.copy(status = ZoneStatus.Deleted), z.account, ZoneChangeType.Create, ZoneChangeStatus.Synced)
+      }
+      val otherChange = ZoneChange(otherAbandoned.copy(status = ZoneStatus.Deleted), otherAbandoned.account, ZoneChangeType.Create, ZoneChangeStatus.Synced)
 
       saveZoneChanges(myChanges ++ Seq(otherChange)).unsafeRunSync()
 

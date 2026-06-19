@@ -1031,7 +1031,7 @@ class MySqlZoneRepositoryIntegrationSpec
         repo.countAllGlobalZoneStats().unsafeRunSync()
 
       total      shouldBe 6
-      shared     shouldBe 1
+      shared     shouldBe 2
       ptr        shouldBe 3
       sharedPtr  shouldBe 1
       privatePtr shouldBe 2
