@@ -902,6 +902,17 @@ export function hmacProxyPlugin(): Plugin {
               user = await createUser(ldapDetails);
             }
 
+            // Mirrors VinylDnsAction.invokeBlock: reject locked accounts at login.
+            // Message format mirrors the old portal's lockedUserResult().
+            if (user.lockStatus === 'Locked') {
+              console.log(`[hmac-proxy] Login rejected – account '${username}' is locked.`);
+              res.writeHead(401, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                error: `Authentication Failed: Account with username ${username} is locked`,
+              }));
+              return;
+            }
+
             // Step 3 – create session
             const sessionId = randomToken();
             sessions.set(sessionId, {
@@ -1072,6 +1083,19 @@ export function hmacProxyPlugin(): Plugin {
           const apiPath = path;
 
           const authHdrs  = buildAuthHeaders(method, apiPath, query, bodyBuf, session.accessKey, session.secretKey);
+
+          // Re-read lockStatus from MySQL on every proxied request.
+          // Mirrors VinylDnsAction.invokeBlock: locked users are rejected mid-session
+          // without having to log out first (matches old portal behaviour).
+          const freshUser = await getUserCredentials(session.username);
+          if (freshUser?.lockStatus === 'Locked') {
+            console.log(`[hmac-proxy] API request blocked – account '${session.username}' is locked.`);
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            (res as unknown as http.ServerResponse).end(JSON.stringify({
+              error: `Authentication Failed: Account with username ${session.username} is locked`,
+            }));
+            return;
+          }
 
           const forwardHeaders: Record<string, string> = {
             ...authHdrs,
