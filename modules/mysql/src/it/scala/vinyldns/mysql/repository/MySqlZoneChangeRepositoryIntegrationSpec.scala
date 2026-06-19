@@ -581,8 +581,6 @@ class MySqlZoneChangeRepositoryIntegrationSpec
     }
 
     "countAllAbandonedStats returns correct totals" in {
-      val okUserAuth = AuthPrincipal(signedInUser = okUser, memberGroupIds = groups.map(_.id))
-
       val abandonedZone    = testZone.head.copy(id = UUID.randomUUID().toString,
         name = "abandoned-forward.", status = ZoneStatus.Deleted)
       val abandonedPtr     = testZone.head.copy(id = UUID.randomUUID().toString,
