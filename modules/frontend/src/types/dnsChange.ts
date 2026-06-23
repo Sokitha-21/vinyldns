@@ -17,10 +17,12 @@
 export type DnsChangeStatus =
   | "Pending"
   | "PendingReview"
+  | "PendingProcessing"
   | "Complete"
   | "Failed"
   | "Cancelled"
   | "PartialFailure"
+  | "Rejected"
   | "Scheduled";
 
 export interface ValidationError {
@@ -62,6 +64,8 @@ export interface DnsChange {
   reviewComment?: string;
   reviewTimestamp?: string;
   scheduledTime?: string;
+  /** Server-configured contextual notices keyed to the batch status. */
+  notices?: string[];
 }
 
 export interface DnsChangeSummary {
@@ -105,4 +109,16 @@ export interface CreateDnsChangeRequest {
   >[];
   ownerGroupId?: string;
   scheduledTime?: string;
+}
+
+export interface BatchChangeCount {
+  total: number;
+  complete: number;
+  failed: number;
+  partialFailure: number;
+  rejected: number;
+  cancelled: number;
+  pendingReview: number;
+  scheduled: number;
+  pendingProcessing: number;
 }

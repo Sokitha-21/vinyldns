@@ -14,19 +14,40 @@
  * limitations under the License.
  */
 
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import type { DnsChangeSummary } from "../../types/dnsChange";
+import type { PagingState } from "../../types/common";
 import { formatDateTime } from "../../utils/dateUtils";
 
+/**
+ * Props for DnsChangesTable.
+ *
+ * @param changes        - Page of batch change summaries from the API.
+ * @param onCancel       - Optional cancel handler; when omitted the cancel
+ *                         button is not rendered (e.g. detail page view).
+ * @param ignoreAccess   - When true the Submitter column is shown, indicating
+ *                         the component is in the admin/all-requests view.
+ * @param currentUserId  - Logged-in user's internal ID; used to gate the
+ *                         cancel action to the original submitter only.
+ *                         Cancel is owner-only at the API level — even super
+ *                         users get a 403 trying to cancel another user's batch.
+ */
 interface DnsChangesTableProps {
   changes: DnsChangeSummary[];
   onCancel?: (change: DnsChangeSummary) => void;
   ignoreAccess?: boolean;
-  currentUserName?: string;
+  currentUserId?: string;
+  fromTab?: "my" | "all";
+  currentPaging?: PagingState;
 }
 
-function changeStatusClass(status: string): string {
+/**
+ * Maps an API `status` string to a VDS CSS modifier class for the status
+ * badge. Unknown statuses fall back to the neutral secondary style so the UI
+ * never renders a classless badge if the API introduces a new status value.
+ */
+export function changeStatusClass(status: string): string {
   if (status === "Complete") return "vds-status-badge--success";
   if (status === "Failed") return "vds-status-badge--danger";
   if (status === "PartialFailure") return "vds-status-badge--warning";
@@ -38,7 +59,12 @@ function changeStatusClass(status: string): string {
   if (status === "Cancelled") return "vds-status-badge--secondary";
   return "vds-status-badge--secondary";
 }
-function changeStatusLabel(status: string): string {
+/**
+ * Converts machine-style status strings (e.g. `PendingReview`) to readable
+ * display labels. Only compound-word values need entries; single-word statuses
+ * are returned as-is via the map lookup fallback.
+ */
+export function changeStatusLabel(status: string): string {
   const map: Record<string, string> = {
     PartialFailure: "Partial Failure",
     PendingProcessing: "Pending Processing",
@@ -47,16 +73,39 @@ function changeStatusLabel(status: string): string {
   return map[status] ?? status;
 }
 
-function copyToClipboard(text: string) {
-  void navigator.clipboard.writeText(text);
-}
+const COPY_KEYFRAMES = `
+  @keyframes vdsCopiedCheck {
+    0%   { opacity: 0; transform: scale(0.4) rotate(-15deg); }
+    60%  { transform: scale(1.3) rotate(5deg); }
+    80%  { transform: scale(0.9) rotate(-2deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  }
+`;
 
+/**
+ * Displays a paginated list of batch DNS change summaries.
+ *
+ * The component is intentionally stateless — all data fetching and pagination
+ * live in the parent (DnsChangesPage / DnsChangeDetailPage) so this component
+ * remains easy to render in isolation during tests or in the detail page sidebar.
+ */
 export function DnsChangesTable({
   changes,
   onCancel,
   ignoreAccess,
-  currentUserName,
+  currentUserId,
+  fromTab,
+  currentPaging,
 }: DnsChangesTableProps) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopyId = (id: string) => {
+    void navigator.clipboard.writeText(id).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 2000);
+    });
+  };
+
   if (changes.length === 0) {
     return (
       <div className="vds-empty-state">
@@ -71,28 +120,76 @@ export function DnsChangesTable({
 
   return (
     <div className="vds-zones-table-wrap">
+      <style>{COPY_KEYFRAMES}</style>
       <table className="vds-zones-table">
         <thead>
           <tr>
-            <th>SUBMITTED</th>
-            {ignoreAccess && <th>SUBMITTER</th>}
             <th>ID</th>
+            {ignoreAccess && <th>SUBMITTER</th>}
             <th>CHANGES</th>
             <th>STATUS</th>
             <th>DESCRIPTION</th>
+            <th>SUBMITTED</th>
             <th>ACTIONS</th>
           </tr>
         </thead>
         <tbody>
           {changes.map((change) => {
-            const canCancel =
-              change.approvalStatus === "PendingReview" &&
-              currentUserName === change.userName;
+            // Cancel is owner-only — the API rejects cancel attempts from
+            // anyone other than the original submitter, even super users.
+            const isPendingReview =
+              change.approvalStatus === "PendingReview" ||
+              change.status === "PendingReview";
+            const isOwner =
+              Boolean(currentUserId) && change.userId === currentUserId;
+            const canCancel = isPendingReview && isOwner;
 
             return (
               <tr key={change.id}>
-                <td className="vds-table-secondary vds-table-nowrap small">
-                  {formatDateTime(change.createdTimestamp)}
+                {/* Full UUID is preserved in the title attr and available via
+                    the clipboard button; showing only 8 chars keeps the table
+                    readable without wrapping on smaller viewports. */}
+                <td style={{ wordBreak: "break-all" }}>
+                  <div className="d-flex align-items-start gap-1 flex-wrap">
+                    <Link
+                      to={`/dnschanges/${change.id}`}
+                      state={
+                        fromTab || currentPaging
+                          ? { fromTab, paging: currentPaging }
+                          : undefined
+                      }
+                      className="text-decoration-none small fw-semibold vds-table-primary"
+                      style={{ wordBreak: "break-all" }}
+                    >
+                      {change.id}
+                    </Link>
+                    <button
+                      type="button"
+                      className="btn btn-link btn-sm p-0"
+                      title="Copy ID"
+                      style={{
+                        lineHeight: 1,
+                        fontSize: "0.78rem",
+                        color: copiedId === change.id ? "#16a34a" : "#94a3b8",
+                        transition: "color 0.15s",
+                      }}
+                      onClick={() => handleCopyId(change.id)}
+                    >
+                      {copiedId === change.id ? (
+                        <i
+                          key="check"
+                          className="bi bi-check2"
+                          style={{
+                            display: "inline-block",
+                            animation:
+                              "vdsCopiedCheck 0.35s cubic-bezier(0.175,0.885,0.32,1.275) forwards",
+                          }}
+                        />
+                      ) : (
+                        <i key="copy" className="bi bi-copy" />
+                      )}
+                    </button>
+                  </div>
                 </td>
                 {ignoreAccess && (
                   <td>
@@ -108,25 +205,6 @@ export function DnsChangesTable({
                   </td>
                 )}
                 <td>
-                  <div className="d-flex align-items-center gap-1">
-                    <Link
-                      to={`/dnschanges/${change.id}`}
-                      className="text-decoration-none small fw-semibold font-monospace vds-table-primary"
-                    >
-                      {change.id.substring(0, 8)}…
-                    </Link>
-                    <button
-                      type="button"
-                      className="btn btn-link btn-sm p-0 vds-table-secondary"
-                      style={{ lineHeight: 1, fontSize: "0.78rem" }}
-                      title="Copy full ID to clipboard"
-                      onClick={() => copyToClipboard(change.id)}
-                    >
-                      <i className="bi bi-copy" />
-                    </button>
-                  </div>
-                </td>
-                <td>
                   <span className="vds-count-badge">{change.totalChanges}</span>
                 </td>
                 <td>
@@ -138,27 +216,24 @@ export function DnsChangesTable({
                 </td>
                 <td
                   className="vds-table-secondary small"
-                  style={{ maxWidth: 220 }}
+                  style={{ overflowWrap: "break-word", maxWidth: 250 }}
                 >
-                  <span
-                    style={{
-                      display: "block",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      maxWidth: 200,
-                    }}
-                    title={change.comments ?? undefined}
-                  >
-                    {change.comments || (
-                      <span className="vds-table-placeholder">—</span>
-                    )}
-                  </span>
+                  {change.comments || (
+                    <span className="vds-table-placeholder">{"\u2014"}</span>
+                  )}
+                </td>
+                <td className="vds-table-secondary small">
+                  {formatDateTime(change.createdTimestamp)}
                 </td>
                 <td>
                   <div className="d-flex gap-1 flex-nowrap">
                     <Link
                       to={`/dnschanges/${change.id}`}
+                      state={
+                        fromTab || currentPaging
+                          ? { fromTab, paging: currentPaging }
+                          : undefined
+                      }
                       className="vds-action-btn vds-action-btn--view"
                       title="View"
                     >

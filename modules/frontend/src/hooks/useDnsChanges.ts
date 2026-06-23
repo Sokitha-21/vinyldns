@@ -15,35 +15,55 @@
  */
 
 import { useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from "@tanstack/react-query";
 import { dnsChangeService } from "../services/dnsChangeService";
 import { usePaging } from "./usePaging";
 import { useAlerts } from "../contexts/AlertContext";
 import type { CreateDnsChangeRequest } from "../types/dnsChange";
 
+/**
+ * Manages data fetching and all mutations for the DNS Changes feature.
+ *
+ * The hook is parameterized rather than split into separate hooks so the same
+ * logic serves both the scoped "My Requests" view and the admin "All Requests"
+ * view. `ignoreAccess` toggles the API's access control bypass, and the
+ * optional filters (userName, approvalStatus, dates) are only forwarded when
+ * `ignoreAccess` is true — the caller is responsible for this gating.
+ *
+ * All filter values are included in the React Query key so changing any filter
+ * triggers an automatic refetch without manual cache invalidation.
+ */
 export function useDnsChanges(
   ignoreAccess = false,
   userName?: string,
   approvalStatus?: string,
   dateTimeRangeStart?: string,
   dateTimeRangeEnd?: string,
+  initialPaging?: import("../types/common").PagingState,
 ) {
   const {
     paging,
+    setMaxItems,
     nextPageUpdate,
     prevPageUpdate,
     getPrevStartFrom,
-    nextPageEnabled,
+    currentPage,
     prevPageEnabled,
     getPanelTitle,
-  } = usePaging(25);
+  } = usePaging(100, initialPaging);
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: [
       "dnschanges",
       ignoreAccess,
+      paging.maxItems,
       paging.next,
       userName,
       approvalStatus,
@@ -62,6 +82,8 @@ export function useDnsChanges(
       );
       return res.data;
     },
+    staleTime: 30_000, // don't re-fetch within 30 s of a successful load
+    placeholderData: keepPreviousData, // show stale rows while new page loads (no empty flash)
   });
 
   const createMutation = useMutation({
@@ -82,7 +104,9 @@ export function useDnsChanges(
       };
       const status = error.response?.status;
       const responseData = error.response?.data;
-      // 400 + array = per-row errors; the caller (DnsChangeNewPage) shows inline row errors + its own alert
+      // A 400 with an array body means the server returned per-row validation
+      // errors. DnsChangeNewPage handles these inline so the generic
+      // alert here to avoid double-reporting the same failure.
       if (status === 400 && Array.isArray(responseData)) return;
       addAlert(
         "danger",
@@ -102,6 +126,10 @@ export function useDnsChanges(
     },
   });
 
+  // Approve/reject mutations are admin-only actions exposed in the detail page.
+  // They are intentionally kept in this shared hook so the query key invalidation
+  // updates the list page cache even if the user navigates back before the
+  // mutation resolves.
   const approveMutation = useMutation({
     mutationFn: ({ id, comment }: { id: string; comment?: string }) =>
       dnsChangeService.approveBatchChange(id, comment),
@@ -134,15 +162,32 @@ export function useDnsChanges(
     prevPageUpdate(getPrevStartFrom());
   }, [prevPageUpdate, getPrevStartFrom]);
 
+  // nextPageEnabled is derived from the API response, not paging.next.
+  // paging.next is the fetch cursor (undefined on page 1), so Boolean(paging.next)
+  // would always be false on the first load even when the API returned a nextId.
+  const nextPageEnabled = Boolean(data?.nextId);
+
+  // Only surface page-size options that make sense given the current data:
+  // always allow reducing the size; only offer larger sizes when more pages exist.
+  const pageSizes = ([10, 25, 50, 100] as const).filter(
+    (s) => s <= paging.maxItems || nextPageEnabled,
+  );
+
   return {
     dnsChanges: data?.batchChanges ?? [],
     isLoading,
+    isFetching,
     refetch,
     nextPage,
     prevPage,
     nextPageEnabled,
     prevPageEnabled,
     getPanelTitle,
+    pageSize: paging.maxItems,
+    setPageSize: setMaxItems,
+    pageSizes,
+    currentPage,
+    paging,
     createBatchChange: createMutation.mutate,
     cancelBatchChange: cancelMutation.mutate,
     approveBatchChange: approveMutation.mutate,

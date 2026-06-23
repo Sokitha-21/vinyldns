@@ -16,6 +16,7 @@
 
 import api, { urlBuilder } from "./api";
 import type {
+  BatchChangeCount,
   DnsChange,
   DnsChangeListResponse,
   CreateDnsChangeRequest,
@@ -28,6 +29,13 @@ export const dnsChangeService = {
     return api.get<DnsChange>(`${BASE}/${id}`);
   },
 
+  /**
+   * Submits a new batch change to the API.
+   *
+   * `allowManualReview` maps to the `allowManualReview` query param, which
+   * lets the submitter opt in to manual review even when the server would
+   * otherwise auto-process the change. Defaults to false (server default).
+   */
   createBatchChange(data: CreateDnsChangeRequest, allowManualReview?: boolean) {
     const url = urlBuilder(BASE, {
       allowManualReview: allowManualReview,
@@ -35,6 +43,15 @@ export const dnsChangeService = {
     return api.post<DnsChange>(url, data);
   },
 
+  /**
+   * Fetches a paginated list of batch changes.
+   *
+   * When `ignoreAccess` is true the API returns changes from all users, not
+   * just the authenticated user — this is the "All Requests" admin view.
+   * The optional `userName`, `approvalStatus`, and date-range params are
+   * only meaningful in that context; passing them on the "My Requests" view
+   * has no effect but wastes cache space, so callers should omit them.
+   */
   getBatchChanges(
     maxItems?: number,
     startFrom?: number,
@@ -60,6 +77,27 @@ export const dnsChangeService = {
     return api.post(`${BASE}/${id}/cancel`, {});
   },
 
+  /**
+   * Returns accurate per-status counts for batch changes from the
+   * dedicated count API — not limited by any page-size cap.
+   */
+  getBatchChangeCount(
+    ignoreAccess?: boolean,
+    approvalStatus?: string,
+    userName?: string,
+    dateTimeRangeStart?: string,
+    dateTimeRangeEnd?: string,
+  ) {
+    const params = {
+      ignoreAccess,
+      approvalStatus: approvalStatus || undefined,
+      userName: userName || undefined,
+      dateTimeRangeStart: dateTimeRangeStart || undefined,
+      dateTimeRangeEnd: dateTimeRangeEnd || undefined,
+    };
+    return api.get<BatchChangeCount>(urlBuilder(`${BASE}/count`, params));
+  },
+
   approveBatchChange(id: string, reviewComment?: string) {
     const data = reviewComment ? { reviewComment } : {};
     return api.post(`${BASE}/${id}/approve`, data);
@@ -70,19 +108,53 @@ export const dnsChangeService = {
     return api.post(`${BASE}/${id}/reject`, data);
   },
 
-  exportToCsv(change: DnsChange) {
-    const changes = change.changes ?? [];
+  /**
+   * Generates and immediately triggers a CSV download for the given change.
+   *
+   * A temporary object URL is created from a Blob, clicked programmatically,
+   * then revoked to avoid memory leaks. The download filename includes the
+   * change ID so exported files stay traceable back to their API record.
+   *
+   * Pass `options.rows` to export a subset (e.g. the rows currently visible
+   * after a search). When `rows` is omitted every row in `change.changes` is
+   * exported, preserving the legacy "export everything" behavior.
+   */
+  exportToCsv(change: DnsChange, options?: { rows?: DnsChange["changes"] }) {
+    const changes = options?.rows ?? change.changes ?? [];
+    // Column order matches the legacy AngularJS portal export for backward compatibility:
+    // Change Type, Input Name, Recordset Name, Zone Name, Record Type, Record Data, TTL, Status, Additional Info
     const header =
-      "Change Type,Record Type,Input Name,TTL,Record Data,Zone,Status";
+      "Change Type,Input Name,Recordset Name,Zone Name,Record Type,Record Data,TTL,Status,Additional Info";
     const rows = changes.map((c) => {
       const changeType = c.changeType ?? "";
-      const recordType = c.type ?? "";
       const inputName = c.inputName ?? "";
-      const ttl = c.ttl != null ? String(c.ttl) : "";
+      const recordName = c.recordName ?? "";
+      const zoneName = c.zoneName ?? "";
+      const recordType = c.type ?? "";
       const recordData = c.record ? JSON.stringify(c.record) : "";
-      const zone = c.zoneName ?? "";
+      const ttl = c.ttl != null ? String(c.ttl) : "";
       const status = c.status ?? "";
-      return [changeType, recordType, inputName, ttl, recordData, zone, status]
+      const additionalInfo =
+        c.systemMessage ??
+        (c.validationErrors ?? [])
+          .map((e: unknown) =>
+            e && typeof e === "object" && "message" in e
+              ? String((e as { message: unknown }).message)
+              : String(e),
+          )
+          .filter(Boolean)
+          .join("; ");
+      return [
+        changeType,
+        inputName,
+        recordName,
+        zoneName,
+        recordType,
+        recordData,
+        ttl,
+        status,
+        additionalInfo,
+      ]
         .map((v) => `"${v.replace(/"/g, '""')}"`)
         .join(",");
     });

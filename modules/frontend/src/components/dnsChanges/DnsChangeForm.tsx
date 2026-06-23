@@ -22,13 +22,14 @@ import {
   useFormContext,
   FormProvider,
 } from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
 import type {
   CreateDnsChangeRequest,
   SingleChange,
 } from "../../types/dnsChange";
+import { groupsService } from "../../services/groupsService";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
+/** Union of all possible DNS record data shapes across supported record types. */
 interface RecordData {
   // A / AAAA / A+PTR / AAAA+PTR
   address?: string;
@@ -56,6 +57,16 @@ interface RecordData {
   replacement?: string;
 }
 
+/**
+ * Form-level change item. Strips server-only fields from `SingleChange` so
+ * the form only manages the subset of fields the user can actually provide.
+ * The `record` field holds the type-specific record data payload.
+ */
+/**
+ * Form-level change item. Strips server-only fields from `SingleChange` so
+ * the form only manages the subset of fields the user can actually provide.
+ * The `record` field holds the type-specific record data payload.
+ */
 type ChangeFormItem = Omit<
   SingleChange,
   | "id"
@@ -67,7 +78,10 @@ type ChangeFormItem = Omit<
   | "errors"
   | "systemMessage"
 > & { record?: RecordData };
+export type { ChangeFormItem, RecordData };
 
+/** Top-level react-hook-form shape for the batch change submission form. */
+/** Top-level react-hook-form shape for the batch change submission form. */
 interface DnsChangeFormData {
   comments: string;
   ownerGroupId: string;
@@ -76,12 +90,31 @@ interface DnsChangeFormData {
   changes: ChangeFormItem[];
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
 /** Default batch change limit. Matches VinylDNS server default. */
 const BATCH_CHANGE_LIMIT = 1000;
 
-// ── CSV helpers ───────────────────────────────────────────────────────────────
+/**
+ * IPv4 address validation pattern. Matches only dotted-decimal notation with
+ * each octet in the 0–255 range, matching the AngularJS `ipv4` directive.
+ */
+const RE_IPV4 =
+  /^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/;
+
+/**
+ * IPv6 address validation pattern covering all standard address forms including
+ * compressed (::), mixed IPv4/IPv6, and link-local addresses with zone IDs.
+ * Matches the AngularJS `ipv6` directive.
+ */
+const RE_IPV6 =
+  /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]+|::(ffff(:0{1,4})?:)?((25[0-5]|(2[0-4]|1?[0-9])?[0-9])\.){3}(25[0-5]|(2[0-4]|1?[0-9])?[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1?[0-9])?[0-9])\.){3}(25[0-5]|(2[0-4]|1?[0-9])?[0-9]))$/;
+
+/**
+ * FQDN validation pattern. Allows an optional leading wildcard label (`*.`)
+ * and requires each label to be 1–63 alphanumeric/hyphen characters. An
+ * optional trailing dot is permitted. Matches the AngularJS `fqdn` directive.
+ */
+const RE_FQDN =
+  /^(\*\.)?([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+([a-zA-Z]{2,}\.?)$/;
 
 /** Decode a single CSV row using standard CSV quoting rules. */
 function decodeCsvRow(row: string): string[] {
@@ -92,8 +125,15 @@ function decodeCsvRow(row: string): string[] {
   );
 }
 
-/** Parse a full CSV text into ChangeFormItem[]. Returns error string on failure. */
-function parseCsvToChanges(
+/**
+ * Parses a full CSV text into `ChangeFormItem[]`.
+ *
+ * Validates the expected header row before processing data. NAPTR rows are
+ * handled with a 5- or 6-field fallback because `regexp` is optional in some
+ * export tools. Returns an `error` string instead of throwing so callers can
+ * display it inline rather than catching an exception.
+ */
+export function parseCsvToChanges(
   csvText: string,
   limit: number,
 ): { changes: ChangeFormItem[]; error?: string } {
@@ -184,17 +224,95 @@ function parseCsvToChanges(
 
 const NAPTR_FLAGS = ["U", "S", "A", "P"] as const;
 
+/**
+ * Build a stable signature for a change row used to detect duplicates after
+ * CSV import. Two rows are considered duplicates only when ALL of the
+ * user-supplied fields match: changeType, type, inputName, ttl, and every
+ * non-empty record sub-field. Record keys are sorted so property ordering
+ * never affects the signature.
+ */
+export function changeSignature(c: ChangeFormItem): string {
+  const recObj = (c.record ?? {}) as Record<string, unknown>;
+  const recEntries = Object.entries(recObj)
+    .filter(
+      ([, v]) =>
+        v !== undefined &&
+        v !== null &&
+        !(typeof v === "string" && v.trim() === "") &&
+        !(typeof v === "number" && Number.isNaN(v)),
+    )
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${String(v).trim().toLowerCase()}`)
+    .join("|");
+  return [
+    String(c.changeType ?? "").toLowerCase(),
+    String(c.type ?? "").toLowerCase(),
+    String(c.inputName ?? "")
+      .trim()
+      .toLowerCase(),
+    // TTL is intentionally excluded: rows with the same record data but
+    // different TTL are still treated as duplicates so the user can pick
+    // which TTL value to keep.
+    recEntries,
+  ].join("::");
+}
+
+/**
+ * Group change rows by `changeSignature` and return only the groups that have
+ * more than one row, i.e. duplicates. Indices refer to positions in the input
+ * array so callers can mutate the original list precisely.
+ */
+export function findDuplicateGroups(
+  changes: ChangeFormItem[],
+): { signature: string; indices: number[] }[] {
+  const map = new Map<string, number[]>();
+  changes.forEach((c, idx) => {
+    const sig = changeSignature(c);
+    const list = map.get(sig);
+    if (list) list.push(idx);
+    else map.set(sig, [idx]);
+  });
+  const groups: { signature: string; indices: number[] }[] = [];
+  for (const [signature, indices] of map.entries()) {
+    if (indices.length > 1) groups.push({ signature, indices });
+  }
+  return groups;
+}
+
+/**
+ * Type-aware record data fields for a single change row inside the batch form.
+ *
+ * Pulls `register` from the parent `FormProvider` context so it doesn't need
+ * to be threaded through props. The `isAdd` flag drives required-field
+ * validation — delete rows don't require record data. `isDark` propagates
+ * the app-level theme into inline styles that can't use CSS variables.
+ *
+ * @param index      - Position of this row in the `changes` field array.
+ * @param recordType - Currently selected DNS type for this row.
+ * @param isAdd      - True for Add changes; false for DeleteRecordSet.
+ * @param isDark     - Whether the dark VDS theme is currently active.
+ */
 function RecordDataFields({
   index,
   recordType,
   isAdd,
+  isDark,
 }: {
   index: number;
   recordType: string;
   isAdd: boolean;
+  isDark: boolean;
 }) {
   const { register } = useFormContext<DnsChangeFormData>();
   const req = isAdd;
+
+  const inputStyle: React.CSSProperties = {
+    background: isDark ? "#1a2640" : "#fff",
+    color: isDark ? "#cdd9ed" : "#212529",
+    borderColor: isDark ? "rgba(127,168,216,0.2)" : "#dde3ec",
+    boxShadow: "none",
+    borderRadius: "0.45rem",
+  };
 
   const helpText = !isAdd && (
     <div className="form-text text-muted fst-italic">
@@ -210,7 +328,15 @@ function RecordDataFields({
           <input
             className="form-control form-control-sm"
             placeholder="e.g. 1.1.1.1"
-            {...register(`changes.${index}.record.address`, { required: req })}
+            style={inputStyle}
+            {...register(`changes.${index}.record.address`, {
+              required: req,
+              validate: (v) =>
+                !req ||
+                !v ||
+                RE_IPV4.test(String(v)) ||
+                "Must be a valid IPv4 address",
+            })}
           />
           {helpText}
         </div>
@@ -222,7 +348,15 @@ function RecordDataFields({
           <input
             className="form-control form-control-sm"
             placeholder="e.g. fd69:27cc:fe91::60"
-            {...register(`changes.${index}.record.address`, { required: req })}
+            style={inputStyle}
+            {...register(`changes.${index}.record.address`, {
+              required: req,
+              validate: (v) =>
+                !req ||
+                !v ||
+                RE_IPV6.test(String(v)) ||
+                "Must be a valid IPv6 address",
+            })}
           />
           {helpText}
         </div>
@@ -234,7 +368,19 @@ function RecordDataFields({
             className="form-control form-control-sm"
             placeholder="e.g. target.example.com."
             disabled={!isAdd}
-            {...register(`changes.${index}.record.cname`, { required: req })}
+            style={{
+              ...inputStyle,
+              background: !isAdd
+                ? isDark
+                  ? "#0f1825"
+                  : "#e9ecef"
+                : inputStyle.background,
+            }}
+            {...register(`changes.${index}.record.cname`, {
+              required: req,
+              validate: (v) =>
+                !req || !v || RE_FQDN.test(String(v)) || "Must be a valid FQDN",
+            })}
           />
         </div>
       );
@@ -244,7 +390,12 @@ function RecordDataFields({
           <input
             className="form-control form-control-sm"
             placeholder="e.g. test.example.com."
-            {...register(`changes.${index}.record.ptrdname`, { required: req })}
+            style={inputStyle}
+            {...register(`changes.${index}.record.ptrdname`, {
+              required: req,
+              validate: (v) =>
+                !req || !v || RE_FQDN.test(String(v)) || "Must be a valid FQDN",
+            })}
           />
           {helpText}
         </div>
@@ -256,6 +407,7 @@ function RecordDataFields({
             className="form-control form-control-sm"
             rows={2}
             placeholder="e.g. attr=val"
+            style={inputStyle}
             {...register(`changes.${index}.record.text`, { required: req })}
           />
           {helpText}
@@ -272,6 +424,7 @@ function RecordDataFields({
               placeholder="e.g. 1"
               min={0}
               max={65535}
+              style={inputStyle}
               {...register(`changes.${index}.record.preference`, {
                 required: req,
                 valueAsNumber: true,
@@ -285,8 +438,14 @@ function RecordDataFields({
             <input
               className="form-control form-control-sm"
               placeholder="e.g. mail.example.com."
+              style={inputStyle}
               {...register(`changes.${index}.record.exchange`, {
                 required: req,
+                validate: (v) =>
+                  !req ||
+                  !v ||
+                  RE_FQDN.test(String(v)) ||
+                  "Must be a valid FQDN",
               })}
             />
           </div>
@@ -299,7 +458,12 @@ function RecordDataFields({
           <input
             className="form-control form-control-sm"
             placeholder="e.g. ns1.example.com."
-            {...register(`changes.${index}.record.nsdname`, { required: req })}
+            style={inputStyle}
+            {...register(`changes.${index}.record.nsdname`, {
+              required: req,
+              validate: (v) =>
+                !req || !v || RE_FQDN.test(String(v)) || "Must be a valid FQDN",
+            })}
           />
           {helpText}
         </div>
@@ -315,6 +479,7 @@ function RecordDataFields({
               placeholder="0"
               min={0}
               max={65535}
+              style={inputStyle}
               {...register(`changes.${index}.record.priority`, {
                 required: req,
                 valueAsNumber: true,
@@ -329,6 +494,7 @@ function RecordDataFields({
               placeholder="0"
               min={0}
               max={65535}
+              style={inputStyle}
               {...register(`changes.${index}.record.weight`, {
                 required: req,
                 valueAsNumber: true,
@@ -343,6 +509,7 @@ function RecordDataFields({
               placeholder="8080"
               min={0}
               max={65535}
+              style={inputStyle}
               {...register(`changes.${index}.record.port`, {
                 required: req,
                 valueAsNumber: true,
@@ -354,7 +521,16 @@ function RecordDataFields({
             <input
               className="form-control form-control-sm"
               placeholder="e.g. target.example.com."
-              {...register(`changes.${index}.record.target`, { required: req })}
+              style={inputStyle}
+              {...register(`changes.${index}.record.target`, {
+                required: req,
+                validate: (v) =>
+                  !req ||
+                  !v ||
+                  RE_FQDN.test(String(v)) ||
+                  v === "." ||
+                  "Must be a valid FQDN",
+              })}
             />
           </div>
           {helpText && <div className="w-100 mb-0">{helpText}</div>}
@@ -371,6 +547,7 @@ function RecordDataFields({
               placeholder="1"
               min={0}
               max={65535}
+              style={inputStyle}
               {...register(`changes.${index}.record.order`, {
                 required: req,
                 valueAsNumber: true,
@@ -385,6 +562,7 @@ function RecordDataFields({
               placeholder="1"
               min={0}
               max={65535}
+              style={inputStyle}
               {...register(`changes.${index}.record.preference`, {
                 required: req,
                 valueAsNumber: true,
@@ -395,6 +573,7 @@ function RecordDataFields({
             <label className="form-label small mb-1">Flags</label>
             <select
               className="form-select form-select-sm"
+              style={inputStyle}
               {...register(`changes.${index}.record.flags`, { required: req })}
             >
               <option value="">--</option>
@@ -410,6 +589,7 @@ function RecordDataFields({
             <input
               className="form-control form-control-sm"
               placeholder="e.g. SIP+D2U"
+              style={inputStyle}
               {...register(`changes.${index}.record.service`, {
                 required: req,
               })}
@@ -420,6 +600,7 @@ function RecordDataFields({
             <input
               className="form-control form-control-sm"
               placeholder="optional"
+              style={inputStyle}
               {...register(`changes.${index}.record.regexp`)}
             />
           </div>
@@ -428,6 +609,7 @@ function RecordDataFields({
             <input
               className="form-control form-control-sm"
               placeholder="e.g. ."
+              style={inputStyle}
               {...register(`changes.${index}.record.replacement`, {
                 required: req,
               })}
@@ -440,8 +622,6 @@ function RecordDataFields({
       return <span className="text-muted small fst-italic">—</span>;
   }
 }
-
-// ── Single change row ─────────────────────────────────────────────────────────
 
 const RECORD_TYPES = [
   "A+PTR",
@@ -457,6 +637,18 @@ const RECORD_TYPES = [
   "NAPTR",
 ] as const;
 
+/**
+ * A single DNS change row within the batch form.
+ *
+ * Subscribes to its own `changeType` and `type` via `useWatch` so it can
+ * conditionally show/hide record data fields without re-rendering the whole
+ * form. Row background and border color shift to red when the API returns
+ * server-side validation errors for that specific row, giving users a clear
+ * visual cue on which entries need attention.
+ *
+ * The type selector resets `record` to an empty object on change so stale
+ * field values from the previous type don't bleed into the new payload.
+ */
 function ChangeRow({
   index,
   remove,
@@ -477,6 +669,8 @@ function ChangeRow({
   const [isDark, setIsDark] = useState<boolean>(
     () => document.documentElement.getAttribute("data-vds-theme") === "dark",
   );
+  // Observe `data-vds-theme` attribute changes on <html> so inline styles
+  // stay in sync with the app-level theme toggle without a full re-render.
   useEffect(() => {
     const observer = new MutationObserver(() => {
       setIsDark(
@@ -494,12 +688,15 @@ function ChangeRow({
   const isPtr = recordType === "PTR";
   const hasErrors = serverErrors && serverErrors.length > 0;
 
+  // Destructure onChange so the custom handler can clear `record` before
+  // delegating to the default react-hook-form onChange for the select.
   const { onChange: onTypeChange, ...restTypeRegister } = register(
     `changes.${index}.type`,
   );
 
   return (
     <div
+      data-change-row="true"
       style={{
         background: hasErrors
           ? isDark
@@ -511,19 +708,17 @@ function ChangeRow({
         border: `1px solid ${
           hasErrors
             ? isDark
-              ? "#4a1515"
-              : "#f5c2c7"
+              ? "#7f1d1d"
+              : "#f1aeb5"
             : isDark
-              ? "#2d4163"
-              : "#e8ecf0"
+              ? "#4a6789"
+              : "#94a3b8"
         }`,
-        borderRadius: "0.6rem",
+        borderRadius: "0.5rem",
         marginBottom: "0.75rem",
         overflow: "hidden",
-        boxShadow: "0 1px 4px rgba(0,0,0,.04)",
       }}
     >
-      {/* Row header */}
       <div
         style={{
           display: "flex",
@@ -533,34 +728,36 @@ function ChangeRow({
           background: hasErrors
             ? isDark
               ? "#2a0a0a"
-              : "#fce8e8"
+              : "#fde5e7"
             : isDark
-              ? "#162032"
-              : "#f4f7fb",
+              ? "#1a2942"
+              : "#cbd5e1",
           borderBottom: `1px solid ${
             hasErrors
               ? isDark
-                ? "#4a1515"
-                : "#f5c2c7"
+                ? "#7f1d1d"
+                : "#f1aeb5"
               : isDark
-                ? "#2d4163"
-                : "#e8ecf0"
+                ? "#4a6789"
+                : "#94a3b8"
           }`,
         }}
       >
         <span
           style={{
-            fontSize: "0.75rem",
+            fontSize: "0.82rem",
             fontWeight: 600,
-            color: hasErrors ? "#b02a37" : isDark ? "#94a3b8" : "#5a6a85",
-            letterSpacing: "0.03em",
-            textTransform: "uppercase",
+            color: hasErrors ? "#991b1b" : isDark ? "#cbd5e1" : "#0d1b3e",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.4rem",
           }}
         >
           <i
-            className={`bi ${hasErrors ? "bi-exclamation-circle" : "bi-list-check"} me-1`}
+            className={`bi ${hasErrors ? "bi-exclamation-circle-fill" : "bi-hash"}`}
+            style={{ fontSize: "0.85rem" }}
           />
-          Change #{index + 1}
+          Change {index + 1}
         </span>
         <button
           type="button"
@@ -583,17 +780,15 @@ function ChangeRow({
         </button>
       </div>
 
-      {/* Fields */}
       <div style={{ padding: "0.85rem" }}>
         <div className="row g-3">
-          {/* Change Type */}
           <div className="col-12 col-sm-6 col-md-3">
             <label
               className="form-label"
               style={{
                 fontSize: "0.78rem",
                 fontWeight: 600,
-                color: "#4a5568",
+                color: isDark ? "#cbd5e1" : "#1f2a44",
                 marginBottom: "0.3rem",
               }}
             >
@@ -602,7 +797,9 @@ function ChangeRow({
             <select
               className="form-select form-select-sm"
               style={{
-                borderColor: "#dde3ec",
+                background: isDark ? "#1a2640" : "#fff",
+                color: isDark ? "#cdd9ed" : "#212529",
+                borderColor: isDark ? "rgba(127,168,216,0.2)" : "#dde3ec",
                 boxShadow: "none",
                 borderRadius: "0.45rem",
               }}
@@ -613,14 +810,13 @@ function ChangeRow({
             </select>
           </div>
 
-          {/* Record Type */}
           <div className="col-12 col-sm-6 col-md-3">
             <label
               className="form-label"
               style={{
                 fontSize: "0.78rem",
                 fontWeight: 600,
-                color: "#4a5568",
+                color: isDark ? "#cbd5e1" : "#1f2a44",
                 marginBottom: "0.3rem",
               }}
             >
@@ -629,7 +825,9 @@ function ChangeRow({
             <select
               className="form-select form-select-sm"
               style={{
-                borderColor: "#dde3ec",
+                background: isDark ? "#1a2640" : "#fff",
+                color: isDark ? "#cdd9ed" : "#212529",
+                borderColor: isDark ? "rgba(127,168,216,0.2)" : "#dde3ec",
                 boxShadow: "none",
                 borderRadius: "0.45rem",
               }}
@@ -647,14 +845,13 @@ function ChangeRow({
             </select>
           </div>
 
-          {/* Input Name */}
           <div className="col-12 col-sm-8 col-md-4">
             <label
               className="form-label"
               style={{
                 fontSize: "0.78rem",
                 fontWeight: 600,
-                color: "#4a5568",
+                color: isDark ? "#cbd5e1" : "#1f2a44",
                 marginBottom: "0.3rem",
               }}
             >
@@ -666,30 +863,48 @@ function ChangeRow({
                 isPtr ? "e.g. 192.0.2.193" : "e.g. host.example.com."
               }
               style={{
-                borderColor: "#dde3ec",
+                background: isDark ? "#1a2640" : "#fff",
+                color: isDark ? "#cdd9ed" : "#212529",
+                borderColor: isDark ? "rgba(127,168,216,0.2)" : "#dde3ec",
                 boxShadow: "none",
                 borderRadius: "0.45rem",
               }}
-              {...register(`changes.${index}.inputName`, { required: true })}
+              {...register(`changes.${index}.inputName`, {
+                required: true,
+                validate: (v) => {
+                  if (!v) return true; // required handles the empty case
+                  if (isPtr) {
+                    return (
+                      RE_IPV4.test(v) ||
+                      RE_IPV6.test(v) ||
+                      "Must be a valid IPv4 or IPv6 address"
+                    );
+                  }
+                  return (
+                    RE_FQDN.test(v) ||
+                    "Must be a valid FQDN (e.g. host.example.com.)"
+                  );
+                },
+              })}
             />
             {errors?.changes?.[index]?.inputName && (
               <div
                 style={{ fontSize: "0.75rem", color: "#b02a37", marginTop: 2 }}
               >
                 <i className="bi bi-exclamation-circle me-1" />
-                Input name is required!
+                {errors.changes[index].inputName.message ||
+                  "Input name is required!"}
               </div>
             )}
           </div>
 
-          {/* TTL */}
           <div className="col-12 col-sm-4 col-md-2">
             <label
               className="form-label"
               style={{
                 fontSize: "0.78rem",
                 fontWeight: 600,
-                color: "#4a5568",
+                color: isDark ? "#cbd5e1" : "#1f2a44",
                 marginBottom: "0.3rem",
               }}
             >
@@ -714,24 +929,30 @@ function ChangeRow({
               min={30}
               max={2147483647}
               style={{
-                borderColor: "#dde3ec",
+                background: !isAdd
+                  ? isDark
+                    ? "#0f1825"
+                    : "#f8fafc"
+                  : isDark
+                    ? "#1a2640"
+                    : "#fff",
+                color: isDark ? "#cdd9ed" : "#212529",
+                borderColor: isDark ? "rgba(127,168,216,0.2)" : "#dde3ec",
                 boxShadow: "none",
                 borderRadius: "0.45rem",
-                background: !isAdd ? "#f8fafc" : undefined,
               }}
               {...register(`changes.${index}.ttl`, { valueAsNumber: true })}
             />
           </div>
         </div>
 
-        {/* Record Data */}
         <div className="mt-3">
           <label
             className="form-label"
             style={{
               fontSize: "0.78rem",
               fontWeight: 600,
-              color: "#4a5568",
+              color: isDark ? "#cbd5e1" : "#1f2a44",
               marginBottom: "0.3rem",
             }}
           >
@@ -753,10 +974,10 @@ function ChangeRow({
             index={index}
             recordType={recordType}
             isAdd={isAdd}
+            isDark={isDark}
           />
         </div>
 
-        {/* Per-row server errors */}
         {hasErrors && (
           <div className="mt-2">
             {serverErrors!.map((e, i) => (
@@ -781,16 +1002,21 @@ function ChangeRow({
   );
 }
 
-// ── Main form ─────────────────────────────────────────────────────────────────
-
-// ── Request Date/Time field ──────────────────────────────────────────────────
-
+/**
+ * Isolated "Request Date/Time" field extracted into its own component to keep
+ * the main form render function readable. Shows a simple Now/Later radio
+ * toggle; the datetime-local input only appears when "Later" is selected.
+ * The user's local timezone is displayed next to the picker so there's no
+ * ambiguity about which timezone the server will interpret the value in.
+ */
 function ScheduledTimeField({
   register,
   watch,
+  isDark,
 }: {
   register: ReturnType<typeof useForm<DnsChangeFormData>>["register"];
   watch: ReturnType<typeof useForm<DnsChangeFormData>>["watch"];
+  isDark: boolean;
 }) {
   const scheduledOption = watch("scheduledOption");
   const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -799,7 +1025,11 @@ function ScheduledTimeField({
     <div className="col-12 col-md-4">
       <label
         className="form-label"
-        style={{ fontSize: "0.8rem", fontWeight: 600, color: "#4a5568" }}
+        style={{
+          fontSize: "0.8rem",
+          fontWeight: 600,
+          color: isDark ? "#cbd5e1" : "#1f2a44",
+        }}
       >
         Request Date/Time
       </label>
@@ -835,7 +1065,9 @@ function ScheduledTimeField({
             type="datetime-local"
             className="form-control form-control-sm"
             style={{
-              borderColor: "#dde3ec",
+              background: isDark ? "#1a2640" : "#fff",
+              color: isDark ? "#cdd9ed" : "#212529",
+              borderColor: isDark ? "rgba(127,168,216,0.2)" : "#dde3ec",
               boxShadow: "none",
               borderRadius: "0.45rem",
             }}
@@ -848,6 +1080,14 @@ function ScheduledTimeField({
   );
 }
 
+/**
+ * @param onSubmit        - Receives the fully normalized `CreateDnsChangeRequest`
+ *                          and the `allowManualReview` flag on form submit.
+ * @param onCancel        - Called when the user dismisses without submitting.
+ * @param isSubmitting    - Disables the submit button while the parent mutation runs.
+ * @param serverRowErrors - Per-row error arrays returned by a 400 API response;
+ *                          passed straight down to each `ChangeRow`.
+ */
 interface DnsChangeFormProps {
   onSubmit: (data: CreateDnsChangeRequest, allowManualReview: boolean) => void;
   onCancel: () => void;
@@ -856,6 +1096,533 @@ interface DnsChangeFormProps {
   serverRowErrors?: string[][];
 }
 
+/**
+ * Format a record-data object into a single human-readable line for display
+ * in the duplicate-review modal. Empty values are dropped so PTR-only rows
+ * don't render a sea of empty `field=` pairs.
+ */
+export function formatRecordData(record: RecordData | undefined): string {
+  if (!record) return "—";
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(record).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    if (v === undefined || v === null) continue;
+    if (typeof v === "string" && v.trim() === "") continue;
+    parts.push(`${k}: ${v}`);
+  }
+  return parts.length ? parts.join(", ") : "—";
+}
+
+interface DuplicateReviewModalProps {
+  state: {
+    changes: ChangeFormItem[];
+    groups: { signature: string; indices: number[] }[];
+    keep: Set<number>;
+  };
+  isDark: boolean;
+  onToggleKeep: (rowIdx: number) => void;
+  onApply: () => void;
+  onCancel: () => void;
+}
+
+/**
+ * Modal shown when the CSV importer detects duplicate change rows. Each
+ * "duplicate group" represents one set of identical rows (matching change
+ * type, record type, input name, TTL, and record data). The user can pick
+ * which row in each group to keep; everything outside any group is kept
+ * automatically and is not shown.
+ */
+function DuplicateReviewModal({
+  state,
+  isDark,
+  onToggleKeep,
+  onApply,
+  onCancel,
+}: DuplicateReviewModalProps) {
+  const { changes, groups, keep } = state;
+  // `totalRows` — total number of rows in the imported CSV.
+  // `totalDuplicateRows` — total rows participating in any duplicate group
+  //   (i.e. the maximum that *could* be removed if the user kept only one
+  //   row per group).
+  // `willKeep` / `willRemove` — reflect the user's current checkbox state.
+  const totalRows = changes.length;
+  const totalDuplicateRows = groups.reduce(
+    (sum, g) => sum + g.indices.length,
+    0,
+  );
+  const willRemove = totalRows - keep.size;
+  const willKeep = keep.size;
+
+  // Lock body scroll while modal is open, restore on close.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  const panelBg = isDark ? "#1e293b" : "#ffffff";
+  const panelBorder = isDark ? "#2d4163" : "#e8ecf0";
+  const headerText = isDark ? "#e2e8f0" : "#0d1b3e";
+  const subText = isDark ? "#94a3b8" : "#64748b";
+  const cardBg = isDark ? "#162032" : "#f8fafd";
+  const cardBorder = isDark ? "#2d4163" : "#e2e8f0";
+  const rowBg = isDark ? "#1e293b" : "#ffffff";
+  const rowBorder = isDark ? "#334155" : "#e8ecf0";
+  const removeBg = isDark ? "#3f1d1d" : "#fef2f2";
+  const removeBorder = isDark ? "#7f1d1d" : "#fecaca";
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dup-review-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancel();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15, 23, 42, 0.65)",
+        backdropFilter: "blur(2px)",
+        zIndex: 1080,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1.5rem",
+      }}
+    >
+      <div
+        style={{
+          background: panelBg,
+          color: headerText,
+          border: `1px solid ${panelBorder}`,
+          borderRadius: "0.85rem",
+          boxShadow: "0 25px 60px rgba(0, 0, 0, 0.45)",
+          width: "min(900px, 100%)",
+          maxHeight: "90vh",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.85rem",
+            padding: "1.1rem 1.4rem",
+            borderBottom: `1px solid ${panelBorder}`,
+            background: isDark
+              ? "linear-gradient(90deg, #1e293b, #162032)"
+              : "linear-gradient(90deg, #ffffff, #f8fafd)",
+          }}
+        >
+          <span
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: "50%",
+              background: isDark ? "#3b2f0d" : "#fff7e0",
+              color: "#d97706",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "1.1rem",
+              flexShrink: 0,
+            }}
+          >
+            <i className="bi bi-exclamation-triangle-fill" aria-hidden="true" />
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h5
+              id="dup-review-title"
+              style={{
+                margin: 0,
+                fontSize: "1.05rem",
+                fontWeight: 600,
+                color: headerText,
+              }}
+            >
+              Duplicate records found
+            </h5>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Close"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: subText,
+              fontSize: "1.1rem",
+              cursor: "pointer",
+              padding: "0.25rem 0.5rem",
+              borderRadius: "0.4rem",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = isDark ? "#2d4163" : "#e8ecf0";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            <i className="bi bi-x-lg" aria-hidden="true" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div
+          style={{
+            padding: "1.1rem 1.4rem",
+            overflowY: "auto",
+            flex: 1,
+          }}
+        >
+          <p
+            style={{
+              margin: "0 0 1rem",
+              fontSize: "0.88rem",
+              color: subText,
+              lineHeight: 1.5,
+            }}
+          >
+            Rows are considered duplicates when{" "}
+            <strong style={{ color: headerText }}>
+              Change Type, Record Type, Input Name,
+            </strong>{" "}
+            and <strong style={{ color: headerText }}>Record Data</strong> all
+            match. Keep the rows you want to import; unchecked rows will be
+            dropped before the form is populated.
+          </p>
+
+          {groups.map((group, gIdx) => {
+            const sample = changes[group.indices[0]];
+            return (
+              <div
+                key={gIdx}
+                style={{
+                  background: cardBg,
+                  border: `1px solid ${cardBorder}`,
+                  borderRadius: "0.7rem",
+                  padding: "0.85rem 1rem",
+                  marginBottom: "0.9rem",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    marginBottom: "0.65rem",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "0.7rem",
+                      fontWeight: 700,
+                      letterSpacing: "0.04em",
+                      textTransform: "uppercase",
+                      color: "#d97706",
+                      background: isDark ? "#3b2f0d" : "#fff7e0",
+                      padding: "0.2rem 0.55rem",
+                      borderRadius: "0.35rem",
+                    }}
+                  >
+                    Group {gIdx + 1}
+                  </span>
+                  <span style={{ fontSize: "0.82rem", color: subText }}>
+                    {group.indices.length} identical rows
+                  </span>
+                </div>
+
+                {/* Shared key fields */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                    gap: "0.5rem 1rem",
+                    fontSize: "0.82rem",
+                    marginBottom: "0.85rem",
+                    paddingBottom: "0.75rem",
+                    borderBottom: `1px dashed ${cardBorder}`,
+                  }}
+                >
+                  <div>
+                    <div style={{ color: subText, fontSize: "0.72rem" }}>
+                      Change Type
+                    </div>
+                    <div style={{ color: headerText, fontWeight: 500 }}>
+                      {sample.changeType ?? "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: subText, fontSize: "0.72rem" }}>
+                      Record Type
+                    </div>
+                    <div style={{ color: headerText, fontWeight: 500 }}>
+                      {sample.type ?? "—"}
+                    </div>
+                  </div>
+                  <div style={{ gridColumn: "span 2", minWidth: 0 }}>
+                    <div style={{ color: subText, fontSize: "0.72rem" }}>
+                      Input Name
+                    </div>
+                    <div
+                      style={{
+                        color: headerText,
+                        fontWeight: 500,
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      {sample.inputName || "—"}
+                    </div>
+                  </div>
+                  <div style={{ gridColumn: "1 / -1", minWidth: 0 }}>
+                    <div style={{ color: subText, fontSize: "0.72rem" }}>
+                      Record Data
+                    </div>
+                    <div
+                      style={{
+                        color: headerText,
+                        fontWeight: 500,
+                        wordBreak: "break-word",
+                        fontFamily:
+                          "ui-monospace, SFMono-Regular, Menlo, monospace",
+                        fontSize: "0.78rem",
+                      }}
+                    >
+                      {formatRecordData(sample.record)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Per-row checkboxes */}
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 5 }}
+                >
+                  {group.indices.map((rowIdx) => {
+                    const row = changes[rowIdx];
+                    const checked = keep.has(rowIdx);
+                    return (
+                      <label
+                        key={rowIdx}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.65rem",
+                          padding: "0.5rem 0.85rem",
+                          background: checked
+                            ? isDark
+                              ? "#0f2f1a"
+                              : "#f0fdf4"
+                            : isDark
+                              ? "#1e293b"
+                              : "#f8fafc",
+                          border: `1px solid ${
+                            checked
+                              ? isDark
+                                ? "#16a34a"
+                                : "#86efac"
+                              : isDark
+                                ? "#2d3d52"
+                                : "#e2e8f0"
+                          }`,
+                          borderRadius: "0.5rem",
+                          cursor: "pointer",
+                          transition: "background 0.15s, border-color 0.15s",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => onToggleKeep(rowIdx)}
+                          style={{
+                            cursor: "pointer",
+                            flexShrink: 0,
+                            width: 15,
+                            height: 15,
+                            accentColor: "#16a34a",
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontWeight: 600,
+                            fontSize: "0.83rem",
+                            color: headerText,
+                            flexShrink: 0,
+                          }}
+                        >
+                          Row #{rowIdx + 1}
+                        </span>
+                        <span
+                          style={{
+                            background: isDark ? "#1e3a5f" : "#dbeafe",
+                            color: isDark ? "#93c5fd" : "#1e5fa8",
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            padding: "0.1rem 0.5rem",
+                            borderRadius: "0.3rem",
+                            fontFamily:
+                              "ui-monospace, SFMono-Regular, Menlo, monospace",
+                            flexShrink: 0,
+                          }}
+                        >
+                          TTL {row.ttl !== undefined ? row.ttl : "—"}
+                        </span>
+                        <span style={{ flex: 1 }} />
+                        {checked && (
+                          <span
+                            style={{
+                              background: "#dc2626",
+                              color: "#fff",
+                              fontSize: "0.68rem",
+                              fontWeight: 700,
+                              padding: "0.15rem 0.55rem",
+                              borderRadius: "9999px",
+                              letterSpacing: "0.04em",
+                              textTransform: "uppercase",
+                              flexShrink: 0,
+                            }}
+                          >
+                            Remove
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            padding: "0.9rem 1.4rem",
+            borderTop: `1px solid ${panelBorder}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "0.75rem",
+            background: isDark ? "#162032" : "#f8fafd",
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "0.82rem",
+              color: subText,
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              flexWrap: "wrap",
+            }}
+          >
+            <span>
+              {willRemove > 0 ? (
+                <>
+                  <strong style={{ color: isDark ? "#fca5a5" : "#dc2626" }}>
+                    {willRemove}
+                  </strong>{" "}
+                  duplicate{willRemove !== 1 ? "s" : ""} will be removed
+                </>
+              ) : null}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: "0.55rem" }}>
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{
+                padding: "0.5rem 1rem",
+                background: "transparent",
+                border: `1px solid ${panelBorder}`,
+                color: headerText,
+                borderRadius: "0.5rem",
+                cursor: "pointer",
+                fontSize: "0.85rem",
+                fontWeight: 500,
+                transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = isDark
+                  ? "#2d4163"
+                  : "#e8ecf0";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+              }}
+            >
+              Cancel import
+            </button>
+            <button
+              type="button"
+              onClick={onApply}
+              disabled={willKeep === 0}
+              style={{
+                padding: "0.5rem 1.1rem",
+                background:
+                  willKeep === 0
+                    ? isDark
+                      ? "#334155"
+                      : "#cbd5e1"
+                    : "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
+                border: "none",
+                color: "#fff",
+                borderRadius: "0.5rem",
+                cursor: willKeep === 0 ? "not-allowed" : "pointer",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                boxShadow:
+                  willKeep === 0 ? "none" : "0 2px 8px rgba(30, 95, 168, 0.25)",
+                transition: "box-shadow 0.15s",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+              }}
+              onMouseEnter={(e) => {
+                if (willKeep > 0)
+                  e.currentTarget.style.boxShadow =
+                    "0 3px 12px rgba(30, 95, 168, 0.4)";
+              }}
+              onMouseLeave={(e) => {
+                if (willKeep > 0)
+                  e.currentTarget.style.boxShadow =
+                    "0 2px 8px rgba(30, 95, 168, 0.25)";
+              }}
+            >
+              <i className="bi bi-check2-circle" aria-hidden="true" />
+              Apply &amp; import {willKeep} row{willKeep !== 1 ? "s" : ""}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Multi-row batch DNS change form.
+ *
+ * Manages state for:
+ * - Batch metadata (description, owner group, scheduled time)
+ * - An unbounded list of individual change rows via `useFieldArray`
+ * - CSV import with client-side validation and inline error feedback
+ * - Per-row server error display after a 400 API response
+ *
+ * `FormProvider` wraps the entire form so child row components can access
+ * `register` and `control` via `useFormContext` without prop drilling.
+ *
+ * A+PTR and AAAA+PTR are convenience types that get expanded into two
+ * separate API entries (address + reverse PTR) in `handleFormSubmit`,
+ * mirroring the legacy portal's `formatData` behavior.
+ */
 export function DnsChangeForm({
   onSubmit,
   onCancel,
@@ -868,10 +1635,30 @@ export function DnsChangeForm({
     type: "success" | "danger";
     message: string;
   } | null>(null);
+  // When set, holds the staged submit payload waiting for user confirmation.
+  // The form switches to a confirmation view instead of immediately calling
+  // the API — matching the AngularJS two-step pendingSubmit → pendingConfirm flow.
+  const [pendingSubmitData, setPendingSubmitData] = useState<{
+    data: CreateDnsChangeRequest;
+    allowManualReview: boolean;
+  } | null>(null);
+  // When set, the duplicate-review modal is shown. `changes` is the full
+  // parsed CSV row list and `groups` enumerates the duplicate clusters (each
+  // with ≥ 2 indices into `changes`). `keep` tracks which indices the user
+  // wants to keep — defaults to "first row of each group" on open.
+  const [dupReview, setDupReview] = useState<{
+    changes: ChangeFormItem[];
+    groups: { signature: string; indices: number[] }[];
+    keep: Set<number>;
+  } | null>(null);
   const csvFileRef = useRef<HTMLInputElement>(null);
+  // Tracks the previous row count so the auto-focus effect only fires when
+  // a new row is appended, not on initial render or row removal.
+  const prevFieldsLengthRef = useRef(0);
   const [isDark, setIsDark] = useState<boolean>(
     () => document.documentElement.getAttribute("data-vds-theme") === "dark",
   );
+  // Observe theme attribute so inline styles stay in sync with the app theme.
   useEffect(() => {
     const observer = new MutationObserver(() => {
       setIsDark(
@@ -885,10 +1672,27 @@ export function DnsChangeForm({
     return () => observer.disconnect();
   }, []);
 
-  // Merge local + server errors
+  // Fetch the user's groups to populate the owner group ID selector.
+  // ignoreAccess=true mirrors the AngularJS groupsService.getGroups() call
+  // which returns all groups the user can see, not just their own.
+  const { data: groupsData } = useQuery({
+    queryKey: ["groups-for-dns-form"],
+    queryFn: async () => {
+      const res = await groupsService.getGroups(true);
+      return res.data.groups ?? [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const groups = groupsData ?? [];
+
+  // Server errors take priority over any local client-side error state;
+  // once the parent clears `serverRowErrors` (e.g. on resubmit), local
+  // errors from the previous attempt are also discarded.
   const effectiveRowErrors = serverRowErrors ?? rowErrors;
 
-  // Detect owner group error from per-row server errors
+  // Surface a banner-level hint when any row's server error references the
+  // owner group — this happens when records belong to a shared zone but
+  // no owner group ID was provided in the batch metadata.
   const ownerGroupError = (serverRowErrors ?? [])
     .flat()
     .some((e) => e.includes("owner group ID must be specified for record"));
@@ -917,11 +1721,51 @@ export function DnsChangeForm({
     name: "changes",
   });
 
-  /** Submit form directly after validation */
+  // Auto-focus the Change Type select of the newly added row whenever a row
+  // is appended. This mirrors the AngularJS addSingleChange() focus behavior.
+  useEffect(() => {
+    if (fields.length > prevFieldsLengthRef.current) {
+      const rows = document.querySelectorAll<HTMLElement>(
+        '[data-change-row="true"]',
+      );
+      const lastRow = rows[rows.length - 1];
+      if (lastRow) {
+        const firstInput = lastRow.querySelector<HTMLElement>("select, input");
+        if (firstInput) firstInput.focus();
+      }
+    }
+    prevFieldsLengthRef.current = fields.length;
+  }, [fields.length]);
+
+  /**
+   * Scrolls the first field that failed react-hook-form validation into view
+   * and focuses it. This makes the inline error message visible to the user
+   * when they click Submit but one or more rows are scrolled out of the viewport.
+   * react-hook-form sets aria-invalid="true" on every registered input that
+   * fails a validation rule, making them discoverable by a standard DOM query.
+   */
+  const onInvalid = () => {
+    const firstInvalid = document.querySelector<HTMLElement>(
+      '[aria-invalid="true"]',
+    );
+    if (firstInvalid) {
+      firstInvalid.scrollIntoView({ behavior: "smooth", block: "center" });
+      firstInvalid.focus({ preventScroll: true });
+    }
+  };
+
+  /**
+   * First-pass submit handler invoked by react-hook-form after validation passes.
+   * Instead of calling `onSubmit` directly this stages the prepared payload in
+   * `pendingSubmitData`, switching the footer to a confirmation panel. The second
+   * click on "Confirm & Submit" is what actually calls `onSubmit`.
+   */
   const handleFormSubmit = (data: DnsChangeFormData) => {
     setRowErrors([]);
 
-    // Expand A+PTR / AAAA+PTR into paired entries (mirrors portal formatData)
+    // A+PTR and AAAA+PTR are convenience compound types: each row expands into
+    // a paired A/AAAA entry and a reverse PTR entry before reaching the API.
+    // This mirrors the legacy portal's formatData function.
     const expandedChanges: ChangeFormItem[] = [];
     for (const entry of data.changes) {
       if (entry.type === "A+PTR" || entry.type === "AAAA+PTR") {
@@ -945,25 +1789,55 @@ export function DnsChangeForm({
       }
     }
 
-    // For DeleteRecordSet: drop record if all values are empty
+    // For DeleteRecordSet: drop record if all values are empty.
+    // Also strip NaN from TTL and any numeric record sub-fields produced by
+    // valueAsNumber on blank number inputs, or left over when the user switches
+    // record types (e.g. MX → A leaves preference: NaN on the row).
     const finalChanges = expandedChanges.map((entry) => {
-      if (entry.changeType === "DeleteRecordSet" && entry.record) {
-        const allEmpty = Object.values(entry.record).every(
+      const cleanTtl =
+        entry.ttl !== undefined && !Number.isNaN(entry.ttl)
+          ? entry.ttl
+          : undefined;
+
+      const cleanRecord = entry.record
+        ? (Object.fromEntries(
+            Object.entries(entry.record as Record<string, unknown>).filter(
+              ([, v]) =>
+                v !== undefined &&
+                v !== null &&
+                v !== "" &&
+                !(typeof v === "number" && Number.isNaN(v)),
+            ),
+          ) as typeof entry.record)
+        : entry.record;
+
+      const cleaned: ChangeFormItem = {
+        ...entry,
+        ...(cleanTtl !== undefined ? { ttl: cleanTtl } : {}),
+        record: cleanRecord,
+      };
+
+      if (cleaned.changeType === "DeleteRecordSet" && cleaned.record) {
+        const allEmpty = Object.values(cleaned.record).every(
           (v) =>
             v === undefined ||
             v === null ||
             (typeof v === "string" && v.trim() === ""),
         );
         if (allEmpty) {
-          const { record: _r, ...rest } = entry;
+          const { record: _r, ...rest } = cleaned;
           return rest as ChangeFormItem;
         }
       }
-      return entry;
+      return cleaned;
     });
 
-    onSubmit(
-      {
+    // Stage the payload for user confirmation rather than submitting immediately.
+    // The confirmation panel will display the change count and let the user
+    // back out before the API call is made. This mirrors the AngularJS two-step
+    // pendingSubmit → pendingConfirm flow.
+    setPendingSubmitData({
+      data: {
         comments: data.comments || undefined,
         ownerGroupId: data.ownerGroupId || undefined,
         scheduledTime:
@@ -973,10 +1847,21 @@ export function DnsChangeForm({
         changes: finalChanges,
       },
       allowManualReview,
-    );
+    });
   };
 
-  /** Handle CSV file import */
+  /** Executes the staged submit after the user clicks "Confirm & Submit". */
+  const handleConfirmSubmit = () => {
+    if (!pendingSubmitData) return;
+    onSubmit(pendingSubmitData.data, pendingSubmitData.allowManualReview);
+    setPendingSubmitData(null);
+  };
+
+  /** Returns the form to edit mode without submitting. */
+  const handleBackToEdit = () => {
+    setPendingSubmitData(null);
+  };
+
   const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     // reset input so same file can be re-imported
@@ -995,51 +1880,109 @@ export function DnsChangeForm({
       const { changes, error } = parseCsvToChanges(text, BATCH_CHANGE_LIMIT);
       if (error) {
         setCsvAlert({ type: "danger", message: error });
-      } else {
-        replace(changes as Parameters<typeof replace>[0]);
-        setCsvAlert({
-          type: "success",
-          message: `Successfully imported ${changes.length} DNS change${changes.length !== 1 ? "s" : ""}.`,
-        });
+        return;
       }
+      // Detect duplicate rows BEFORE applying. If any are found, defer the
+      // replace() call and let the user resolve them in the review modal.
+      const groups = findDuplicateGroups(changes);
+      if (groups.length > 0) {
+        // Default: keep the first occurrence of each duplicate group, plus
+        // every unique row (rows that don't appear in any group).
+        const inAnyGroup = new Set<number>();
+        groups.forEach((g) => g.indices.forEach((i) => inAnyGroup.add(i)));
+        const keep = new Set<number>();
+        changes.forEach((_, i) => {
+          if (!inAnyGroup.has(i)) keep.add(i);
+        });
+        groups.forEach((g) => keep.add(g.indices[0]));
+        setDupReview({ changes, groups, keep });
+        setCsvAlert(null);
+        return;
+      }
+      replace(changes as Parameters<typeof replace>[0]);
+      setCsvAlert({
+        type: "success",
+        message: `Successfully imported ${changes.length} DNS change${changes.length !== 1 ? "s" : ""}.`,
+      });
     };
     reader.readAsText(file);
   };
 
+  /**
+   * Apply the user's keep/remove decisions from the duplicate-review modal.
+   * Rebuilds the change list preserving the original CSV order and replaces
+   * the form's field array. Shows a success alert that explicitly reports
+   * how many duplicate rows were removed.
+   */
+  const handleDupReviewApply = () => {
+    if (!dupReview) return;
+    const kept = dupReview.changes.filter((_, i) => dupReview.keep.has(i));
+    const removed = dupReview.changes.length - kept.length;
+    replace(kept as Parameters<typeof replace>[0]);
+    setCsvAlert({
+      type: "success",
+      message:
+        removed > 0
+          ? `Imported ${kept.length} DNS change${kept.length !== 1 ? "s" : ""} (removed ${removed} duplicate${removed !== 1 ? "s" : ""}).`
+          : `Successfully imported ${kept.length} DNS change${kept.length !== 1 ? "s" : ""}.`,
+    });
+    setDupReview(null);
+  };
+
+  /** Discard the import entirely; no rows are added to the form. */
+  const handleDupReviewCancel = () => {
+    setDupReview(null);
+    setCsvAlert({
+      type: "danger",
+      message: "Import cancelled. No changes were added.",
+    });
+  };
+
+  /** Toggle keep/remove for a single row inside the duplicate modal. */
+  const toggleDupKeep = (rowIdx: number) => {
+    setDupReview((prev) => {
+      if (!prev) return prev;
+      const next = new Set(prev.keep);
+      if (next.has(rowIdx)) next.delete(rowIdx);
+      else next.add(rowIdx);
+      return { ...prev, keep: next };
+    });
+  };
+
   return (
     <FormProvider {...methods}>
-      <form onSubmit={handleSubmit(handleFormSubmit)} noValidate>
+      <form onSubmit={handleSubmit(handleFormSubmit, onInvalid)} noValidate>
         {/* ── Section: Metadata ─────────────────────────────────── */}
         <div
+          className="vds-tab-panel-content rounded-3 mb-3"
           style={{
-            background: isDark ? "#162032" : "#f8fafd",
-            border: `1px solid ${isDark ? "#2d4163" : "#e8ecf0"}`,
-            borderRadius: "0.65rem",
-            padding: "1.25rem 1.5rem",
-            marginBottom: "1.5rem",
+            border: `1px solid ${isDark ? "#4a6789" : "#64748b"}`,
+            overflow: "hidden",
+            boxShadow: isDark
+              ? "0 2px 6px rgba(0,0,0,0.35)"
+              : "0 2px 6px rgba(15,23,42,0.10)",
           }}
         >
           <div
+            className="px-3 py-2 d-flex align-items-center gap-2"
             style={{
-              display: "flex",
-              gap: "1rem",
-              justifyContent: "space-between",
+              background: "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
+              color: "#ffffff",
+              borderBottom: `1px solid ${isDark ? "#3a5377" : "#0d1b3e"}`,
             }}
-            className="w-100"
           >
-            <p
-              style={{
-                fontSize: "0.72rem",
-                fontWeight: 700,
-                color: "#8496ad",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                marginBottom: "1rem",
-              }}
+            <i
+              className="bi bi-info-circle-fill"
+              style={{ fontSize: "0.95rem", color: "#ffffff" }}
+            />
+            <span
+              className="fw-semibold"
+              style={{ color: "#ffffff", fontSize: "0.9rem" }}
             >
-              <i className="bi bi-info-circle me-1" />
               Batch Details
-            </p>
+            </span>
+          </div>
+          <div className="p-3">
             {/* <div
               className="col-12 col-sm-5 col-md-2 d-flex align-items-end mt-md-0"
               style={{ paddingBottom: "0.15rem" }}
@@ -1081,91 +2024,134 @@ export function DnsChangeForm({
                 </label>
               </div>
             </div> */}
-          </div>
 
-          <div className="row g-3 align-items-start">
-            <div className="col-12 col-md-6">
-              <label
-                className="form-label"
-                style={{
-                  fontSize: "0.8rem",
-                  fontWeight: 600,
-                  color: "#4a5568",
-                }}
-              >
-                Description
-                <span
-                  style={{ fontWeight: 400, color: "#9aacbe", marginLeft: 4 }}
+            <div className="row g-3 align-items-start">
+              <div className="col-12 col-md-6">
+                <label
+                  className="form-label"
+                  style={{
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    color: isDark ? "#cbd5e1" : "#1f2a44",
+                  }}
                 >
-                  (optional)
-                </span>
-              </label>
-              <textarea
-                className="form-control form-control-sm"
-                rows={2}
-                placeholder="Brief description of this batch change"
-                style={{
-                  borderColor: "#dde3ec",
-                  boxShadow: "none",
-                  borderRadius: "0.45rem",
-                  resize: "none",
-                }}
-                {...register("comments")}
-              />
-            </div>
-            <div className="col-12 col-sm-7 col-md-4">
-              <label
-                className="form-label"
-                style={{
-                  fontSize: "0.8rem",
-                  fontWeight: 600,
-                  color: "#4a5568",
-                }}
-              >
-                Owner Group ID
-                <span
-                  style={{ fontWeight: 400, color: "#9aacbe", marginLeft: 4 }}
+                  Description
+                  <span
+                    style={{ fontWeight: 400, color: "#9aacbe", marginLeft: 4 }}
+                  >
+                    (optional)
+                  </span>
+                </label>
+                <textarea
+                  className="form-control form-control-sm"
+                  rows={2}
+                  placeholder="Brief description of this batch change"
+                  style={{
+                    background: isDark ? "#1a2640" : "#fff",
+                    color: isDark ? "#cdd9ed" : "#212529",
+                    borderColor: isDark ? "rgba(127,168,216,0.2)" : "#dde3ec",
+                    boxShadow: "none",
+                    borderRadius: "0.45rem",
+                    resize: "none",
+                  }}
+                  {...register("comments")}
+                />
+              </div>
+              <div className="col-12 col-sm-7 col-md-4">
+                <label
+                  className="form-label"
+                  style={{
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    color: isDark ? "#cbd5e1" : "#1f2a44",
+                  }}
                 >
-                  (optional)
-                </span>
-              </label>
-              <input
-                className={`form-control form-control-sm${ownerGroupError ? " is-invalid" : ""}`}
-                placeholder="Required for shared zone records"
-                style={{
-                  borderColor: ownerGroupError ? "#dc3545" : "#dde3ec",
-                  boxShadow: "none",
-                  borderRadius: "0.45rem",
-                }}
-                {...register("ownerGroupId")}
-              />
-              {ownerGroupError && (
+                  Owner Group
+                  <span
+                    style={{ fontWeight: 400, color: "#9aacbe", marginLeft: 4 }}
+                  >
+                    (optional)
+                  </span>
+                </label>
+                {groups.length > 0 ? (
+                  <select
+                    className={`form-select form-select-sm${ownerGroupError ? " is-invalid" : ""}`}
+                    style={{
+                      background: isDark ? "#1a2640" : "#fff",
+                      color: isDark ? "#cdd9ed" : "#212529",
+                      borderColor: ownerGroupError
+                        ? "#dc3545"
+                        : isDark
+                          ? "rgba(127,168,216,0.2)"
+                          : "#dde3ec",
+                      boxShadow: "none",
+                      borderRadius: "0.45rem",
+                    }}
+                    {...register("ownerGroupId")}
+                  >
+                    <option value="">— No owner group —</option>
+                    {groups
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))}
+                  </select>
+                ) : (
+                  <input
+                    className={`form-control form-control-sm${ownerGroupError ? " is-invalid" : ""}`}
+                    placeholder="Required for shared zone records"
+                    style={{
+                      background: isDark ? "#1a2640" : "#fff",
+                      color: isDark ? "#cdd9ed" : "#212529",
+                      borderColor: ownerGroupError
+                        ? "#dc3545"
+                        : isDark
+                          ? "rgba(127,168,216,0.2)"
+                          : "#dde3ec",
+                      boxShadow: "none",
+                      borderRadius: "0.45rem",
+                    }}
+                    {...register("ownerGroupId")}
+                  />
+                )}
+                {ownerGroupError && (
+                  <div
+                    style={{
+                      fontSize: "0.78rem",
+                      color: "#b02a37",
+                      marginTop: 4,
+                    }}
+                  >
+                    <i className="bi bi-exclamation-circle me-1" />
+                    <strong>
+                      Record Owner Group is required for records in shared
+                      zones.
+                    </strong>
+                  </div>
+                )}
                 <div
                   style={{
-                    fontSize: "0.78rem",
-                    color: "#b02a37",
+                    fontSize: "0.76rem",
+                    color: "#6b7a90",
                     marginTop: 4,
                   }}
                 >
-                  <i className="bi bi-exclamation-circle me-1" />
-                  <strong>
-                    Record Owner Group is required for records in shared zones.
-                  </strong>
+                  Or you can{" "}
+                  <a href="/groups" style={{ color: "#1e5fa8" }}>
+                    create a new group from the Groups page
+                  </a>
+                  .
                 </div>
-              )}
-              <div
-                style={{ fontSize: "0.76rem", color: "#6b7a90", marginTop: 4 }}
-              >
-                Or you can{" "}
-                <a href="/groups" style={{ color: "#1e5fa8" }}>
-                  create a new group from the Groups page
-                </a>
-                .
               </div>
-            </div>
-            {/* Request Date/Time */}
-            <ScheduledTimeField register={register} watch={watch} />
-            {/* <div
+              <ScheduledTimeField
+                register={register}
+                watch={watch}
+                isDark={isDark}
+              />
+              {/* <div
               className="col-12 col-sm-5 col-md-2 d-flex align-items-end mt-md-0"
               style={{ paddingBottom: "0.15rem" }}
             >
@@ -1206,43 +2192,50 @@ export function DnsChangeForm({
                 </label>
               </div>
             </div> */}
+            </div>
           </div>
         </div>
 
         {/* ── Section: Changes ──────────────────────────────────── */}
-        <div style={{ marginBottom: "1.5rem" }}>
+        <div
+          className="vds-tab-panel-content rounded-3 mb-3"
+          style={{
+            border: `1px solid ${isDark ? "#4a6789" : "#64748b"}`,
+            overflow: "hidden",
+            boxShadow: isDark
+              ? "0 2px 6px rgba(0,0,0,0.35)"
+              : "0 2px 6px rgba(15,23,42,0.10)",
+          }}
+        >
           <div
+            className="px-3 py-2 d-flex align-items-center justify-content-between flex-wrap gap-2"
             style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: "0.85rem",
+              background: "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
+              color: "#ffffff",
+              borderBottom: `1px solid ${isDark ? "#3a5377" : "#0d1b3e"}`,
             }}
           >
-            <div>
+            <div className="d-flex align-items-center gap-2">
+              <i
+                className="bi bi-list-check"
+                style={{ fontSize: "0.95rem", color: "#ffffff" }}
+              />
               <span
-                style={{
-                  fontSize: "0.72rem",
-                  fontWeight: 700,
-                  color: "#8496ad",
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                }}
+                className="fw-semibold"
+                style={{ color: "#ffffff", fontSize: "0.9rem" }}
               >
-                <i className="bi bi-list-check me-1" />
                 DNS Changes
               </span>
               {fields.length > 0 && (
                 <span
                   style={{
-                    marginLeft: 8,
-                    background: "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
-                    color: "#fff",
-                    fontSize: "0.68rem",
+                    background: "rgba(255,255,255,0.18)",
+                    color: "#ffffff",
+                    fontSize: "0.72rem",
                     fontWeight: 700,
                     borderRadius: "999px",
-                    padding: "2px 8px",
-                    verticalAlign: "middle",
+                    padding: "2px 9px",
+                    border: "1px solid rgba(255,255,255,0.25)",
                   }}
                 >
                   {fields.length}
@@ -1250,7 +2243,6 @@ export function DnsChangeForm({
               )}
             </div>
             <div className="d-flex align-items-center gap-2">
-              {/* Add Change button */}
               <button
                 type="button"
                 className="btn btn-sm"
@@ -1300,7 +2292,6 @@ export function DnsChangeForm({
                 Add Change
               </button>
 
-              {/* Import CSV */}
               <label
                 htmlFor="batchChangeCsv"
                 className="btn btn-sm mb-0"
@@ -1332,87 +2323,126 @@ export function DnsChangeForm({
             </div>
           </div>
 
-          {/* CSV alert */}
-          {csvAlert && (
-            <div
-              className={`alert alert-${csvAlert.type} alert-dismissible d-flex align-items-center gap-2 py-2 px-3`}
-              style={{ fontSize: "0.82rem", marginBottom: "0.75rem" }}
-            >
-              <i
-                className={`bi ${csvAlert.type === "success" ? "bi-check-circle" : "bi-exclamation-triangle"}`}
-              />
-              {csvAlert.message}
-              <button
-                type="button"
-                className="btn-close ms-auto"
-                style={{ fontSize: "0.7rem" }}
-                onClick={() => setCsvAlert(null)}
-              />
+          <div className="p-3">
+            {csvAlert && (
+              <div
+                className={`alert alert-${csvAlert.type} d-flex align-items-center gap-2 py-2 px-3`}
+                style={{ fontSize: "0.82rem", marginBottom: "0.75rem" }}
+              >
+                <i
+                  className={`bi ${csvAlert.type === "success" ? "bi-check-circle" : "bi-exclamation-triangle"}`}
+                />
+                {csvAlert.message}
+                <button
+                  type="button"
+                  onClick={() => setCsvAlert(null)}
+                  style={{
+                    marginLeft: "auto",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "0.25rem 0.6rem",
+                    fontSize: "0.75rem",
+                    fontWeight: 500,
+                    border: `1px solid ${csvAlert.type === "success" ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
+                    background:
+                      csvAlert.type === "success"
+                        ? "rgba(34,197,94,0.08)"
+                        : "rgba(239,68,68,0.08)",
+                    color: csvAlert.type === "success" ? "#059669" : "#dc2626",
+                    borderRadius: "0.35rem",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                    outline: "none",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background =
+                      csvAlert.type === "success"
+                        ? "rgba(34,197,94,0.15)"
+                        : "rgba(239,68,68,0.15)";
+                    e.currentTarget.style.borderColor =
+                      csvAlert.type === "success"
+                        ? "rgba(34,197,94,0.5)"
+                        : "rgba(239,68,68,0.5)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background =
+                      csvAlert.type === "success"
+                        ? "rgba(34,197,94,0.08)"
+                        : "rgba(239,68,68,0.08)";
+                    e.currentTarget.style.borderColor =
+                      csvAlert.type === "success"
+                        ? "rgba(34,197,94,0.3)"
+                        : "rgba(239,68,68,0.3)";
+                  }}
+                >
+                  <i className="bi bi-x-lg" />
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {fields.length >= BATCH_CHANGE_LIMIT && (
+              <div
+                className="alert alert-warning d-flex align-items-center gap-2 py-2 px-3"
+                style={{ fontSize: "0.82rem", marginBottom: "0.75rem" }}
+              >
+                <i className="bi bi-exclamation-triangle-fill" />
+                Limit reached. Cannot add more than {BATCH_CHANGE_LIMIT} records
+                per DNS change.
+              </div>
+            )}
+
+            <div style={{ marginBottom: "0.75rem" }}>
+              <a
+                href="https://www.vinyldns.io/portal/dns-changes#dns-change-csv-import"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: "0.78rem", color: "#1e5fa8" }}
+              >
+                <i className="bi bi-box-arrow-up-right me-1" />
+                See documentation for sample CSV format
+              </a>
             </div>
-          )}
 
-          {/* Batch limit warning */}
-          {fields.length >= BATCH_CHANGE_LIMIT && (
-            <div
-              className="alert alert-warning d-flex align-items-center gap-2 py-2 px-3"
-              style={{ fontSize: "0.82rem", marginBottom: "0.75rem" }}
-            >
-              <i className="bi bi-exclamation-triangle-fill" />
-              Limit reached. Cannot add more than {BATCH_CHANGE_LIMIT} records
-              per DNS change.
-            </div>
-          )}
-
-          {/* CSV documentation link */}
-          <div style={{ marginBottom: "0.75rem" }}>
-            <a
-              href="https://www.vinyldns.io/portal/dns-changes#dns-change-csv-import"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ fontSize: "0.78rem", color: "#1e5fa8" }}
-            >
-              <i className="bi bi-box-arrow-up-right me-1" />
-              See documentation for sample CSV format
-            </a>
-          </div>
-
-          {fields.length === 0 ? (
-            <div
-              style={{
-                border: `2px dashed ${isDark ? "#2d4163" : "#dde3ec"}`,
-                borderRadius: "0.65rem",
-                padding: "2.5rem 1rem",
-                textAlign: "center",
-                color: isDark ? "#3d5a7a" : "#9aacbe",
-                background: isDark ? "#1e293b" : "transparent",
-              }}
-            >
-              <i
-                className="bi bi-plus-circle"
+            {fields.length === 0 ? (
+              <div
                 style={{
-                  fontSize: "1.6rem",
-                  display: "block",
-                  marginBottom: "0.5rem",
+                  border: `2px dashed ${isDark ? "#3d5273" : "#94a3b8"}`,
+                  borderRadius: "0.65rem",
+                  padding: "2.5rem 1rem",
+                  textAlign: "center",
+                  color: isDark ? "#64748b" : "#475569",
+                  background: isDark ? "#1e293b" : "#f8fafc",
                 }}
-              />
-              <span style={{ fontSize: "0.85rem", fontWeight: 500 }}>
-                No changes added yet
-              </span>
-              <br />
-              <span style={{ fontSize: "0.78rem" }}>
-                Click <strong>Add Change</strong> to get started
-              </span>
-            </div>
-          ) : (
-            fields.map((field, index) => (
-              <ChangeRow
-                key={field.id}
-                index={index}
-                remove={remove}
-                serverErrors={effectiveRowErrors[index]}
-              />
-            ))
-          )}
+              >
+                <i
+                  className="bi bi-plus-circle"
+                  style={{
+                    fontSize: "1.6rem",
+                    display: "block",
+                    marginBottom: "0.5rem",
+                  }}
+                />
+                <span style={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                  No changes added yet
+                </span>
+                <br />
+                <span style={{ fontSize: "0.78rem" }}>
+                  Click <strong>Add Change</strong> to get started
+                </span>
+              </div>
+            ) : (
+              fields.map((field, index) => (
+                <ChangeRow
+                  key={field.id}
+                  index={index}
+                  remove={remove}
+                  serverErrors={effectiveRowErrors[index]}
+                />
+              ))
+            )}
+          </div>
         </div>
 
         {/* ── Footer Actions ────────────────────────────────────── */}
@@ -1422,92 +2452,201 @@ export function DnsChangeForm({
             borderTop: `1px solid ${isDark ? "#2d4163" : "#e8ecf0"}`,
           }}
         >
-          <div className="d-flex align-items-center gap-2">
-            <button
-              type="submit"
-              disabled={fields.length === 0 || isSubmitting}
-              style={{
-                background:
-                  fields.length === 0 || isSubmitting
-                    ? "#c8d4e0"
-                    : "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
-                border: "none",
-                color: "#fff",
-                borderRadius: "0.45rem",
-                padding: "0.45rem 1.4rem",
-                fontSize: "0.85rem",
-                fontWeight: 600,
-                boxShadow:
-                  fields.length === 0 || isSubmitting
-                    ? "none"
-                    : "0 2px 8px rgba(30,95,168,.25)",
-                cursor:
-                  fields.length === 0 || isSubmitting
-                    ? "not-allowed"
-                    : "pointer",
-                transition: "all 0.2s",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-              onMouseEnter={(e) => {
-                if (fields.length > 0 && !isSubmitting)
-                  e.currentTarget.style.boxShadow =
-                    "0 3px 12px rgba(30,95,168,.35)";
-              }}
-              onMouseLeave={(e) => {
-                if (fields.length > 0 && !isSubmitting)
-                  e.currentTarget.style.boxShadow =
-                    "0 2px 8px rgba(30,95,168,.25)";
-              }}
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="spinner-border spinner-border-sm" />
-                  Submitting…
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-send-fill" />
-                  Submit Batch Change
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              disabled={isSubmitting}
-              style={{
-                background: isDark ? "#1e293b" : "#fff",
-                border: `1px solid ${isDark ? "#2d4163" : "#d4dae3"}`,
-                color: isDark ? "#94a3b8" : "#5a6a85",
-                borderRadius: "0.45rem",
-                padding: "0.45rem 1.1rem",
-                fontSize: "0.85rem",
-                fontWeight: 600,
-                cursor: isSubmitting ? "not-allowed" : "pointer",
-                transition: "all 0.15s",
-              }}
-              onMouseEnter={(e) => {
-                if (!isSubmitting) {
-                  e.currentTarget.style.borderColor = "#1e5fa8";
-                  e.currentTarget.style.color = "#1e5fa8";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isSubmitting) {
-                  e.currentTarget.style.borderColor = isDark
-                    ? "#2d4163"
-                    : "#d4dae3";
-                  e.currentTarget.style.color = isDark ? "#94a3b8" : "#5a6a85";
-                }
-              }}
-            >
-              Cancel
-            </button>
-          </div>
+          {pendingSubmitData ? (
+            // Two-step confirmation panel — matches AngularJS pendingConfirm step.
+            <div>
+              <div
+                className="d-flex align-items-start gap-2 p-3 mb-3"
+                style={{
+                  background: isDark
+                    ? "rgba(255,193,7,0.08)"
+                    : "rgba(255,193,7,0.12)",
+                  border: "1px solid rgba(255,193,7,0.35)",
+                  borderRadius: "0.5rem",
+                  fontSize: "0.85rem",
+                  color: isDark ? "#ffe082" : "#664d03",
+                }}
+              >
+                <i
+                  className="bi bi-exclamation-triangle-fill mt-1"
+                  style={{ flexShrink: 0 }}
+                />
+                <div>
+                  <strong>Review before submitting:</strong> You are about to
+                  submit{" "}
+                  <strong>
+                    {pendingSubmitData.data.changes.length} DNS change
+                    {pendingSubmitData.data.changes.length !== 1 ? "s" : ""}
+                  </strong>
+                  .
+                  {pendingSubmitData.data.scheduledTime && (
+                    <>
+                      {" "}
+                      Scheduled for:{" "}
+                      <strong>{pendingSubmitData.data.scheduledTime}</strong>.
+                    </>
+                  )}{" "}
+                  This action cannot be undone once submitted.
+                </div>
+              </div>
+              <div className="d-flex align-items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmSubmit}
+                  disabled={isSubmitting}
+                  style={{
+                    background: isSubmitting
+                      ? "#c8d4e0"
+                      : "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
+                    border: "none",
+                    color: "#fff",
+                    borderRadius: "0.45rem",
+                    padding: "0.45rem 1.4rem",
+                    fontSize: "0.85rem",
+                    fontWeight: 600,
+                    boxShadow: isSubmitting
+                      ? "none"
+                      : "0 2px 8px rgba(30,95,168,.25)",
+                    cursor: isSubmitting ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" />
+                      Submitting…
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-send-fill" />
+                      Confirm &amp; Submit
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBackToEdit}
+                  disabled={isSubmitting}
+                  style={{
+                    background: isDark ? "#1e293b" : "#fff",
+                    border: `1px solid ${isDark ? "#2d4163" : "#d4dae3"}`,
+                    color: isDark ? "#94a3b8" : "#5a6a85",
+                    borderRadius: "0.45rem",
+                    padding: "0.45rem 1.1rem",
+                    fontSize: "0.85rem",
+                    fontWeight: 600,
+                    cursor: isSubmitting ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <i className="bi bi-arrow-left" />
+                  Back to Edit
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="d-flex align-items-center gap-2">
+              <button
+                type="submit"
+                disabled={fields.length === 0 || isSubmitting}
+                style={{
+                  background:
+                    fields.length === 0 || isSubmitting
+                      ? "#c8d4e0"
+                      : "linear-gradient(90deg, #1e5fa8, #0d1b3e)",
+                  border: "none",
+                  color: "#fff",
+                  borderRadius: "0.45rem",
+                  padding: "0.45rem 1.4rem",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  boxShadow:
+                    fields.length === 0 || isSubmitting
+                      ? "none"
+                      : "0 2px 8px rgba(30,95,168,.25)",
+                  cursor:
+                    fields.length === 0 || isSubmitting
+                      ? "not-allowed"
+                      : "pointer",
+                  transition: "all 0.2s",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+                onMouseEnter={(e) => {
+                  if (fields.length > 0 && !isSubmitting)
+                    e.currentTarget.style.boxShadow =
+                      "0 3px 12px rgba(30,95,168,.35)";
+                }}
+                onMouseLeave={(e) => {
+                  if (fields.length > 0 && !isSubmitting)
+                    e.currentTarget.style.boxShadow =
+                      "0 2px 8px rgba(30,95,168,.25)";
+                }}
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm" />
+                    Submitting…
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-send-fill" />
+                    Submit Batch Change
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={isSubmitting}
+                style={{
+                  background: isDark ? "#1e293b" : "#fff",
+                  border: `1px solid ${isDark ? "#2d4163" : "#d4dae3"}`,
+                  color: isDark ? "#94a3b8" : "#5a6a85",
+                  borderRadius: "0.45rem",
+                  padding: "0.45rem 1.1rem",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  cursor: isSubmitting ? "not-allowed" : "pointer",
+                  transition: "all 0.15s",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSubmitting) {
+                    e.currentTarget.style.borderColor = "#1e5fa8";
+                    e.currentTarget.style.color = "#1e5fa8";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSubmitting) {
+                    e.currentTarget.style.borderColor = isDark
+                      ? "#2d4163"
+                      : "#d4dae3";
+                    e.currentTarget.style.color = isDark
+                      ? "#94a3b8"
+                      : "#5a6a85";
+                  }
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
       </form>
+      {dupReview && (
+        <DuplicateReviewModal
+          state={dupReview}
+          isDark={isDark}
+          onToggleKeep={toggleDupKeep}
+          onApply={handleDupReviewApply}
+          onCancel={handleDupReviewCancel}
+        />
+      )}
     </FormProvider>
   );
 }
