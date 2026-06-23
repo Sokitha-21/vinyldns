@@ -93,6 +93,7 @@ export interface RecordSet {
   accessLevel?: string;
   ownerGroupId?: string;
   ownerGroupName?: string;
+  zoneShared?: boolean;
   recordSetGroupChange?: RecordSetGroupChange;
 }
 
