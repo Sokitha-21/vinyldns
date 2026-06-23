@@ -15,11 +15,11 @@
  */
 
 import React, { useEffect } from 'react';
-import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import type { RecordSet, RecordType, RecordData } from '../../types/record';
 import type { Group } from '../../types/group';
 
-const RECORD_TYPES: RecordType[] = [
+const ALL_RECORD_TYPES: RecordType[] = [
   'A', 'AAAA', 'CNAME', 'DS', 'MX', 'NAPTR', 'NS', 'PTR', 'SSHFP', 'SRV', 'TXT',
 ];
 
@@ -56,15 +56,17 @@ interface RecordFormProps {
   onCancel: () => void;
   mode: 'create' | 'edit';
   isSharedZone?: boolean;
+  isReverseZone?: boolean;
+  isLoading?: boolean;
   allGroups?: Group[];
 }
 
-export function RecordForm({ zoneName, initialData, onSubmit, onCancel, mode, isSharedZone = false, allGroups = [] }: RecordFormProps) {
-  const { register, control, handleSubmit, watch, reset, setValue,
+export function RecordForm({ zoneId, zoneName, initialData, onSubmit, onCancel, mode, isSharedZone = false, isReverseZone = false, isLoading = false, allGroups = [] }: RecordFormProps) {
+  const allowedTypes = ALL_RECORD_TYPES;  const { register, control, handleSubmit, watch, reset, setValue,
     formState: { errors, isSubmitting } } = useForm<RecordFormValues>({
     defaultValues: {
       name: initialData?.name ?? '',
-      type: initialData?.type ?? 'A',
+      type: initialData?.type ?? (isReverseZone ? 'PTR' : 'A'),
       ttl:  initialData?.ttl ?? 300,
       records: initialData?.records?.length ? initialData.records : [emptyRecord(initialData?.type ?? 'A')],
       ownerGroupId: initialData?.ownerGroupId ?? '',
@@ -80,7 +82,6 @@ export function RecordForm({ zoneName, initialData, onSubmit, onCancel, mode, is
   const selectedType = watch('type');
   const { fields, append, remove, replace, update } = useFieldArray({ control, name: 'records' });
 
-  // When type changes, reset records to single empty record for that type
   useEffect(() => {
     if (mode === 'create') {
       replace([emptyRecord(selectedType)]);
@@ -101,6 +102,7 @@ export function RecordForm({ zoneName, initialData, onSubmit, onCancel, mode, is
         .map((ptrdname) => ({ ptrdname }));
     }
     onSubmit({
+      zoneId,
       name:       values.name,
       type:       values.type,
       ttl:        Number(values.ttl),
@@ -116,7 +118,6 @@ export function RecordForm({ zoneName, initialData, onSubmit, onCancel, mode, is
       nsText: '', ptrText: '',
     });
   };
-
   const isSingle = SINGLE_RECORD_TYPES.includes(selectedType);
 
   return (
@@ -154,7 +155,7 @@ export function RecordForm({ zoneName, initialData, onSubmit, onCancel, mode, is
             className="form-select form-select-sm"
             disabled={mode === 'edit'}
           >
-            {RECORD_TYPES.map((t) => (
+            {allowedTypes.map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
@@ -248,7 +249,6 @@ export function RecordForm({ zoneName, initialData, onSubmit, onCancel, mode, is
                       type={selectedType}
                       index={idx}
                       register={register}
-                      control={control}
                       errors={errors}
                     />
                   </div>
@@ -296,21 +296,21 @@ export function RecordForm({ zoneName, initialData, onSubmit, onCancel, mode, is
         <button type="button" className="btn btn-sm btn-outline-secondary" onClick={onCancel}>
           <i className="bi bi-x-circle me-1" />Cancel
         </button>
-        <button type="submit" className="btn btn-sm d-flex align-items-center gap-1 vds-btn-nav" disabled={isSubmitting}>
-          <i className={`bi bi-${mode === 'edit' ? 'save' : 'plus-circle-fill'} me-1`} />
-          {mode === 'edit' ? 'Save Changes' : 'Add Record'}
+        <button type="submit" className="btn btn-sm d-flex align-items-center gap-1 vds-btn-nav" disabled={isSubmitting || isLoading}>
+          {isLoading
+            ? <><span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />{mode === 'edit' ? 'Saving…' : 'Adding…'}</>
+            : <><i className={`bi bi-${mode === 'edit' ? 'save' : 'plus-circle-fill'} me-1`} />{mode === 'edit' ? 'Save Changes' : 'Add Record'}</>}
         </button>
       </div>
     </form>
   );
 }
 
-// ── Per-type data fields ──────────────────────────────────────────────────────
+
 function RecordDataFields({ type, index, register, errors }: {
   type: RecordType;
   index: number;
   register: ReturnType<typeof useForm<RecordFormValues>>['register'];
-  control: ReturnType<typeof useForm<RecordFormValues>>['control'];
   errors: ReturnType<typeof useForm<RecordFormValues>>['formState']['errors'];
 }) {
   const p = `records.${index}` as const;

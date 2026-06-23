@@ -20,6 +20,7 @@ import type {
   ZoneListResponse,
   ZoneChangesResponse,
   DeletedZonesResponse,
+  ZoneCount,
 } from '../types/zone';
 
 /** Convert a display date back to API ISO format (drops milliseconds) */
@@ -71,7 +72,8 @@ export const zonesService = {
     query?: string,
     searchByAdminGroup?: boolean,
     ignoreAccess?: boolean,
-    includeReverse?: boolean
+    includeReverse?: boolean,
+    accessFilter?: number
   ) {
     const params = {
       maxItems: limit,
@@ -80,6 +82,7 @@ export const zonesService = {
       searchByAdminGroup,
       ignoreAccess,
       includeReverse,
+      accessFilter,
     };
     return api.get<ZoneListResponse>(urlBuilder('/zones', params));
   },
@@ -101,19 +104,25 @@ export const zonesService = {
     limit: number,
     startFrom?: string,
     query?: string,
-    ignoreAccess?: boolean
+    ignoreAccess?: boolean,
+    accessFilter?: number
   ) {
     const params = {
       maxItems: limit,
       startFrom,
       nameFilter: query || undefined,
       ignoreAccess,
+      accessFilter,
     };
     return api.get<DeletedZonesResponse>(urlBuilder('/zones/deleted/changes', params));
   },
 
   getBackendIds() {
     return api.get<string[]>('/zones/backendids');
+  },
+
+  countZones() {
+    return api.get<ZoneCount>('/zones/count');
   },
 
   createZone(payload: Zone) {
@@ -126,6 +135,10 @@ export const zonesService = {
 
   deleteZone(id: string) {
     return api.delete(`/zones/${id}`);
+  },
+
+  syncZone(id: string) {
+    return api.post<{ zone: Zone }>(`/zones/${id}/sync`, {});
   },
 
   normalizeZoneDates(zone: Zone): Zone {

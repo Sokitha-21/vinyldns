@@ -15,7 +15,7 @@
  */
 
 import api, { urlBuilder } from './api';
-import type { Group, GroupListResponse, GroupMember, GroupChangesResponse } from '../types/group';
+import type { Group, GroupListResponse, GroupMember, GroupChangesResponse, GroupCount } from '../types/group';
 
 export const groupsService = {
   createGroup(data: Partial<Group>) {
@@ -24,10 +24,6 @@ export const groupsService = {
 
   getGroup(id: string) {
     return api.get<Group>(`/groups/${id}`);
-  },
-
-  listEmailDomains() {
-    return api.get<string[]>('/groups/valid/domains');
   },
 
   deleteGroup(id: string) {
@@ -68,7 +64,9 @@ export const groupsService = {
     limit?: number,
     startFrom?: string,
     ignoreAccess?: boolean,
-    query?: string
+    query?: string,
+    roleFilter?: number          // 0=admin, 1=member, 2=norole
+  
   ) {
     const params = {
       maxItems: limit,
@@ -76,6 +74,7 @@ export const groupsService = {
       groupNameFilter: query || undefined,
       ignoreAccess,
       abridged: true,
+      roleFilter,
     };
     return api.get<GroupListResponse>(urlBuilder('/groups', params));
   },
@@ -83,7 +82,11 @@ export const groupsService = {
   getGroupChanges(groupId: string, count?: number, startFrom?: string) {
     const params = { startFrom, maxItems: count };
     return api.get<GroupChangesResponse>(
-      urlBuilder(`/groups/${groupId}/groupchanges`, params)
+      urlBuilder(`/groups/${groupId}/activity`, params)
     );
+  },
+
+  countGroups() {
+    return api.get<GroupCount>('/groups/count');
   },
 };

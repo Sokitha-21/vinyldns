@@ -464,7 +464,56 @@ export function RecordsTable({
       </div>
     );
   }
+  return (
+    <span className="vds-owner-group-chip">
+      <i className="bi bi-people-fill me-1" />
+      {record.ownerGroupName ?? `${record.ownerGroupId.slice(0, 8)}…`}
+    </span>
+  );
+}
 
+type OwnershipCapability =
+  | 'CLAIM'          
+  | 'REQUEST'        
+  | 'REQUESTOR'      
+  | 'APPROVER'      
+  | 'ADMIN_APPROVER' 
+  | 'PENDING'       
+  | 'NONE';          
+
+function resolveOwnershipCapability(
+  record: RecordSet,
+  opts: { isSuper: boolean; isSupport: boolean; isZoneAdmin: boolean; userGroupIds: string[] },
+): OwnershipCapability {
+  const { isSuper, isSupport, isZoneAdmin, userGroupIds } = opts;
+  const status = record.recordSetGroupChange?.ownershipTransferStatus ?? 'None';
+
+  if (!record.ownerGroupId) return 'CLAIM';
+
+  const isOwner = userGroupIds.includes(record.ownerGroupId);
+  const isRequestor = Boolean(
+    record.recordSetGroupChange?.requestedOwnerGroupId &&
+    userGroupIds.includes(record.recordSetGroupChange.requestedOwnerGroupId)
+  );
+
+  if (status === 'PendingReview') {
+    // Super / support always get full control — checked before requestor/owner
+    if (isSuper || isSupport) return 'ADMIN_APPROVER';
+    // Requestor (non-super): hourglass + cancel only
+    if (isRequestor) return 'REQUESTOR';
+    // Current owner (not requestor): approve + reject
+    if (isOwner) return 'APPROVER';
+    // Zone admin (not requestor, not owner): approve + reject + cancel
+    if (isZoneAdmin) return 'ADMIN_APPROVER';
+    return 'PENDING';
+  }
+
+  const hasNonOwnerGroup = userGroupIds.some((gid) => gid !== record.ownerGroupId);
+  if (isOwner && !hasNonOwnerGroup && !isSuper && !isSupport) return 'NONE';
+  return 'REQUEST';
+}
+
+function ZoneTypePill({ isSharedZone }: { isSharedZone: boolean }) {
   return (
     <div
       className="vds-zones-table-wrap"
@@ -677,6 +726,7 @@ export function RecordsTable({
           })}
         </tbody>
       </table>
+
     </div>
   );
 }

@@ -14,4 +14,22 @@
  * limitations under the License.
  */
 
-import '@testing-library/jest-dom';
+/**
+ * Portal configuration — mirrors the Meta + CustomLinks models from the old
+ * Play portal's application.conf.
+*/
+
+export const portalConfig = {
+  version: __APP_VERSION__,
+
+  loginLinks: [
+    {
+      title: 'Documentation',
+      href: 'https://www.vinyldns.io/',
+    },
+    {
+      title: 'API Docs',
+      href: 'https://www.vinyldns.io/api/',
+    },
+  ].filter((l) => Boolean(l.href)),
+} as const;

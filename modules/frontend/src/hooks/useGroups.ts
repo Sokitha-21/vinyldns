@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { groupsService } from '../services/groupsService';
 import { usePaging } from './usePaging';
 import { useAlerts } from '../contexts/AlertContext';
 import type { Group } from '../types/group';
+import type { PagingState } from '../types/common';
 
 function getErrorMessage(error: { response?: { data?: string | { errors?: string[] }; statusText?: string; status?: number } }): string {
   const status = error.response?.status ?? 0;
@@ -34,22 +35,24 @@ function getErrorMessage(error: { response?: { data?: string | { errors?: string
   return msg;
 }
 
-export function useGroups(ignoreAccess = false) {
-  const [query, setQuery] = useState('');
+export function useGroups(ignoreAccess = false, query = '', initialPaging?: Partial<PagingState>) {
+  const [roleFilter, setRoleFilterState] = useState<number | undefined>(undefined);
+  const lastRoleFilter = useRef<number | undefined>(undefined);
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
-    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
+    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100, initialPaging);
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['groups', ignoreAccess, query, paging.next],
+  const { data, isLoading } = useQuery({
+    queryKey: ['groups', ignoreAccess, query, roleFilter, paging.next],
     staleTime: 0,
     queryFn: async () => {
       const res = await groupsService.getGroupsAbridged(
         paging.maxItems,
         paging.next as string | undefined,
         ignoreAccess,
-        query
+        query,
+        roleFilter
       );
       return res.data;
     },
@@ -59,6 +62,7 @@ export function useGroups(ignoreAccess = false) {
     mutationFn: (group: Partial<Group>) => groupsService.createGroup(group),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['groups'] });
+      void queryClient.invalidateQueries({ queryKey: ['groups-count'] });
       addAlert('success', 'Group created successfully');
     },
     onError: (err: unknown) => {
@@ -71,6 +75,7 @@ export function useGroups(ignoreAccess = false) {
       groupsService.updateGroup(id, group),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['groups'] });
+      void queryClient.invalidateQueries({ queryKey: ['groups-count'] });
       addAlert('success', 'Group updated successfully');
     },
     onError: (err: unknown) => {
@@ -82,20 +87,13 @@ export function useGroups(ignoreAccess = false) {
     mutationFn: (id: string) => groupsService.deleteGroup(id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['groups'] });
+      void queryClient.invalidateQueries({ queryKey: ['groups-count'] });
       addAlert('success', 'Group deleted successfully');
     },
     onError: (err: unknown) => {
       addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
     },
   });
-
-  const search = useCallback(
-    (q: string) => {
-      setQuery(q);
-      resetPaging();
-    },
-    [resetPaging]
-  );
 
   const nextPage = useCallback(() => {
     nextPageUpdate(data?.groups?.length ?? 0, data?.nextId);
@@ -108,14 +106,21 @@ export function useGroups(ignoreAccess = false) {
   return {
     groups: data?.groups ?? [],
     isLoading,
-    query,
-    search,
     nextPage,
     prevPage,
-    nextPageEnabled,
+    nextPageEnabled: Boolean(data?.nextId),
     prevPageEnabled,
     getPanelTitle,
-    refetch,
+    pageNum: paging.pageNum,
+    paging,
+    resetPaging,
+    roleFilter,
+    setRoleFilter: (f: number | undefined) => {
+      if (lastRoleFilter.current === f) return;
+      lastRoleFilter.current = f;
+      setRoleFilterState(f);
+      resetPaging();
+    },
     createGroup: createGroupMutation.mutate,
     updateGroup: updateGroupMutation.mutate,
     deleteGroup: deleteGroupMutation.mutate,
