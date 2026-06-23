@@ -22,6 +22,11 @@ import type {
 } from "../types/record";
 
 export const recordsService = {
+  /**
+   * Global record set search — returns records across all zones.
+   * Used by the RecordSet Search page; `nameFilter` drives the FQDN search
+   * and `nameSort` controls ASC/DESC ordering of results.
+   */
   listRecordSetData(
     limit: number,
     startFrom?: string,
@@ -41,6 +46,11 @@ export const recordsService = {
     return api.get<RecordSetListResponse>(urlBuilder("/recordsets", params));
   },
 
+  /**
+   * Zone-scoped record listing used by the Zone Detail page.
+   * Supports both name and type filtering independently; `recordTypeSort`
+   * is a secondary sort key that the global search endpoint does not expose.
+   */
   listRecordSetsByZone(
     zoneId: string,
     limit: number,
@@ -99,11 +109,19 @@ export const recordsService = {
   },
 
   getRecordSuggestions(term: string) {
-    // The real endpoint is /recordsets with recordNameFilter (required param)
+    // `/recordsets` doubles as the typeahead source; `maxItems: 10` keeps
+    // the dropdown snappy without pulling an unbounded result set.
     const params = { recordNameFilter: term, maxItems: 10 };
     return api.get<RecordSetListResponse>(urlBuilder("/recordsets", params));
   },
 
+  /**
+   * Fetches paginated change history for a specific record set.
+   * The API endpoint uses a global `/recordsetchange/history` path rather
+   * than a zone-scoped one, so `zoneId` is passed as a query param instead
+   * of a path segment. `fqdn` and `recordType` narrow results to a single
+   * record set when provided.
+   */
   listRecordSetChangeHistory(
     zoneId: string,
     limit: number,
@@ -112,12 +130,13 @@ export const recordsService = {
     recordType?: string,
   ) {
     const params = {
+      zoneId: zoneId || undefined,
       maxItems: limit,
       startFrom,
       fqdn: fqdn || undefined,
       recordType: recordType || undefined,
     };
-    return api.get<{ changes: any[]; hasMore: boolean }>(
+    return api.get<{ recordSetChanges: any[]; nextId?: number }>(
       urlBuilder(`/recordsetchange/history`, params),
     );
   },
