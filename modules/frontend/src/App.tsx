@@ -22,14 +22,12 @@ import {
   Navigate,
 } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 import { AlertProvider } from './contexts/AlertContext';
 import { ProfileProvider } from './contexts/ProfileContext';
+import { BreadcrumbProvider } from './contexts/BreadcrumbContext';
 import { Layout } from './components/common/Layout';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
-
-// Pages
 import { LoginPage } from './pages/LoginPage';
 import { ZonesPage } from './pages/ZonesPage';
 import { ZoneDetailPage } from './pages/ZoneDetailPage';
@@ -39,8 +37,7 @@ import { RecordsPage } from './pages/RecordsPage';
 import { DnsChangesPage } from './pages/DnsChangesPage';
 import { DnsChangeDetailPage } from './pages/DnsChangeDetailPage';
 import { DnsChangeNewPage } from './pages/DnsChangeNewPage';
-
-// Bootstrap CSS + icons
+import { AdminPage } from './pages/AdminPage';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './styles/vinyldns.css';
@@ -48,7 +45,7 @@ import './styles/vinyldns.css';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000, // 30 s
+      staleTime: 30_000, 
       retry: 1,
     },
   },
@@ -59,11 +56,13 @@ const queryClient = new QueryClient({
  */
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ProfileProvider>
-      <Layout>
-        <ErrorBoundary>{children}</ErrorBoundary>
-      </Layout>
-    </ProfileProvider>
+    <BreadcrumbProvider>
+      <ProfileProvider>
+        <Layout>
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </Layout>
+      </ProfileProvider>
+    </BreadcrumbProvider>
   );
 }
 
@@ -142,13 +141,21 @@ export function App() {
               }
             />
 
+            <Route
+              path="/admin"
+              element={
+                <AppLayout>
+                  <AdminPage />
+                </AppLayout>
+              }
+            />
+
             {/* Default redirect */}
             <Route path="/" element={<Navigate to="/zones" replace />} />
             <Route path="/index" element={<Navigate to="/zones" replace />} />
             <Route path="*" element={<Navigate to="/zones" replace />} />
           </Routes>
         </BrowserRouter>
-        <ReactQueryDevtools initialIsOpen={false} />
       </AlertProvider>
     </QueryClientProvider>
   );

@@ -56,7 +56,7 @@ export function RecordsPage() {
               <input
                 type="text"
                 className="form-control"
-                placeholder="Filter by name…"
+                placeholder="Filter by record name"
                 value={nameFilter}
                 onChange={(e) => setNameFilter(e.target.value)}
                 onKeyUp={(e) => e.key === 'Enter' && handleSearch()}
@@ -110,7 +110,7 @@ export function RecordsPage() {
         <LoadingSpinner />
       ) : (
         <>
-          <RecordsTable records={records} showZone />
+          <RecordsTable records={records} />
           <Pagination
             onPrev={prevPage}
             onNext={nextPage}

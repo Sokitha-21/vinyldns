@@ -30,7 +30,6 @@ interface GroupFormProps {
   onCancel: () => void;
   isSubmitting: boolean;
   mode: 'create' | 'edit';
-  validEmailDomains?: string[];
 }
 
 export function GroupForm({
@@ -39,7 +38,6 @@ export function GroupForm({
   onCancel,
   isSubmitting,
   mode,
-  validEmailDomains = [],
 }: GroupFormProps) {
   const { register, handleSubmit, reset, formState: { errors } } = useForm<GroupFormData>({
     defaultValues: {
@@ -69,7 +67,6 @@ export function GroupForm({
           className={`form-control ${errors.name ? 'is-invalid' : ''}`}
           placeholder="Enter group name"
           {...register('name', { required: 'Group name is required' })}
-          disabled={mode === 'edit'}
         />
         {errors.name && <div className="invalid-feedback">{errors.name.message}</div>}
       </div>
@@ -85,11 +82,6 @@ export function GroupForm({
           {...register('email', { required: 'Email is required' })}
         />
         {errors.email && <div className="invalid-feedback">{errors.email.message}</div>}
-        {Array.isArray(validEmailDomains) && validEmailDomains.length > 0 && (
-          <div className="form-text">
-            Valid domains: {validEmailDomains.join(', ')}
-          </div>
-        )}
       </div>
 
       <div className="mb-4">
@@ -103,7 +95,7 @@ export function GroupForm({
       </div>
 
       <div className="d-flex gap-2">
-        <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+        <button type="submit" className="btn btn-primary" style={{background: 'linear-gradient(90deg, #1e5fa8, #0d1b3e)', border: 'none'}} disabled={isSubmitting}>
           {isSubmitting ? (
             <>
               <span className="spinner-border spinner-border-sm me-1" />
@@ -115,6 +107,16 @@ export function GroupForm({
             'Update Group'
           )}
         </button>
+        {mode === 'create' && (
+          <button
+            type="button"
+            className="btn btn-outline-secondary"
+            onClick={() => reset({ name: '', email: '', description: '' })}
+          >
+            <i className="bi bi-x-circle me-1" />
+            Clear
+          </button>
+        )}
         <button type="button" className="btn btn-outline-secondary" onClick={onCancel}>
           Cancel
         </button>

@@ -18,6 +18,7 @@ export interface ZoneConnection {
   name?: string;
   keyName?: string;
   key?: string;
+  algorithm?: string;
   primaryServer?: string;
 }
 
@@ -52,6 +53,7 @@ export interface Zone {
   acl?: ZoneAcl;
   shared?: boolean;
   backendId?: string;
+  recurrenceSchedule?: string;
   accessLevel?: string;
   account?: string;
 }
@@ -65,17 +67,22 @@ export interface ZoneListResponse {
 }
 
 export interface DeletedZoneChange {
-  zone: Zone;
-  changeType: string;
-  status: string;
-  systemMessage?: string;
-  created: string;
-  userId: string;
-  id: string;
+  zoneChange: {
+    zone: Zone;
+    changeType: string;
+    status: string;
+    systemMessage?: string;
+    created: string;
+    userId: string;
+    id: string;
+  };
+  adminGroupName: string;
+  userName: string;
+  accessLevel: string;
 }
 
 export interface DeletedZonesResponse {
-  zoneChanges: DeletedZoneChange[];
+  zonesDeletedInfo: DeletedZoneChange[];
   startFrom?: string;
   nextId?: string;
   maxItems: number;
@@ -88,7 +95,31 @@ export interface ZoneChange {
   systemMessage?: string;
   created: string;
   userId: string;
+  userName?: string;
   id: string;
+}
+
+export interface ZoneCount {
+  totalCount: number;
+  myZonesCount: number;
+  sharedCount: number;
+  privateCount: number;
+  activeCount: number;
+  syncingCount: number;
+  abandonedCount: number;
+  ptrCount: number;
+  sharedPtrCount: number;
+  privatePtrCount: number;
+  abandonedPtrCount: number;
+  abandonedSharedCount: number;
+  myActiveCount: number;
+  mySyncingCount: number;
+  mySharedCount: number;
+  myPrivateCount: number;
+  myPtrCount: number;
+  myAbandonedCount: number;
+  myAbandonedPtrCount: number;
+  myAbandonedSharedCount: number;
 }
 
 export interface ZoneChangesResponse {

@@ -14,23 +14,27 @@
  * limitations under the License.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { zonesService } from '../services/zonesService';
 import { usePaging } from './usePaging';
 import { useAlerts } from '../contexts/AlertContext';
-import type { Zone } from '../types/zone';
+import type { Zone, DeletedZoneChange } from '../types/zone';
+import type { PagingState } from '../types/common';
 
-export function useZones(ignoreAccess = false, includeReverse = true) {
+export function useZones(ignoreAccess = false, includeReverse = true, initialPaging?: Partial<PagingState>) {
   const [query, setQuery] = useState('');
   const [searchByAdminGroup, setSearchByAdminGroup] = useState(false);
+  const [accessFilter, setAccessFilter] = useState<number | undefined>(undefined);
+  const lastSearch = useRef({ query: '', byAdminGroup: false });
+  const lastAccessFilter = useRef<number | undefined>(undefined);
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
-    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
+    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100, initialPaging);
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['zones', ignoreAccess, includeReverse, query, searchByAdminGroup, paging.next],
+  const { data, isLoading } = useQuery({
+    queryKey: ['zones', ignoreAccess, includeReverse, query, searchByAdminGroup, accessFilter, paging.next],
     queryFn: async () => {
       const res = await zonesService.getZones(
         paging.maxItems,
@@ -38,7 +42,8 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
         query,
         searchByAdminGroup,
         ignoreAccess,
-        includeReverse
+        includeReverse,
+        accessFilter
       );
       return res.data;
     },
@@ -84,6 +89,8 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
 
   const search = useCallback(
     (q: string, byAdminGroup = false) => {
+      if (lastSearch.current.query === q && lastSearch.current.byAdminGroup === byAdminGroup) return;
+      lastSearch.current = { query: q, byAdminGroup };
       setQuery(q);
       setSearchByAdminGroup(byAdminGroup);
       resetPaging();
@@ -104,18 +111,80 @@ export function useZones(ignoreAccess = false, includeReverse = true) {
     isLoading,
     query,
     search,
+    accessFilter,
+    setAccessFilter: (f: number | undefined) => {
+      if (lastAccessFilter.current === f) return;
+      lastAccessFilter.current = f;
+      setAccessFilter(f);
+      resetPaging();
+    },
     nextPage,
     prevPage,
-    nextPageEnabled,
+    nextPageEnabled: Boolean(data?.nextId),
     prevPageEnabled,
+    pageNum: paging.pageNum,
+    paging,
     getPanelTitle,
-    refetch,
+    resetPaging,
     createZone: createZoneMutation.mutate,
     updateZone: updateZoneMutation.mutate,
     deleteZone: deleteZoneMutation.mutate,
     isCreating: createZoneMutation.isPending,
     isUpdating: updateZoneMutation.isPending,
     isDeleting: deleteZoneMutation.isPending,
+  };
+}
+
+export function useDeletedZones(ignoreAccess = false, enabled = true) {
+  const [query, setQuery] = useState('');
+  const [accessFilter, setAccessFilter] = useState<number | undefined>(undefined);
+  const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
+    prevPageEnabled, getPanelTitle } = usePaging(100);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['deleted-zones', ignoreAccess, query, accessFilter, paging.next],
+    queryFn: async () => {
+      const res = await zonesService.getDeletedZones(
+        paging.maxItems,
+        paging.next as string | undefined,
+        query,
+        ignoreAccess,
+        accessFilter
+      );
+      return res.data;
+    },
+    enabled: enabled && Boolean(ignoreAccess !== undefined),
+  });
+
+  const search = useCallback(
+    (q: string) => {
+      setQuery(q);
+      resetPaging();
+    },
+    [resetPaging]
+  );
+
+  const nextPage = useCallback(() => {
+    nextPageUpdate(data?.zonesDeletedInfo?.length ?? 0, data?.nextId);
+  }, [data, nextPageUpdate]);
+
+  const prevPage = useCallback(() => {
+    prevPageUpdate(getPrevStartFrom());
+  }, [prevPageUpdate, getPrevStartFrom]);
+
+  return {
+    deletedZones: (data?.zonesDeletedInfo ?? []) as DeletedZoneChange[],
+    isLoading,
+    query,
+    search,
+    nextPage,
+    prevPage,
+    nextPageEnabled: Boolean(data?.nextId),
+    prevPageEnabled,
+    pageNum: paging.pageNum,
+    getPanelTitle,
+    resetPaging,
+    setAccessFilter: (f: number | undefined) => { setAccessFilter(f); resetPaging(); },
   };
 }
 
