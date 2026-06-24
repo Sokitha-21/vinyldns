@@ -14,21 +14,26 @@
  * limitations under the License.
  */
 
-import api, { urlBuilder } from './api';
+import api, { urlBuilder } from "./api";
 import type {
   RecordSet,
   RecordSetListResponse,
   RecordSetChangesResponse,
-} from '../types/record';
+} from "../types/record";
 
 export const recordsService = {
+  /**
+   * Global record set search — returns records across all zones.
+   * Used by the RecordSet Search page; `nameFilter` drives the FQDN search
+   * and `nameSort` controls ASC/DESC ordering of results.
+   */
   listRecordSetData(
     limit: number,
     startFrom?: string,
     nameFilter?: string,
     typeFilter?: string,
     nameSort?: string,
-    ownerGroupFilter?: string
+    ownerGroupFilter?: string,
   ) {
     const params = {
       maxItems: limit,
@@ -38,9 +43,14 @@ export const recordsService = {
       nameSort: nameSort || undefined,
       recordOwnerGroupFilter: ownerGroupFilter || undefined,
     };
-    return api.get<RecordSetListResponse>(urlBuilder('/recordsets', params));
+    return api.get<RecordSetListResponse>(urlBuilder("/recordsets", params));
   },
 
+  /**
+   * Zone-scoped record listing used by the Zone Detail page.
+   * Supports both name and type filtering independently; `recordTypeSort`
+   * is a secondary sort key that the global search endpoint does not expose.
+   */
   listRecordSetsByZone(
     zoneId: string,
     limit: number,
@@ -48,7 +58,7 @@ export const recordsService = {
     nameFilter?: string,
     typeFilter?: string,
     nameSort?: string,
-    recordTypeSort?: string
+    recordTypeSort?: string,
   ) {
     const params = {
       maxItems: limit,
@@ -59,27 +69,31 @@ export const recordsService = {
       recordTypeSort: recordTypeSort || undefined,
     };
     return api.get<RecordSetListResponse>(
-      urlBuilder(`/zones/${zoneId}/recordsets`, params)
+      urlBuilder(`/zones/${zoneId}/recordsets`, params),
     );
   },
 
   getRecordSet(zoneId: string, recordSetId: string) {
     return api.get<{ recordSet: RecordSet }>(
-      `/zones/${zoneId}/recordsets/${recordSetId}`
+      `/zones/${zoneId}/recordsets/${recordSetId}`,
     );
   },
 
   createRecordSet(zoneId: string, data: Partial<RecordSet>) {
     return api.post<{ recordSet: RecordSet }>(
       `/zones/${zoneId}/recordsets`,
-      data
+      data,
     );
   },
 
-  updateRecordSet(zoneId: string, recordSetId: string, data: Partial<RecordSet>) {
+  updateRecordSet(
+    zoneId: string,
+    recordSetId: string,
+    data: Partial<RecordSet>,
+  ) {
     return api.put<{ recordSet: RecordSet }>(
       `/zones/${zoneId}/recordsets/${recordSetId}`,
-      data
+      data,
     );
   },
 
@@ -87,14 +101,43 @@ export const recordsService = {
     return api.delete(`/zones/${zoneId}/recordsets/${recordSetId}`);
   },
 
-  getRecordSetChanges(
-    zoneId: string,
-    limit: number,
-    startFrom?: string
-  ) {
+  getRecordSetChanges(zoneId: string, limit: number, startFrom?: string) {
     const params = { maxItems: limit, startFrom };
     return api.get<RecordSetChangesResponse>(
-      urlBuilder(`/zones/${zoneId}/recordsetchanges`, params)
+      urlBuilder(`/zones/${zoneId}/recordsetchanges`, params),
+    );
+  },
+
+  getRecordSuggestions(term: string) {
+    // `/recordsets` doubles as the typeahead source; `maxItems: 10` keeps
+    // the dropdown snappy without pulling an unbounded result set.
+    const params = { recordNameFilter: term, maxItems: 10 };
+    return api.get<RecordSetListResponse>(urlBuilder("/recordsets", params));
+  },
+
+  /**
+   * Fetches paginated change history for a specific record set.
+   * The API endpoint uses a global `/recordsetchange/history` path rather
+   * than a zone-scoped one, so `zoneId` is passed as a query param instead
+   * of a path segment. `fqdn` and `recordType` narrow results to a single
+   * record set when provided.
+   */
+  listRecordSetChangeHistory(
+    zoneId: string,
+    limit: number,
+    startFrom?: string,
+    fqdn?: string,
+    recordType?: string,
+  ) {
+    const params = {
+      zoneId: zoneId || undefined,
+      maxItems: limit,
+      startFrom,
+      fqdn: fqdn || undefined,
+      recordType: recordType || undefined,
+    };
+    return api.get<{ recordSetChanges: any[]; nextId?: number }>(
+      urlBuilder(`/recordsetchange/history`, params),
     );
   },
 };

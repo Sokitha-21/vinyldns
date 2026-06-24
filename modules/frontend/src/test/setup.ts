@@ -1,6 +1,12 @@
 import "@testing-library/jest-dom";
 import { vi } from "vitest";
 
+<<<<<<< dns_changes
+=======
+import "@testing-library/jest-dom";
+import { vi } from "vitest";
+
+>>>>>>> portal_migration_angular_to_react
 // jsdom doesn't implement window.matchMedia; provide a deterministic stub
 // so components that probe for dark theme (e.g. tables, modals) don't throw.
 if (typeof window.matchMedia !== "function") {
