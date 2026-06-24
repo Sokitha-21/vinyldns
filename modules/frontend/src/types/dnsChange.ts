@@ -15,16 +15,23 @@
  */
 
 export type DnsChangeStatus =
-  | 'Pending'
-  | 'PendingReview'
-  | 'Complete'
-  | 'Failed'
-  | 'Cancelled'
-  | 'PartialFailure'
-  | 'Scheduled';
+  | "Pending"
+  | "PendingReview"
+  | "PendingProcessing"
+  | "Complete"
+  | "Failed"
+  | "Cancelled"
+  | "PartialFailure"
+  | "Rejected"
+  | "Scheduled";
+
+export interface ValidationError {
+  message?: string;
+  [key: string]: unknown;
+}
 
 export interface SingleChange {
-  changeType: 'Add' | 'DeleteRecordSet' | 'DeleteRecord';
+  changeType: "Add" | "DeleteRecordSet" | "DeleteRecord";
   inputName: string;
   type: string;
   ttl?: number;
@@ -35,8 +42,10 @@ export interface SingleChange {
   zoneId?: string;
   recordSetId?: string;
   errors?: string[];
+  validationErrors?: Array<ValidationError | string>;
   id: string;
   systemMessage?: string;
+  outstandingErrors?: boolean;
 }
 
 export interface DnsChange {
@@ -55,6 +64,8 @@ export interface DnsChange {
   reviewComment?: string;
   reviewTimestamp?: string;
   scheduledTime?: string;
+  /** Server-configured contextual notices keyed to the batch status. */
+  notices?: string[];
 }
 
 export interface DnsChangeSummary {
@@ -85,7 +96,29 @@ export interface DnsChangeListResponse {
 
 export interface CreateDnsChangeRequest {
   comments?: string;
-  changes: Omit<SingleChange, 'id' | 'status' | 'recordName' | 'zoneName' | 'zoneId' | 'recordSetId' | 'errors' | 'systemMessage'>[];
+  changes: Omit<
+    SingleChange,
+    | "id"
+    | "status"
+    | "recordName"
+    | "zoneName"
+    | "zoneId"
+    | "recordSetId"
+    | "errors"
+    | "systemMessage"
+  >[];
   ownerGroupId?: string;
   scheduledTime?: string;
+}
+
+export interface BatchChangeCount {
+  total: number;
+  complete: number;
+  failed: number;
+  partialFailure: number;
+  rejected: number;
+  cancelled: number;
+  pendingReview: number;
+  scheduled: number;
+  pendingProcessing: number;
 }

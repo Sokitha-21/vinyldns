@@ -14,78 +14,246 @@
  * limitations under the License.
  */
 
-import React from 'react';
-import { Link } from 'react-router-dom';
-import type { DnsChangeSummary } from '../../types/dnsChange';
-import { formatDateTime } from '../../utils/dateUtils';
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import type { DnsChangeSummary } from "../../types/dnsChange";
+import type { PagingState } from "../../types/common";
+import { formatDateTime } from "../../utils/dateUtils";
 
+/**
+ * Props for DnsChangesTable.
+ *
+ * @param changes        - Page of batch change summaries from the API.
+ * @param onCancel       - Optional cancel handler; when omitted the cancel
+ *                         button is not rendered (e.g. detail page view).
+ * @param ignoreAccess   - When true the Submitter column is shown, indicating
+ *                         the component is in the admin/all-requests view.
+ * @param currentUserId  - Logged-in user's internal ID; used to gate the
+ *                         cancel action to the original submitter only.
+ *                         Cancel is owner-only at the API level — even super
+ *                         users get a 403 trying to cancel another user's batch.
+ */
 interface DnsChangesTableProps {
   changes: DnsChangeSummary[];
-  onCancel?: (id: string) => void;
+  onCancel?: (change: DnsChangeSummary) => void;
+  ignoreAccess?: boolean;
+  currentUserId?: string;
+  fromTab?: "my" | "all";
+  currentPaging?: PagingState;
 }
 
-const STATUS_CLASS: Record<string, string> = {
-  Complete: 'bg-success',
-  Failed: 'bg-danger',
-  PartialFailure: 'bg-warning text-dark',
-  Pending: 'bg-info text-dark',
-  PendingReview: 'bg-warning text-dark',
-  Cancelled: 'bg-secondary',
-  Scheduled: 'bg-primary',
-};
+/**
+ * Maps an API `status` string to a VDS CSS modifier class for the status
+ * badge. Unknown statuses fall back to the neutral secondary style so the UI
+ * never renders a classless badge if the API introduces a new status value.
+ */
+export function changeStatusClass(status: string): string {
+  if (status === "Complete") return "vds-status-badge--success";
+  if (status === "Failed") return "vds-status-badge--danger";
+  if (status === "PartialFailure") return "vds-status-badge--warning";
+  if (status === "PendingProcessing") return "vds-status-badge--info";
+  if (status === "PendingReview") return "vds-status-badge--warning";
+  if (status === "Pending") return "vds-status-badge--info";
+  if (status === "Rejected") return "vds-status-badge--danger";
+  if (status === "Scheduled") return "vds-status-badge--info";
+  if (status === "Cancelled") return "vds-status-badge--secondary";
+  return "vds-status-badge--secondary";
+}
+/**
+ * Converts machine-style status strings (e.g. `PendingReview`) to readable
+ * display labels. Only compound-word values need entries; single-word statuses
+ * are returned as-is via the map lookup fallback.
+ */
+export function changeStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    PartialFailure: "Partial Failure",
+    PendingProcessing: "Pending Processing",
+    PendingReview: "Pending Review",
+  };
+  return map[status] ?? status;
+}
 
-export function DnsChangesTable({ changes, onCancel }: DnsChangesTableProps) {
+const COPY_KEYFRAMES = `
+  @keyframes vdsCopiedCheck {
+    0%   { opacity: 0; transform: scale(0.4) rotate(-15deg); }
+    60%  { transform: scale(1.3) rotate(5deg); }
+    80%  { transform: scale(0.9) rotate(-2deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  }
+`;
+
+/**
+ * Displays a paginated list of batch DNS change summaries.
+ *
+ * The component is intentionally stateless — all data fetching and pagination
+ * live in the parent (DnsChangesPage / DnsChangeDetailPage) so this component
+ * remains easy to render in isolation during tests or in the detail page sidebar.
+ */
+export function DnsChangesTable({
+  changes,
+  onCancel,
+  ignoreAccess,
+  currentUserId,
+  fromTab,
+  currentPaging,
+}: DnsChangesTableProps) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopyId = (id: string) => {
+    void navigator.clipboard.writeText(id).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 2000);
+    });
+  };
+
   if (changes.length === 0) {
-    return <div className="alert alert-info">No DNS changes found.</div>;
+    return (
+      <div className="vds-empty-state">
+        <i className="bi bi-list-ol fs-1 mb-2" style={{ opacity: 0.4 }} />
+        <p className="mb-0 fw-semibold">No DNS changes found</p>
+        <small className="text-muted">
+          Create a new batch change to get started.
+        </small>
+      </div>
+    );
   }
 
   return (
-    <div className="table-responsive">
-      <table className="table table-hover table-striped align-middle">
-        <thead className="table-dark">
+    <div className="vds-zones-table-wrap">
+      <style>{COPY_KEYFRAMES}</style>
+      <table className="vds-zones-table">
+        <thead>
           <tr>
             <th>ID</th>
-            <th>Created By</th>
-            <th>Created</th>
-            <th>Status</th>
-            <th>Changes</th>
-            <th>Comments</th>
-            <th>Actions</th>
+            {ignoreAccess && <th>SUBMITTER</th>}
+            <th>CHANGES</th>
+            <th>STATUS</th>
+            <th>DESCRIPTION</th>
+            <th>SUBMITTED</th>
+            <th>ACTIONS</th>
           </tr>
         </thead>
         <tbody>
-          {changes.map((change) => (
-            <tr key={change.id}>
-              <td>
-                <Link to={`/dnschanges/${change.id}`} className="font-monospace text-decoration-none small">
-                  {change.id.substring(0, 8)}…
-                </Link>
-              </td>
-              <td>{change.userName}</td>
-              <td className="small">{formatDateTime(change.createdTimestamp)}</td>
-              <td>
-                <span className={`badge ${STATUS_CLASS[change.status] ?? 'bg-secondary'}`}>
-                  {change.status}
-                </span>
-              </td>
-              <td>
-                <span className="badge bg-light text-dark border">
-                  {change.totalChanges}
-                </span>
-              </td>
-              <td className="text-muted small">{change.comments ?? '—'}</td>
-              <td>
-                {onCancel && (change.status === 'Pending' || change.status === 'PendingReview') && (
-                  <button
-                    className="btn btn-sm btn-outline-danger"
-                    onClick={() => onCancel(change.id)}
-                  >
-                    Cancel
-                  </button>
+          {changes.map((change) => {
+            // Cancel is owner-only — the API rejects cancel attempts from
+            // anyone other than the original submitter, even super users.
+            const isPendingReview =
+              change.approvalStatus === "PendingReview" ||
+              change.status === "PendingReview";
+            const isOwner =
+              Boolean(currentUserId) && change.userId === currentUserId;
+            const canCancel = isPendingReview && isOwner;
+
+            return (
+              <tr key={change.id}>
+                {/* Full UUID is preserved in the title attr and available via
+                    the clipboard button; showing only 8 chars keeps the table
+                    readable without wrapping on smaller viewports. */}
+                <td style={{ wordBreak: "break-all" }}>
+                  <div className="d-flex align-items-start gap-1 flex-wrap">
+                    <Link
+                      to={`/dnschanges/${change.id}`}
+                      state={
+                        fromTab || currentPaging
+                          ? { fromTab, paging: currentPaging }
+                          : undefined
+                      }
+                      className="text-decoration-none small fw-semibold vds-table-primary"
+                      style={{ wordBreak: "break-all" }}
+                    >
+                      {change.id}
+                    </Link>
+                    <button
+                      type="button"
+                      className="btn btn-link btn-sm p-0"
+                      title="Copy ID"
+                      style={{
+                        lineHeight: 1,
+                        fontSize: "0.78rem",
+                        color: copiedId === change.id ? "#16a34a" : "#94a3b8",
+                        transition: "color 0.15s",
+                      }}
+                      onClick={() => handleCopyId(change.id)}
+                    >
+                      {copiedId === change.id ? (
+                        <i
+                          key="check"
+                          className="bi bi-check2"
+                          style={{
+                            display: "inline-block",
+                            animation:
+                              "vdsCopiedCheck 0.35s cubic-bezier(0.175,0.885,0.32,1.275) forwards",
+                          }}
+                        />
+                      ) : (
+                        <i key="copy" className="bi bi-copy" />
+                      )}
+                    </button>
+                  </div>
+                </td>
+                {ignoreAccess && (
+                  <td>
+                    <span className="d-flex align-items-center gap-1">
+                      <i
+                        className="bi bi-person-circle vds-table-secondary"
+                        style={{ fontSize: "0.9rem" }}
+                      />
+                      <span className="small vds-table-secondary">
+                        {change.userName}
+                      </span>
+                    </span>
+                  </td>
                 )}
-              </td>
-            </tr>
-          ))}
+                <td>
+                  <span className="vds-count-badge">{change.totalChanges}</span>
+                </td>
+                <td>
+                  <span
+                    className={`vds-status-badge ${changeStatusClass(change.status)}`}
+                  >
+                    {changeStatusLabel(change.status)}
+                  </span>
+                </td>
+                <td
+                  className="vds-table-secondary small"
+                  style={{ overflowWrap: "break-word", maxWidth: 250 }}
+                >
+                  {change.comments || (
+                    <span className="vds-table-placeholder">{"\u2014"}</span>
+                  )}
+                </td>
+                <td className="vds-table-secondary small">
+                  {formatDateTime(change.createdTimestamp)}
+                </td>
+                <td>
+                  <div className="d-flex gap-1 flex-nowrap">
+                    <Link
+                      to={`/dnschanges/${change.id}`}
+                      state={
+                        fromTab || currentPaging
+                          ? { fromTab, paging: currentPaging }
+                          : undefined
+                      }
+                      className="vds-action-btn vds-action-btn--view"
+                      title="View"
+                    >
+                      <i className="bi bi-eye-fill" />
+                    </Link>
+                    {canCancel && onCancel && (
+                      <button
+                        type="button"
+                        className="vds-action-btn vds-action-btn--cancel"
+                        title="Cancel"
+                        onClick={() => onCancel(change)}
+                      >
+                        <i className="bi bi-x-circle" />
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
