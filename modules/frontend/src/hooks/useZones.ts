@@ -14,49 +14,27 @@
  * limitations under the License.
  */
 
-import { useState, useCallback, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { zonesService } from "../services/zonesService";
-import { usePaging } from "./usePaging";
-import { useAlerts } from "../contexts/AlertContext";
-import type { Zone, DeletedZoneChange } from "../types/zone";
-import type { PagingState } from "../types/common";
+import { useState, useCallback, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { zonesService } from '../services/zonesService';
+import { usePaging } from './usePaging';
+import { useAlerts } from '../contexts/AlertContext';
+import type { Zone, DeletedZoneChange } from '../types/zone';
+import type { PagingState } from '../types/common';
 
-export function useZones(
-  ignoreAccess = false,
-  includeReverse = true,
-  initialPaging?: Partial<PagingState>,
-) {
-  const [query, setQuery] = useState("");
+export function useZones(ignoreAccess = false, includeReverse = true, initialPaging?: Partial<PagingState>) {
+  const [query, setQuery] = useState('');
   const [searchByAdminGroup, setSearchByAdminGroup] = useState(false);
-  const [accessFilter, setAccessFilter] = useState<number | undefined>(
-    undefined,
-  );
-  const lastSearch = useRef({ query: "", byAdminGroup: false });
+  const [accessFilter, setAccessFilter] = useState<number | undefined>(undefined);
+  const lastSearch = useRef({ query: '', byAdminGroup: false });
   const lastAccessFilter = useRef<number | undefined>(undefined);
-  const {
-    paging,
-    nextPageUpdate,
-    prevPageUpdate,
-    getPrevStartFrom,
-    resetPaging,
-    nextPageEnabled,
-    prevPageEnabled,
-    getPanelTitle,
-  } = usePaging(100, initialPaging as PagingState | undefined);
+  const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
+    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100, initialPaging);
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: [
-      "zones",
-      ignoreAccess,
-      includeReverse,
-      query,
-      searchByAdminGroup,
-      accessFilter,
-      paging.next,
-    ],
+    queryKey: ['zones', ignoreAccess, includeReverse, query, searchByAdminGroup, accessFilter, paging.next],
     queryFn: async () => {
       const res = await zonesService.getZones(
         paging.maxItems,
@@ -65,7 +43,7 @@ export function useZones(
         searchByAdminGroup,
         ignoreAccess,
         includeReverse,
-        accessFilter,
+        accessFilter
       );
       return res.data;
     },
@@ -74,19 +52,13 @@ export function useZones(
   const createZoneMutation = useMutation({
     mutationFn: (zone: Zone) => zonesService.createZone(zone),
     onSuccess: () => {
-      addAlert("success", "Zone created successfully");
-      void queryClient.invalidateQueries({ queryKey: ["zones"] });
+      addAlert('success', 'Zone created successfully');
+      void queryClient.invalidateQueries({ queryKey: ['zones'] });
     },
     onError: (err: unknown) => {
-      const error = err as {
-        response?: {
-          data?: string | { errors?: string[] };
-          statusText?: string;
-          status?: number;
-        };
-      };
+      const error = err as { response?: { data?: string | { errors?: string[] }; statusText?: string; status?: number } };
       const msg = getErrorMessage(error);
-      addAlert("danger", msg);
+      addAlert('danger', msg);
     },
   });
 
@@ -94,52 +66,36 @@ export function useZones(
     mutationFn: ({ id, zone }: { id: string; zone: Zone }) =>
       zonesService.updateZone(id, zone),
     onSuccess: () => {
-      addAlert("success", "Zone updated successfully");
-      void queryClient.invalidateQueries({ queryKey: ["zones"] });
+      addAlert('success', 'Zone updated successfully');
+      void queryClient.invalidateQueries({ queryKey: ['zones'] });
     },
     onError: (err: unknown) => {
-      const error = err as {
-        response?: {
-          data?: string | { errors?: string[] };
-          statusText?: string;
-          status?: number;
-        };
-      };
-      addAlert("danger", getErrorMessage(error));
+      const error = err as { response?: { data?: string | { errors?: string[] }; statusText?: string; status?: number } };
+      addAlert('danger', getErrorMessage(error));
     },
   });
 
   const deleteZoneMutation = useMutation({
     mutationFn: (id: string) => zonesService.deleteZone(id),
     onSuccess: () => {
-      addAlert("success", "Zone deleted successfully");
-      void queryClient.invalidateQueries({ queryKey: ["zones"] });
+      addAlert('success', 'Zone deleted successfully');
+      void queryClient.invalidateQueries({ queryKey: ['zones'] });
     },
     onError: (err: unknown) => {
-      const error = err as {
-        response?: {
-          data?: string | { errors?: string[] };
-          statusText?: string;
-          status?: number;
-        };
-      };
-      addAlert("danger", getErrorMessage(error));
+      const error = err as { response?: { data?: string | { errors?: string[] }; statusText?: string; status?: number } };
+      addAlert('danger', getErrorMessage(error));
     },
   });
 
   const search = useCallback(
     (q: string, byAdminGroup = false) => {
-      if (
-        lastSearch.current.query === q &&
-        lastSearch.current.byAdminGroup === byAdminGroup
-      )
-        return;
+      if (lastSearch.current.query === q && lastSearch.current.byAdminGroup === byAdminGroup) return;
       lastSearch.current = { query: q, byAdminGroup };
       setQuery(q);
       setSearchByAdminGroup(byAdminGroup);
       resetPaging();
     },
-    [resetPaging],
+    [resetPaging]
   );
 
   const nextPage = useCallback(() => {
@@ -180,29 +136,20 @@ export function useZones(
 }
 
 export function useDeletedZones(ignoreAccess = false, enabled = true) {
-  const [query, setQuery] = useState("");
-  const [accessFilter, setAccessFilter] = useState<number | undefined>(
-    undefined,
-  );
-  const {
-    paging,
-    nextPageUpdate,
-    prevPageUpdate,
-    getPrevStartFrom,
-    resetPaging,
-    prevPageEnabled,
-    getPanelTitle,
-  } = usePaging(100);
+  const [query, setQuery] = useState('');
+  const [accessFilter, setAccessFilter] = useState<number | undefined>(undefined);
+  const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
+    prevPageEnabled, getPanelTitle } = usePaging(100);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["deleted-zones", ignoreAccess, query, accessFilter, paging.next],
+    queryKey: ['deleted-zones', ignoreAccess, query, accessFilter, paging.next],
     queryFn: async () => {
       const res = await zonesService.getDeletedZones(
         paging.maxItems,
         paging.next as string | undefined,
         query,
         ignoreAccess,
-        accessFilter,
+        accessFilter
       );
       return res.data;
     },
@@ -214,7 +161,7 @@ export function useDeletedZones(ignoreAccess = false, enabled = true) {
       setQuery(q);
       resetPaging();
     },
-    [resetPaging],
+    [resetPaging]
   );
 
   const nextPage = useCallback(() => {
@@ -237,33 +184,19 @@ export function useDeletedZones(ignoreAccess = false, enabled = true) {
     pageNum: paging.pageNum,
     getPanelTitle,
     resetPaging,
-    setAccessFilter: (f: number | undefined) => {
-      setAccessFilter(f);
-      resetPaging();
-    },
+    setAccessFilter: (f: number | undefined) => { setAccessFilter(f); resetPaging(); },
   };
 }
 
-function getErrorMessage(error: {
-  response?: {
-    data?: string | { errors?: string[] };
-    statusText?: string;
-    status?: number;
-  };
-}): string {
+function getErrorMessage(error: { response?: { data?: string | { errors?: string[] }; statusText?: string; status?: number } }): string {
   const status = error.response?.status ?? 0;
-  const statusText = error.response?.statusText ?? "Unknown";
+  const statusText = error.response?.statusText ?? 'Unknown';
   const data = error.response?.data;
   let msg = `HTTP ${status} (${statusText}): `;
-  if (
-    data &&
-    typeof data === "object" &&
-    "errors" in data &&
-    Array.isArray(data.errors)
-  ) {
-    msg += data.errors.join("\n");
-  } else if (typeof data === "string") {
-    msg += data.replace(/^"|"$/g, "");
+  if (data && typeof data === 'object' && 'errors' in data && Array.isArray(data.errors)) {
+    msg += data.errors.join('\n');
+  } else if (typeof data === 'string') {
+    msg += data.replace(/^"|"$/g, '');
   }
   return msg;
 }

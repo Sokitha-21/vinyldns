@@ -37,6 +37,7 @@ import { RecordsPage } from './pages/RecordsPage';
 import { DnsChangesPage } from './pages/DnsChangesPage';
 import { DnsChangeDetailPage } from './pages/DnsChangeDetailPage';
 import { DnsChangeNewPage } from './pages/DnsChangeNewPage';
+import { AdminPage } from './pages/AdminPage';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './styles/vinyldns.css';
@@ -139,6 +140,16 @@ export function App() {
                 </AppLayout>
               }
             />
+
+            <Route
+              path="/admin"
+              element={
+                <AppLayout>
+                  <AdminPage />
+                </AppLayout>
+              }
+            />
+
             {/* Default redirect */}
             <Route path="/" element={<Navigate to="/zones" replace />} />
             <Route path="/index" element={<Navigate to="/zones" replace />} />
