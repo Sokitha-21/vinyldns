@@ -489,7 +489,6 @@ export function DnsChangeDetailPage() {
   const handleCopyId = () => {
     if (!change) return;
     void copyToClipboard(change.id).then((ok) => {
-      if (!ok) return;
       setIdCopied(true);
       setTimeout(() => setIdCopied(false), 2000);
     });
