@@ -23,7 +23,7 @@ export interface ZoneConnection {
 }
 
 export interface AclRule {
-  accessLevel: "NoAccess" | "Read" | "Write" | "Delete";
+  accessLevel: 'NoAccess' | 'Read' | 'Write' | 'Delete';
   description?: string;
   userId?: string;
   groupId?: string;
@@ -31,7 +31,7 @@ export interface AclRule {
   recordTypes?: string[];
   displayName?: string;
   userName?: string;
-  priority?: "User" | "Group" | "All Users";
+  priority?: 'User' | 'Group' | 'All Users';
 }
 
 export interface ZoneAcl {
@@ -42,7 +42,7 @@ export interface Zone {
   id: string;
   name: string;
   email: string;
-  status: "Active" | "Deleted" | "Syncing" | "PendingDelete" | "PendingUpdate";
+  status: 'Active' | 'Deleted' | 'Syncing' | 'PendingDelete' | 'PendingUpdate';
   created?: string;
   updated?: string;
   latestSync?: string;
@@ -56,14 +56,6 @@ export interface Zone {
   recurrenceSchedule?: string;
   accessLevel?: string;
   account?: string;
-}
-
-export interface ZoneDetails {
-  name: string;
-  email: string;
-  status: string;
-  adminGroupId: string;
-  adminGroupName: string;
 }
 
 export interface ZoneListResponse {

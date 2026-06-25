@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import React from "react";
+import React from 'react';
 
 interface PaginationProps {
   onPrev: () => void;
@@ -23,12 +23,9 @@ interface PaginationProps {
   nextEnabled: boolean;
   panelTitle?: string;
   rangeLabel?: string;
-  /** Total count displayed as "X–Y of Z". Shown alongside rangeLabel when provided. */
-  totalCount?: number;
 }
 
 interface PaginatedSectionProps extends PaginationProps {
-  /** When false the pagination bars are hidden entirely */
   show: boolean;
   children: React.ReactNode;
 }
@@ -37,11 +34,7 @@ interface PaginatedSectionProps extends PaginationProps {
  * Renders a top Pagination bar, then children, then a bottom Pagination bar.
  * Both bars are only rendered when `show` is true.
  */
-export function PaginatedSection({
-  show,
-  children,
-  ...paginationProps
-}: PaginatedSectionProps) {
+export function PaginatedSection({ show, children, ...paginationProps }: PaginatedSectionProps) {
   return (
     <>
       {show && <Pagination {...paginationProps} />}
@@ -51,51 +44,41 @@ export function PaginatedSection({
   );
 }
 
-export function Pagination({
-  onPrev,
-  onNext,
-  prevEnabled,
-  nextEnabled,
-  panelTitle,
-  rangeLabel,
-  totalCount,
-}: PaginationProps) {
+export function Pagination({ onPrev, onNext, prevEnabled, nextEnabled, panelTitle, rangeLabel }: PaginationProps) {
+  const showPrev = prevEnabled;
+  const showNext = nextEnabled;
   const label = rangeLabel ?? panelTitle;
-  // Build the displayed label — append " of <total>" when a totalCount is given.
-  const displayLabel = label
-    ? totalCount != null
-      ? `${label} of ${totalCount}`
-      : label
-    : undefined;
 
   return (
-    <div
-      className="d-flex justify-content-end align-items-center gap-2 my-2"
-      style={{ minHeight: 32 }}
-    >
-      {prevEnabled && (
-        <button className="vds-pagination-btn" onClick={onPrev}>
-          <i className="bi bi-chevron-left" style={{ fontSize: "0.75rem" }} />
+    <div className="d-flex justify-content-end align-items-center gap-2 my-2" style={{ minHeight: 32 }}>
+      {showPrev && (
+        <button
+          className="vds-pagination-btn"
+          onClick={onPrev}
+        >
+          <i className="bi bi-chevron-left" style={{ fontSize: '0.75rem' }} />
           <span>Previous</span>
         </button>
       )}
-      {displayLabel && (
-        <span className="vds-pagination-label">
-          {!rangeLabel && (
-            <i
-              className="bi bi-layers"
-              style={{ fontSize: "0.7rem", marginRight: 3 }}
-            />
-          )}
-          {displayLabel}
+      {label && (
+        <span
+          className="vds-pagination-label"
+          style={{ opacity: showPrev || showNext ? 1 : 0, pointerEvents: 'none' }}
+        >
+          {!rangeLabel && <i className="bi bi-layers" style={{ fontSize: '0.7rem', marginRight: 3 }} />}
+          {label}
         </span>
       )}
-      {nextEnabled && (
-        <button className="vds-pagination-btn" onClick={onNext}>
+      {showNext && (
+        <button
+          className="vds-pagination-btn"
+          onClick={onNext}
+        >
           <span>Next</span>
-          <i className="bi bi-chevron-right" style={{ fontSize: "0.75rem" }} />
+          <i className="bi bi-chevron-right" style={{ fontSize: '0.75rem' }} />
         </button>
       )}
     </div>
   );
 }
+
