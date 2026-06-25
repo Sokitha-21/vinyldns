@@ -299,17 +299,12 @@ export function ZoneDetailPage() {
       setZoneTabAlert({ type: "success", msg: "Zone updated successfully." });
       setTimeout(() => setZoneTabAlert(null), 3000);
     },
-    onError: (err: unknown) => {
-      const error = err as { response?: { data?: string | { errors?: string[] } } };
-      const data = error.response?.data;
-      let msg = 'Failed to update zone.';
-      if (data && typeof data === 'object' && 'errors' in data && Array.isArray(data.errors)) {
-        msg = data.errors.join('\n');
-      } else if (typeof data === 'string') {
-        msg = data.replace(/^"|"$/g, '');
-      }
-      setZoneTabAlert({ type: 'danger', msg });
-      setTimeout(() => setZoneTabAlert(null), 8000);
+    onError: () => {
+      setZoneTabAlert({
+        type: "danger",
+        msg: "Failed to update zone. Please try again.",
+      });
+      setTimeout(() => setZoneTabAlert(null), 5000);
     },
   });
 
@@ -320,17 +315,9 @@ export function ZoneDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ["deleted-zones"] });
       navigate("/zones");
     },
-    onError: (err: unknown) => {
-      const error = err as { response?: { data?: string | { errors?: string[] } } };
-      const data = error.response?.data;
-      let msg = 'Failed to abandon zone.';
-      if (data && typeof data === 'object' && 'errors' in data && Array.isArray(data.errors)) {
-        msg = data.errors.join('\n');
-      } else if (typeof data === 'string') {
-        msg = data.replace(/^"|"$/g, '');
-      }
-      setZoneTabAlert({ type: 'danger', msg });
-      setTimeout(() => setZoneTabAlert(null), 8000);
+    onError: () => {
+      setZoneTabAlert({ type: "danger", msg: "Failed to abandon zone." });
+      setTimeout(() => setZoneTabAlert(null), 5000);
     },
   });
 
@@ -389,18 +376,9 @@ export function ZoneDetailPage() {
       setZoneTabAlert({ type: "success", msg: "ACL rule deleted." });
       setTimeout(() => setZoneTabAlert(null), 3000);
     },
-    onError: (err: unknown) => {
-      const error = err as { response?: { data?: string | { errors?: string[] } } };
-      const data = error.response?.data;
-      let msg = 'Failed to delete ACL rule.';
-      if (data && typeof data === 'object' && 'errors' in data && Array.isArray(data.errors)) {
-        msg = data.errors.join('\n');
-      } else if (typeof data === 'string') {
-        msg = data.replace(/^"|"$/g, '');
-      }
-      setAclDeleteModal(null);
-      setAclAlert({ type: 'danger', msg });
-      setTimeout(() => setAclAlert(null), 8000);
+    onError: () => {
+      setZoneTabAlert({ type: "danger", msg: "Failed to delete ACL rule." });
+      setTimeout(() => setZoneTabAlert(null), 5000);
     },
   });
 
@@ -450,17 +428,15 @@ export function ZoneDetailPage() {
       );
       setTimeout(() => setOwnershipAlert(null), 5000);
     },
-    onError: (err: unknown) => {
-      const error = err as { response?: { data?: string | { errors?: string[] } } };
-      const data = error.response?.data;
-      let msg = 'Could not submit the ownership request.';
-      if (data && typeof data === 'object' && 'errors' in data && Array.isArray(data.errors)) {
-        msg = data.errors.join('\n');
-      } else if (typeof data === 'string') {
-        msg = data.replace(/^"|"$/g, '');
-      }
-      setOwnershipAlert({ type: 'danger', title: 'Request Failed', icon: 'bi-exclamation-octagon-fill', accent: '#dc2626', msg });
-      setTimeout(() => setOwnershipAlert(null), 8000);
+    onError: () => {
+      setOwnershipAlert({
+        type: "danger",
+        title: "Request Failed",
+        icon: "bi-exclamation-octagon-fill",
+        accent: "#dc2626",
+        msg: "Could not submit the ownership request. Please try again.",
+      });
+      setTimeout(() => setOwnershipAlert(null), 6000);
     },
   });
 
@@ -484,17 +460,15 @@ export function ZoneDetailPage() {
       });
       setTimeout(() => setOwnershipAlert(null), 5000);
     },
-    onError: (err: unknown) => {
-      const error = err as { response?: { data?: string | { errors?: string[] } } };
-      const data = error.response?.data;
-      let msg = 'Could not approve the ownership transfer.';
-      if (data && typeof data === 'object' && 'errors' in data && Array.isArray(data.errors)) {
-        msg = data.errors.join('\n');
-      } else if (typeof data === 'string') {
-        msg = data.replace(/^"|"$/g, '');
-      }
-      setOwnershipAlert({ type: 'danger', title: 'Approval Failed', icon: 'bi-exclamation-octagon-fill', accent: '#dc2626', msg });
-      setTimeout(() => setOwnershipAlert(null), 8000);
+    onError: () => {
+      setOwnershipAlert({
+        type: "danger",
+        title: "Approval Failed",
+        icon: "bi-exclamation-octagon-fill",
+        accent: "#dc2626",
+        msg: "Could not approve the ownership transfer. Please try again.",
+      });
+      setTimeout(() => setOwnershipAlert(null), 6000);
     },
   });
 
@@ -518,17 +492,15 @@ export function ZoneDetailPage() {
       });
       setTimeout(() => setOwnershipAlert(null), 5000);
     },
-    onError: (err: unknown) => {
-      const error = err as { response?: { data?: string | { errors?: string[] } } };
-      const data = error.response?.data;
-      let msg = 'Could not reject the ownership transfer.';
-      if (data && typeof data === 'object' && 'errors' in data && Array.isArray(data.errors)) {
-        msg = data.errors.join('\n');
-      } else if (typeof data === 'string') {
-        msg = data.replace(/^"|"$/g, '');
-      }
-      setOwnershipAlert({ type: 'danger', title: 'Rejection Failed', icon: 'bi-exclamation-octagon-fill', accent: '#dc2626', msg });
-      setTimeout(() => setOwnershipAlert(null), 8000);
+    onError: () => {
+      setOwnershipAlert({
+        type: "danger",
+        title: "Rejection Failed",
+        icon: "bi-exclamation-octagon-fill",
+        accent: "#dc2626",
+        msg: "Could not reject the ownership transfer. Please try again.",
+      });
+      setTimeout(() => setOwnershipAlert(null), 6000);
     },
   });
 
@@ -552,17 +524,15 @@ export function ZoneDetailPage() {
       });
       setTimeout(() => setOwnershipAlert(null), 5000);
     },
-    onError: (err: unknown) => {
-      const error = err as { response?: { data?: string | { errors?: string[] } } };
-      const data = error.response?.data;
-      let msg = 'Could not cancel the ownership request.';
-      if (data && typeof data === 'object' && 'errors' in data && Array.isArray(data.errors)) {
-        msg = data.errors.join('\n');
-      } else if (typeof data === 'string') {
-        msg = data.replace(/^"|"$/g, '');
-      }
-      setOwnershipAlert({ type: 'danger', title: 'Cancel Failed', icon: 'bi-exclamation-octagon-fill', accent: '#dc2626', msg });
-      setTimeout(() => setOwnershipAlert(null), 8000);
+    onError: () => {
+      setOwnershipAlert({
+        type: "danger",
+        title: "Cancel Failed",
+        icon: "bi-exclamation-octagon-fill",
+        accent: "#dc2626",
+        msg: "Could not cancel the ownership request. Please try again.",
+      });
+      setTimeout(() => setOwnershipAlert(null), 6000);
     },
   });
 
