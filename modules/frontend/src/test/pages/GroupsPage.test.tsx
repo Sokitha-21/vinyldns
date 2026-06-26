@@ -80,9 +80,7 @@ beforeEach(() => {
 describe("<GroupsPage />", () => {
   it("renders the page header and primary actions", () => {
     renderWithProviders(<GroupsPage />);
-    expect(
-      screen.getByRole("heading", { name: "Groups" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Groups" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /New Group/ }),
     ).toBeInTheDocument();
@@ -102,9 +100,7 @@ describe("<GroupsPage />", () => {
   it("opens the create group modal when New Group is clicked", async () => {
     renderWithProviders(<GroupsPage />);
     await userEvent.click(screen.getByRole("button", { name: /New Group/ }));
-    expect(
-      await screen.findByText("Create New Group"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Create New Group")).toBeInTheDocument();
   });
 
   it("renders the group search input", () => {

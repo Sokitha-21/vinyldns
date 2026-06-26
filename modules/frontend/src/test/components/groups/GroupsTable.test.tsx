@@ -23,7 +23,10 @@ import { renderWithProviders } from "../../utils/renderWithProviders";
 import { buildGroup, frodoMember } from "../../fixtures/testData";
 import type { Group } from "../../../types/group";
 
-function setup(groups: Group[], overrides: Partial<Parameters<typeof GroupsTable>[0]> = {}) {
+function setup(
+  groups: Group[],
+  overrides: Partial<Parameters<typeof GroupsTable>[0]> = {},
+) {
   const onEdit = vi.fn();
   const onDelete = vi.fn();
   const isGroupAdmin = overrides.isGroupAdmin ?? (() => true);

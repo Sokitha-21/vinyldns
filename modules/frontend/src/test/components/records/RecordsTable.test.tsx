@@ -64,7 +64,9 @@ describe("<RecordsTable />", () => {
   });
 
   it("renders the private zone banner and pill when not shared", () => {
-    renderWithProviders(<RecordsTable records={[record()]} isSharedZone={false} />);
+    renderWithProviders(
+      <RecordsTable records={[record()]} isSharedZone={false} />,
+    );
 
     expect(screen.getByText("Private Zone")).toBeInTheDocument();
     expect(
@@ -114,8 +116,16 @@ describe("<RecordsTable />", () => {
     renderWithProviders(
       <RecordsTable
         records={[
-          record({ id: "r-cname", type: "CNAME", records: [{ cname: "alias.example.com." }] }),
-          record({ id: "r-mx", type: "MX", records: [{ preference: 10, exchange: "mail.example.com." }] }),
+          record({
+            id: "r-cname",
+            type: "CNAME",
+            records: [{ cname: "alias.example.com." }],
+          }),
+          record({
+            id: "r-mx",
+            type: "MX",
+            records: [{ preference: 10, exchange: "mail.example.com." }],
+          }),
           record({ id: "r-txt", type: "TXT", records: [{ text: "hello" }] }),
         ]}
       />,

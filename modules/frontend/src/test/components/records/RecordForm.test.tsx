@@ -61,7 +61,10 @@ describe("<RecordForm />", () => {
   it("submits a valid A record", async () => {
     const { onSubmit } = setup();
     await userEvent.type(screen.getByPlaceholderText("e.g. www"), "www");
-    await userEvent.type(screen.getByPlaceholderText("192.168.1.1"), "10.0.0.1");
+    await userEvent.type(
+      screen.getByPlaceholderText("192.168.1.1"),
+      "10.0.0.1",
+    );
     await userEvent.click(screen.getByRole("button", { name: /Add Record/ }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
@@ -80,13 +83,17 @@ describe("<RecordForm />", () => {
       initialData: buildRecordSet({ name: "test", type: "A", ttl: 600 }),
     });
     expect(screen.getByDisplayValue("test")).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Save Changes/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Save Changes/ }),
+    ).toBeInTheDocument();
   });
 
   it("renders MX-specific fields after switching type", async () => {
     setup();
     await userEvent.selectOptions(screen.getByRole("combobox"), "MX");
-    expect(screen.getByPlaceholderText("mail.example.com.")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("mail.example.com."),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Add Another/ }),
     ).toBeInTheDocument();
@@ -111,7 +118,10 @@ describe("<RecordForm />", () => {
       allGroups: [buildGroup({ id: "g-1", name: "hobbits" })],
     });
     await userEvent.type(screen.getByPlaceholderText("e.g. www"), "www");
-    await userEvent.type(screen.getByPlaceholderText("192.168.1.1"), "10.0.0.1");
+    await userEvent.type(
+      screen.getByPlaceholderText("192.168.1.1"),
+      "10.0.0.1",
+    );
     await userEvent.click(screen.getByRole("button", { name: /Add Record/ }));
 
     expect(
@@ -140,5 +150,87 @@ describe("<RecordForm />", () => {
     setup({ isLoading: true });
     const submit = screen.getByRole("button", { name: /Adding…/ });
     expect(submit).toBeDisabled();
+  });
+
+  describe("record-type data fields", () => {
+    it("renders an IP Address field for AAAA records", async () => {
+      setup();
+      await userEvent.selectOptions(screen.getByRole("combobox"), "AAAA");
+      expect(screen.getByText("IP Address")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("2001:db8::1")).toBeInTheDocument();
+    });
+
+    it("renders a CNAME Target field for CNAME records", async () => {
+      setup();
+      await userEvent.selectOptions(screen.getByRole("combobox"), "CNAME");
+      expect(screen.getByText("CNAME Target FQDN")).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText("target.example.com."),
+      ).toBeInTheDocument();
+    });
+
+    it("renders a Text field for TXT records", async () => {
+      setup();
+      await userEvent.selectOptions(screen.getByRole("combobox"), "TXT");
+      expect(screen.getByText("Text")).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText("v=spf1 include:example.com ~all"),
+      ).toBeInTheDocument();
+    });
+
+    it("renders priority, weight, port and target fields for SRV records", async () => {
+      setup();
+      await userEvent.selectOptions(screen.getByRole("combobox"), "SRV");
+      expect(screen.getByText("Priority")).toBeInTheDocument();
+      expect(screen.getByText("Weight")).toBeInTheDocument();
+      expect(screen.getByText("Port")).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText("service.example.com."),
+      ).toBeInTheDocument();
+    });
+
+    it("renders SOA fields for SOA records", () => {
+      setup({
+        mode: "edit",
+        initialData: buildRecordSet({ name: "@", type: "SOA" }),
+      });
+      expect(screen.getByText("Primary NS (mname)")).toBeInTheDocument();
+      expect(screen.getByText("Responsible (rname)")).toBeInTheDocument();
+      expect(screen.getByText("Minimum TTL")).toBeInTheDocument();
+    });
+
+    it("renders flags, tag and value fields for CAA records", () => {
+      setup({
+        mode: "edit",
+        initialData: buildRecordSet({ name: "@", type: "CAA" }),
+      });
+      expect(screen.getByText("Flags")).toBeInTheDocument();
+      expect(screen.getByText("Tag")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("ca.example.com")).toBeInTheDocument();
+    });
+
+    it("renders algorithm, type and fingerprint fields for SSHFP records", async () => {
+      setup();
+      await userEvent.selectOptions(screen.getByRole("combobox"), "SSHFP");
+      expect(screen.getByText("Algorithm")).toBeInTheDocument();
+      expect(screen.getByText("FP Type")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("abc123...")).toBeInTheDocument();
+    });
+
+    it("renders key tag, algorithm, digest type and digest fields for DS records", async () => {
+      setup();
+      await userEvent.selectOptions(screen.getByRole("combobox"), "DS");
+      expect(screen.getByText("Key Tag")).toBeInTheDocument();
+      expect(screen.getByText("Digest Type")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("hex digest")).toBeInTheDocument();
+    });
+
+    it("renders order, preference and service fields for NAPTR records", async () => {
+      setup();
+      await userEvent.selectOptions(screen.getByRole("combobox"), "NAPTR");
+      expect(screen.getByText("Order")).toBeInTheDocument();
+      expect(screen.getByText("Preference")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("E2U+sip")).toBeInTheDocument();
+    });
   });
 });

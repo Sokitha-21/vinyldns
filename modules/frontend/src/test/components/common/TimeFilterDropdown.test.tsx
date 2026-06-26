@@ -108,9 +108,8 @@ describe("<TimeFilterDropdown />", () => {
     const { onDateFromChange, onDateToChange } = setup({ value: "custom" });
     await userEvent.click(screen.getByRole("button", { name: /Custom Range/ }));
 
-    const dateInputs = document.querySelectorAll<HTMLInputElement>(
-      'input[type="date"]',
-    );
+    const dateInputs =
+      document.querySelectorAll<HTMLInputElement>('input[type="date"]');
     expect(dateInputs).toHaveLength(2);
 
     await userEvent.type(dateInputs[0], "2024-03-01");

@@ -27,9 +27,7 @@ describe("<ZonesTable />", () => {
   it("renders the default empty state", () => {
     renderWithProviders(<ZonesTable zones={[]} />);
     expect(screen.getByText("No zones found")).toBeInTheDocument();
-    expect(
-      screen.getByText(/You do not own any zones/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/You do not own any zones/)).toBeInTheDocument();
   });
 
   it("renders the all-zones empty subtitle when showAllZones is set", () => {
@@ -49,7 +47,9 @@ describe("<ZonesTable />", () => {
 
   it("links the zone name when the user has access", () => {
     renderWithProviders(
-      <ZonesTable zones={[buildZone({ accessLevel: "Write" } as Partial<Zone>)]} />,
+      <ZonesTable
+        zones={[buildZone({ accessLevel: "Write" } as Partial<Zone>)]}
+      />,
     );
     expect(
       screen.getByRole("link", { name: "example.com." }),
@@ -59,7 +59,9 @@ describe("<ZonesTable />", () => {
 
   it("renders the zone name as plain text without access", () => {
     renderWithProviders(
-      <ZonesTable zones={[buildZone({ accessLevel: "NoAccess" } as Partial<Zone>)]} />,
+      <ZonesTable
+        zones={[buildZone({ accessLevel: "NoAccess" } as Partial<Zone>)]}
+      />,
     );
     expect(
       screen.queryByRole("link", { name: "example.com." }),
@@ -68,9 +70,7 @@ describe("<ZonesTable />", () => {
   });
 
   it("shows a Shared access badge for shared zones", () => {
-    renderWithProviders(
-      <ZonesTable zones={[buildZone({ shared: true })]} />,
-    );
+    renderWithProviders(<ZonesTable zones={[buildZone({ shared: true })]} />);
     expect(screen.getByText("Shared")).toBeInTheDocument();
   });
 
@@ -97,14 +97,24 @@ describe("<ZonesTable />", () => {
     renderWithProviders(
       <ZonesTable
         zones={[
-          buildZone({ id: "z-b", name: "bravo.com.", accessLevel: "Write" } as Partial<Zone>),
-          buildZone({ id: "z-a", name: "alpha.com.", accessLevel: "Write" } as Partial<Zone>),
+          buildZone({
+            id: "z-b",
+            name: "bravo.com.",
+            accessLevel: "Write",
+          } as Partial<Zone>),
+          buildZone({
+            id: "z-a",
+            name: "alpha.com.",
+            accessLevel: "Write",
+          } as Partial<Zone>),
         ]}
       />,
     );
 
     await userEvent.click(screen.getByText(/Zone Name/));
-    const links = screen.getAllByRole("link", { name: /alpha.com.|bravo.com./ });
+    const links = screen.getAllByRole("link", {
+      name: /alpha.com.|bravo.com./,
+    });
     expect(links[0]).toHaveTextContent("alpha.com.");
   });
 });

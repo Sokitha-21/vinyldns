@@ -23,10 +23,16 @@ import { renderWithProviders } from "../utils/renderWithProviders";
 import { buildZone } from "../fixtures/testData";
 import type { Zone } from "../../types/zone";
 
-const zonesHook = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
-const deletedHook = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
+const zonesHook = vi.hoisted(() => ({
+  current: {} as Record<string, unknown>,
+}));
+const deletedHook = vi.hoisted(() => ({
+  current: {} as Record<string, unknown>,
+}));
 const profileHolder = vi.hoisted(() => ({
-  current: { profile: { id: "user-1", isSuper: true } as Record<string, unknown> | null },
+  current: {
+    profile: { id: "user-1", isSuper: true } as Record<string, unknown> | null,
+  },
 }));
 
 vi.mock("../../hooks/useZones", () => ({
@@ -41,7 +47,9 @@ vi.mock("../../contexts/ProfileContext", () => ({
 vi.mock("../../services/zonesService", () => ({
   zonesService: {
     getZones: vi.fn().mockResolvedValue({ data: { zones: [] } }),
-    getDeletedZones: vi.fn().mockResolvedValue({ data: { zonesDeletedInfo: [] } }),
+    getDeletedZones: vi
+      .fn()
+      .mockResolvedValue({ data: { zonesDeletedInfo: [] } }),
     getBackendIds: vi.fn().mockResolvedValue({ data: ["default"] }),
     countZones: vi.fn().mockResolvedValue({
       data: { myZonesCount: 1, totalCount: 3, abandonedCount: 0 },
@@ -57,7 +65,12 @@ vi.mock("../../services/groupsService", () => ({
 
 function baseZonesHook(overrides: Record<string, unknown> = {}) {
   return {
-    zones: [buildZone({ name: "alpha.example.com.", accessLevel: "Write" } as Partial<Zone>)],
+    zones: [
+      buildZone({
+        name: "alpha.example.com.",
+        accessLevel: "Write",
+      } as Partial<Zone>),
+    ],
     isLoading: false,
     query: "",
     search: vi.fn(),
@@ -141,9 +154,7 @@ describe("<ZonesPage />", () => {
 
   it("opens the connect zone modal", async () => {
     renderWithProviders(<ZonesPage />);
-    await userEvent.click(
-      screen.getByRole("button", { name: /Connect Zone/ }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /Connect Zone/ }));
     await waitFor(() =>
       expect(screen.getByText("Connect to Zone")).toBeInTheDocument(),
     );

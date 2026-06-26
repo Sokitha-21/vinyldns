@@ -111,7 +111,11 @@ describe("useGroups", () => {
 
     it("alerts a parsed server error on failure", async () => {
       mockService.createGroup.mockRejectedValueOnce({
-        response: { status: 409, statusText: "Conflict", data: { errors: ["exists"] } },
+        response: {
+          status: 409,
+          statusText: "Conflict",
+          data: { errors: ["exists"] },
+        },
       });
       const { result } = renderHook(() => useGroups(), {
         wrapper: makeWrapper(),
@@ -170,7 +174,11 @@ describe("useGroups", () => {
 
     it("alerts a string server error on failure", async () => {
       mockService.deleteGroup.mockRejectedValueOnce({
-        response: { status: 400, statusText: "Bad Request", data: '"group in use"' },
+        response: {
+          status: 400,
+          statusText: "Bad Request",
+          data: '"group in use"',
+        },
       });
       const { result } = renderHook(() => useGroups(), {
         wrapper: makeWrapper(),

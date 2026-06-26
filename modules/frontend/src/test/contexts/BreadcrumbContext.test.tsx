@@ -44,10 +44,7 @@ describe("BreadcrumbContext", () => {
 
     it("stores crumbs passed to setCrumbs", () => {
       const { result } = renderHook(() => useBreadcrumbs(), { wrapper });
-      const crumbs: Crumb[] = [
-        { label: "Home", to: "/" },
-        { label: "Zones" },
-      ];
+      const crumbs: Crumb[] = [{ label: "Home", to: "/" }, { label: "Zones" }];
 
       act(() => result.current.setCrumbs(crumbs));
 
@@ -70,7 +67,9 @@ describe("BreadcrumbContext", () => {
         const { crumbs, setCrumbs } = useBreadcrumbs();
         return (
           <div>
-            <button onClick={() => setCrumbs([{ label: "Groups" }])}>set</button>
+            <button onClick={() => setCrumbs([{ label: "Groups" }])}>
+              set
+            </button>
             <span data-testid="label">{crumbs?.[0]?.label ?? "none"}</span>
           </div>
         );

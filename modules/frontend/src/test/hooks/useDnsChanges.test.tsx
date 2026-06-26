@@ -102,7 +102,9 @@ describe("useDnsChanges", () => {
 
   describe("createBatchChange", () => {
     it("alerts success and invalidates the list", async () => {
-      mockService.createBatchChange.mockResolvedValueOnce({ data: { id: "b1" } });
+      mockService.createBatchChange.mockResolvedValueOnce({
+        data: { id: "b1" },
+      });
       const { result } = renderHook(() => useDnsChanges(), {
         wrapper: makeWrapper(),
       });
@@ -135,7 +137,9 @@ describe("useDnsChanges", () => {
         }),
       );
 
-      await waitFor(() => expect(mockService.createBatchChange).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(mockService.createBatchChange).toHaveBeenCalled(),
+      );
       expect(mockAddAlert).not.toHaveBeenCalledWith(
         "danger",
         expect.stringContaining("Error submitting"),

@@ -68,7 +68,9 @@ describe("<GroupForm />", () => {
   it("shows validation errors when required fields are empty", async () => {
     const { onSubmit } = setup();
     await userEvent.click(screen.getByRole("button", { name: "Create Group" }));
-    expect(await screen.findByText("Group name is required")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Group name is required"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Email is required")).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
   });
@@ -102,7 +104,9 @@ describe("<GroupForm />", () => {
 
   it("hides the Clear button in edit mode", () => {
     setup({ mode: "edit", initialData: { name: "hobbits" } });
-    expect(screen.queryByRole("button", { name: /Clear/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Clear/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("invokes onCancel when Cancel is clicked", async () => {

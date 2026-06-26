@@ -105,19 +105,26 @@ describe("<RecordsSearchTable />", () => {
   it("defaults toggle to ASC when nameSort is not provided", async () => {
     const onToggleSort = vi.fn();
     renderWithProviders(
-      <RecordsSearchTable records={[recordRow()]} onToggleSort={onToggleSort} />,
+      <RecordsSearchTable
+        records={[recordRow()]}
+        onToggleSort={onToggleSort}
+      />,
     );
     await userEvent.click(screen.getByText("FQDN"));
     expect(onToggleSort).toHaveBeenCalledWith("ASC");
   });
 
   it("renders TTL with a trailing 's' suffix", () => {
-    renderWithProviders(<RecordsSearchTable records={[recordRow({ ttl: 600 })]} />);
+    renderWithProviders(
+      <RecordsSearchTable records={[recordRow({ ttl: 600 })]} />,
+    );
     expect(screen.getByText("600s")).toBeInTheDocument();
   });
 
   it("renders an em-dash when ttl is null", () => {
-    renderWithProviders(<RecordsSearchTable records={[recordRow({ ttl: null })]} />);
+    renderWithProviders(
+      <RecordsSearchTable records={[recordRow({ ttl: null })]} />,
+    );
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
@@ -167,7 +174,9 @@ describe("<RecordsSearchTable />", () => {
       .spyOn(navigator.clipboard, "writeText")
       .mockResolvedValue(undefined);
     renderWithProviders(
-      <RecordsSearchTable records={[recordRow({ fqdn: "abc.example.com." })]} />,
+      <RecordsSearchTable
+        records={[recordRow({ fqdn: "abc.example.com." })]}
+      />,
     );
     await userEvent.click(screen.getByTitle("Copy FQDN"));
     expect(writeText).toHaveBeenCalledWith("abc.example.com.");

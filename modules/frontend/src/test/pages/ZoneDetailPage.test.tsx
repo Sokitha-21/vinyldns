@@ -22,7 +22,9 @@ import { ZoneDetailPage } from "../../pages/ZoneDetailPage";
 import { renderWithProviders } from "../utils/renderWithProviders";
 import { buildZone, buildRecordSet } from "../fixtures/testData";
 
-const recordsHook = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
+const recordsHook = vi.hoisted(() => ({
+  current: {} as Record<string, unknown>,
+}));
 
 vi.mock("../../hooks/useRecords", () => ({
   useZoneRecords: () => recordsHook.current,

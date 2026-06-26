@@ -18,7 +18,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useRecords } from "../../hooks/useRecords";
+import { useRecords, useZoneRecords } from "../../hooks/useRecords";
 import { aRecord } from "../fixtures/testData";
 
 const mockAddAlert = vi.fn();
@@ -35,6 +35,7 @@ vi.mock("../../contexts/AlertContext", () => ({
 vi.mock("../../services/recordsService", () => ({
   recordsService: {
     listRecordSetData: vi.fn(),
+    listRecordSetsByZone: vi.fn(),
     createRecordSet: vi.fn(),
     updateRecordSet: vi.fn(),
     deleteRecordSet: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock("../../services/recordsService", () => ({
 import { recordsService } from "../../services/recordsService";
 const mockService = recordsService as unknown as {
   listRecordSetData: ReturnType<typeof vi.fn>;
+  listRecordSetsByZone: ReturnType<typeof vi.fn>;
   createRecordSet: ReturnType<typeof vi.fn>;
   updateRecordSet: ReturnType<typeof vi.fn>;
   deleteRecordSet: ReturnType<typeof vi.fn>;
@@ -66,6 +68,9 @@ function makeWrapper() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockService.listRecordSetData.mockResolvedValue({
+    data: { recordSets: [], nextId: undefined },
+  });
+  mockService.listRecordSetsByZone.mockResolvedValue({
     data: { recordSets: [], nextId: undefined },
   });
 });
@@ -146,7 +151,11 @@ describe("useRecords", () => {
 
     it("alerts a parsed server error on failure", async () => {
       mockService.createRecordSet.mockRejectedValueOnce({
-        response: { status: 422, statusText: "Unprocessable", data: { errors: ["bad name"] } },
+        response: {
+          status: 422,
+          statusText: "Unprocessable",
+          data: { errors: ["bad name"] },
+        },
       });
       const { result } = renderHook(() => useRecords(), {
         wrapper: makeWrapper(),
@@ -222,6 +231,169 @@ describe("useRecords", () => {
       act(() => result.current.setPageSize(50));
 
       await waitFor(() => expect(result.current.pageSize).toBe(50));
+    });
+  });
+});
+
+describe("useZoneRecords", () => {
+  describe("initial state", () => {
+    it("returns an empty list before data loads", () => {
+      const { result } = renderHook(() => useZoneRecords("zone-id-1"), {
+        wrapper: makeWrapper(),
+      });
+      expect(result.current.records).toEqual([]);
+    });
+
+    it("populates records after a successful fetch", async () => {
+      mockService.listRecordSetsByZone.mockResolvedValueOnce({
+        data: { recordSets: [aRecord], nextId: "n1" },
+      });
+      const { result } = renderHook(() => useZoneRecords("zone-id-1"), {
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() => expect(result.current.records).toHaveLength(1));
+    });
+
+    it("does not query when zoneId is empty", () => {
+      renderHook(() => useZoneRecords(""), { wrapper: makeWrapper() });
+      expect(mockService.listRecordSetsByZone).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("search", () => {
+    it("forwards the name and type filters to the service query", async () => {
+      const { result } = renderHook(() => useZoneRecords("zone-id-1"), {
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      act(() => result.current.search({ name: "host", type: "A" }));
+
+      await waitFor(() =>
+        expect(mockService.listRecordSetsByZone).toHaveBeenCalledWith(
+          "zone-id-1",
+          expect.any(Number),
+          undefined,
+          "host",
+          "A",
+        ),
+      );
+    });
+
+    it("defaults filters to empty strings when omitted", async () => {
+      const { result } = renderHook(() => useZoneRecords("zone-id-1"), {
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      act(() => result.current.search({}));
+
+      await waitFor(() =>
+        expect(mockService.listRecordSetsByZone).toHaveBeenLastCalledWith(
+          "zone-id-1",
+          expect.any(Number),
+          undefined,
+          "",
+          "",
+        ),
+      );
+    });
+  });
+
+  describe("createRecord", () => {
+    it("alerts success on create", async () => {
+      mockService.createRecordSet.mockResolvedValueOnce({ data: aRecord });
+      const { result } = renderHook(() => useZoneRecords("zone-id-1"), {
+        wrapper: makeWrapper(),
+      });
+
+      act(() => result.current.createRecord(aRecord));
+
+      await waitFor(() =>
+        expect(mockAddAlert).toHaveBeenCalledWith(
+          "success",
+          "Record created successfully",
+        ),
+      );
+    });
+
+    it("alerts a parsed server error on failure", async () => {
+      mockService.createRecordSet.mockRejectedValueOnce({
+        response: {
+          status: 422,
+          statusText: "Unprocessable",
+          data: { errors: ["bad name"] },
+        },
+      });
+      const { result } = renderHook(() => useZoneRecords("zone-id-1"), {
+        wrapper: makeWrapper(),
+      });
+
+      act(() => result.current.createRecord(aRecord));
+
+      await waitFor(() =>
+        expect(mockAddAlert).toHaveBeenCalledWith(
+          "danger",
+          expect.stringContaining("bad name"),
+        ),
+      );
+    });
+  });
+
+  describe("updateRecord", () => {
+    it("alerts success on update", async () => {
+      mockService.updateRecordSet.mockResolvedValueOnce({ data: aRecord });
+      const { result } = renderHook(() => useZoneRecords("zone-id-1"), {
+        wrapper: makeWrapper(),
+      });
+
+      act(() =>
+        result.current.updateRecord({
+          recordSetId: "recordset-id-1",
+          record: aRecord,
+        }),
+      );
+
+      await waitFor(() =>
+        expect(mockAddAlert).toHaveBeenCalledWith(
+          "success",
+          "Record updated successfully",
+        ),
+      );
+    });
+  });
+
+  describe("deleteRecord", () => {
+    it("alerts success on delete", async () => {
+      mockService.deleteRecordSet.mockResolvedValueOnce({});
+      const { result } = renderHook(() => useZoneRecords("zone-id-1"), {
+        wrapper: makeWrapper(),
+      });
+
+      act(() => result.current.deleteRecord("recordset-id-1"));
+
+      await waitFor(() =>
+        expect(mockAddAlert).toHaveBeenCalledWith(
+          "success",
+          "Record deleted successfully",
+        ),
+      );
+    });
+  });
+
+  describe("pagination", () => {
+    it("enables the next page when the service returns a nextId", async () => {
+      mockService.listRecordSetsByZone.mockResolvedValueOnce({
+        data: { recordSets: [aRecord], nextId: "n1" },
+      });
+      const { result } = renderHook(() => useZoneRecords("zone-id-1"), {
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() => expect(result.current.records).toHaveLength(1));
+
+      act(() => result.current.nextPage());
+
+      await waitFor(() => expect(result.current.prevPageEnabled).toBe(true));
     });
   });
 });

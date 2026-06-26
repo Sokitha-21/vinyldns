@@ -71,7 +71,11 @@ describe("<GroupMemberList />", () => {
 
   it("invokes onToggleAdmin with the new state when the switch changes", async () => {
     const onToggleAdmin = vi.fn();
-    const member = buildGroupMember({ id: "m-1", userName: "sam", isAdmin: false });
+    const member = buildGroupMember({
+      id: "m-1",
+      userName: "sam",
+      isAdmin: false,
+    });
     render(
       <GroupMemberList
         members={[member]}

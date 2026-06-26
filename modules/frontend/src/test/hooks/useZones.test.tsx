@@ -28,7 +28,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useZones } from '../../hooks/useZones';
+import { useZones, useDeletedZones } from '../../hooks/useZones';
 import { activeZone, buildZone } from '../fixtures/testData';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -64,6 +64,7 @@ const mockZonesService = zonesService as unknown as {
   createZone: ReturnType<typeof vi.fn>;
   updateZone: ReturnType<typeof vi.fn>;
   deleteZone: ReturnType<typeof vi.fn>;
+  getDeletedZones: ReturnType<typeof vi.fn>;
 };
 
 // ── Test wrapper ──────────────────────────────────────────────────────────────
@@ -85,6 +86,7 @@ function makeWrapper() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockZonesService.getZones.mockResolvedValue({ data: { zones: [], maxItems: 100 } });
+  mockZonesService.getDeletedZones.mockResolvedValue({ data: { zonesDeletedInfo: [], maxItems: 100 } });
 });
 
 // ── useZones ──────────────────────────────────────────────────────────────────
@@ -222,6 +224,140 @@ describe('useZones', () => {
       const { result } = renderHook(() => useZones(), { wrapper: makeWrapper() });
       await waitFor(() => expect(result.current.isLoading).toBe(false));
       expect(result.current.nextPageEnabled).toBe(false);
+    });
+
+    it('enables nextPage once a nextId is returned', async () => {
+      mockZonesService.getZones.mockResolvedValueOnce({
+        data: { zones: [activeZone], nextId: 'n1', maxItems: 100 },
+      });
+      const { result } = renderHook(() => useZones(), { wrapper: makeWrapper() });
+      await waitFor(() => expect(result.current.nextPageEnabled).toBe(true));
+    });
+
+    it('advances and returns to the previous page', async () => {
+      mockZonesService.getZones.mockResolvedValue({
+        data: { zones: [activeZone], nextId: 'n1', maxItems: 100 },
+      });
+      const { result } = renderHook(() => useZones(), { wrapper: makeWrapper() });
+      await waitFor(() => expect(result.current.zones).toHaveLength(1));
+
+      act(() => result.current.nextPage());
+      await waitFor(() => expect(result.current.prevPageEnabled).toBe(true));
+
+      act(() => result.current.prevPage());
+      await waitFor(() => expect(result.current.prevPageEnabled).toBe(false));
+    });
+  });
+
+  // ── access filter ────────────────────────────────────────────────────────────
+
+  describe('access filter', () => {
+    it('forwards the access filter to the service query', async () => {
+      const { result } = renderHook(() => useZones(), { wrapper: makeWrapper() });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      act(() => result.current.setAccessFilter(1));
+
+      await waitFor(() => expect(result.current.accessFilter).toBe(1));
+      await waitFor(() =>
+        expect(mockZonesService.getZones).toHaveBeenLastCalledWith(
+          expect.any(Number),
+          undefined,
+          '',
+          false,
+          false,
+          true,
+          1,
+        ),
+      );
+    });
+
+    it('ignores a repeated access filter value', async () => {
+      const { result } = renderHook(() => useZones(), { wrapper: makeWrapper() });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      act(() => result.current.setAccessFilter(2));
+      await waitFor(() => expect(result.current.accessFilter).toBe(2));
+      const callsAfterFirst = mockZonesService.getZones.mock.calls.length;
+
+      act(() => result.current.setAccessFilter(2));
+      expect(mockZonesService.getZones.mock.calls.length).toBe(callsAfterFirst);
+    });
+  });
+});
+
+// ── useDeletedZones ───────────────────────────────────────────────────────────
+
+describe('useDeletedZones', () => {
+  describe('initial state', () => {
+    it('returns an empty list before data loads', () => {
+      const { result } = renderHook(() => useDeletedZones(), { wrapper: makeWrapper() });
+      expect(result.current.deletedZones).toEqual([]);
+    });
+
+    it('does not query when disabled', () => {
+      renderHook(() => useDeletedZones(false, false), { wrapper: makeWrapper() });
+      expect(mockZonesService.getDeletedZones).not.toHaveBeenCalled();
+    });
+
+    it('populates deleted zones after a successful fetch', async () => {
+      mockZonesService.getDeletedZones.mockResolvedValueOnce({
+        data: { zonesDeletedInfo: [{ zoneChange: { zone: buildZone() } }], maxItems: 100 },
+      });
+      const { result } = renderHook(() => useDeletedZones(true), { wrapper: makeWrapper() });
+      await waitFor(() => expect(result.current.deletedZones).toHaveLength(1));
+    });
+  });
+
+  describe('search', () => {
+    it('forwards the query to the service', async () => {
+      const { result } = renderHook(() => useDeletedZones(true), { wrapper: makeWrapper() });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      act(() => result.current.search('gone'));
+
+      await waitFor(() => expect(result.current.query).toBe('gone'));
+      await waitFor(() =>
+        expect(mockZonesService.getDeletedZones).toHaveBeenLastCalledWith(
+          expect.any(Number),
+          undefined,
+          'gone',
+          true,
+          undefined,
+        ),
+      );
+    });
+  });
+
+  describe('access filter', () => {
+    it('forwards the access filter to the service query', async () => {
+      const { result } = renderHook(() => useDeletedZones(true), { wrapper: makeWrapper() });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      act(() => result.current.setAccessFilter(1));
+
+      await waitFor(() =>
+        expect(mockZonesService.getDeletedZones).toHaveBeenLastCalledWith(
+          expect.any(Number),
+          undefined,
+          '',
+          true,
+          1,
+        ),
+      );
+    });
+  });
+
+  describe('pagination', () => {
+    it('enables nextPage once a nextId is returned', async () => {
+      mockZonesService.getDeletedZones.mockResolvedValueOnce({
+        data: { zonesDeletedInfo: [{ zoneChange: { zone: buildZone() } }], nextId: 'n1', maxItems: 100 },
+      });
+      const { result } = renderHook(() => useDeletedZones(true), { wrapper: makeWrapper() });
+      await waitFor(() => expect(result.current.nextPageEnabled).toBe(true));
+
+      act(() => result.current.nextPage());
+      await waitFor(() => expect(result.current.prevPageEnabled).toBe(true));
     });
   });
 });

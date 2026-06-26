@@ -76,7 +76,9 @@ afterEach(() => {
 describe("<Layout />", () => {
   it("renders the primary navigation links", () => {
     renderLayout();
-    expect(screen.getByRole("link", { name: "DNS Changes" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "DNS Changes" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "RecordSet Search" }),
     ).toBeInTheDocument();

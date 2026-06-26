@@ -64,7 +64,9 @@ describe("<ZoneForm />", () => {
   it("renders the intro banner in create mode", () => {
     setup();
     expect(
-      screen.getByText(/Use this form to connect to an already existing DNS zone/),
+      screen.getByText(
+        /Use this form to connect to an already existing DNS zone/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -90,7 +92,9 @@ describe("<ZoneForm />", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /Connect Zone|Create|Save|Update/ }),
     );
-    expect(await screen.findByText("Zone name is required")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Zone name is required"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Email is required")).toBeInTheDocument();
     expect(screen.getByText("Admin group is required")).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
@@ -143,7 +147,9 @@ describe("<ZoneForm />", () => {
 
   it("expands the DNS server connection section", async () => {
     setup();
-    const trigger = screen.getByRole("button", { name: /DNS Server Connection/ });
+    const trigger = screen.getByRole("button", {
+      name: /DNS Server Connection/,
+    });
     await userEvent.click(trigger);
     expect(screen.getByPlaceholderText("e.g. vinyldns.")).toBeInTheDocument();
   });

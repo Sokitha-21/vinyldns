@@ -22,7 +22,9 @@ import { renderWithProviders } from "../../utils/renderWithProviders";
 import { buildZone } from "../../fixtures/testData";
 import type { DeletedZoneChange } from "../../../types/zone";
 
-function deletedChange(overrides: Partial<DeletedZoneChange> = {}): DeletedZoneChange {
+function deletedChange(
+  overrides: Partial<DeletedZoneChange> = {},
+): DeletedZoneChange {
   return {
     zoneChange: {
       zone: buildZone({

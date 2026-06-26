@@ -71,7 +71,9 @@ describe("dnsChangeService", () => {
     });
 
     it("resolves with the change payload", async () => {
-      mockApi.get.mockResolvedValueOnce({ data: buildChange({ id: "batch-9" }) });
+      mockApi.get.mockResolvedValueOnce({
+        data: buildChange({ id: "batch-9" }),
+      });
       const res = await dnsChangeService.getBatchChange("batch-9");
       expect(res.data.id).toBe("batch-9");
     });
@@ -197,8 +199,10 @@ describe("dnsChangeService", () => {
     beforeEach(() => {
       createObjectURL = vi.fn(() => "blob:mock") as ReturnType<typeof vi.fn>;
       revokeObjectURL = vi.fn();
-      URL.createObjectURL = createObjectURL as unknown as typeof URL.createObjectURL;
-      URL.revokeObjectURL = revokeObjectURL as unknown as typeof URL.revokeObjectURL;
+      URL.createObjectURL =
+        createObjectURL as unknown as typeof URL.createObjectURL;
+      URL.revokeObjectURL =
+        revokeObjectURL as unknown as typeof URL.revokeObjectURL;
       clickSpy = vi
         .spyOn(HTMLAnchorElement.prototype, "click")
         .mockImplementation(() => {});
@@ -263,8 +267,16 @@ describe("dnsChangeService", () => {
     it("exports only the supplied rows when options.rows is provided", () => {
       const change = buildChange({
         changes: [
-          { changeType: "Add", inputName: "a.example.com.", status: "Complete" },
-          { changeType: "Add", inputName: "b.example.com.", status: "Complete" },
+          {
+            changeType: "Add",
+            inputName: "a.example.com.",
+            status: "Complete",
+          },
+          {
+            changeType: "Add",
+            inputName: "b.example.com.",
+            status: "Complete",
+          },
         ] as unknown as DnsChange["changes"],
       });
 
@@ -314,7 +326,9 @@ describe("dnsChangeService", () => {
     });
 
     it("tolerates a change with no changes array", () => {
-      const change = buildChange({ changes: undefined as unknown as DnsChange["changes"] });
+      const change = buildChange({
+        changes: undefined as unknown as DnsChange["changes"],
+      });
       expect(() => dnsChangeService.exportToCsv(change)).not.toThrow();
     });
   });
