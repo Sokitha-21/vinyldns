@@ -14,37 +14,34 @@
  * limitations under the License.
  */
 
-import React, { useState, useRef, useEffect, type KeyboardEvent } from 'react';
+import React, { useState, useRef, useEffect, useMemo, type KeyboardEvent } from 'react';
 import { useProfile } from '../contexts/ProfileContext';
 import { useAlerts } from '../contexts/AlertContext';
+import { adminService, type UserApiResponse } from '../services/adminService';
 import '../styles/admin.css';
+import {
+  getAllConfigs,
+  createAllConfigEntries,
+  updateAllConfigEntries,
+  deleteConfigEntry,
+  fetchEffectiveConfig,
+  reloadAppConfig,
+  type ConfigEntry,
+  type PendingChanges,
+} from '../services/configService';
+import {
+  type ConfigTab,
+  type ExpandedConfig,
+  TAB_DISPLAY,
+  deriveTabsFromFlat,
+  flatKeyToApiKey,
+  expandApiEntries,
+  buildSavableEntries,
+} from '../config/appConfigTabs';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ConfigTab = 'backend' | 'nameservers' | 'highvalue' | 'manualreview';
-
 type Role = 'super' | 'support' | 'normal';
-
-type BackendConn = { name: string; keyName: string; key: string; primaryServer: string; };
-interface Backend {
-  id: string;
-  zoneConnection: BackendConn;
-  transferConnection: BackendConn;
-  tsigUsage: string;
-}
-
-interface AppConfig {
-  className: string;
-  legacy: boolean;
-  defaultBackendId: string;
-  backends: Backend[];
-  approvedNameServers: string[];
-  highValueDomains: { regexList: string[]; ipList: string[] };
-  manualReviewDomains: { domainList: string[]; ipList: string[]; zoneNameList: string[] };
-}
-
-type HighValueConfig = AppConfig['highValueDomains'];
-type ManualReviewConfig = AppConfig['manualReviewDomains'];
 
 interface ManagedUser {
   id: string;
@@ -76,6 +73,46 @@ function roleMeta(role: Role) {
 
 function initials(u: ManagedUser) {
   return `${u.firstName[0] ?? ''}${u.lastName[0] ?? ''}`.toUpperCase();
+}
+
+function toManagedUser(u: UserApiResponse): ManagedUser {
+  const dateStr = u.created
+    ? new Date(u.created).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+    : '';
+  return {
+    id: u.id,
+    userName: u.userName ?? u.id,
+    firstName: u.firstName ?? '',
+    lastName: u.lastName ?? '',
+    email: u.email ?? '',
+    isSuper: u.isSuper ?? false,
+    isSupport: u.isSupport ?? false,
+    lockStatus: (u.lockStatus ?? 'Unlocked') as 'Locked' | 'Unlocked',
+    created: dateStr,
+  };
+}
+
+type PermOp = 'MakeSuper' | 'RemoveSuper' | 'MakeSupport' | 'RemoveSupport';
+
+const PERM_OP_LABELS: Record<PermOp, string> = {
+  MakeSuper:     'Make Super User',
+  RemoveSuper:   'Remove Super User',
+  MakeSupport:   'Make Support User',
+  RemoveSupport: 'Remove Support User',
+};
+
+
+// ─── Initial flat config — populated entirely from GET /appconfig ─────────────
+const INITIAL_FLAT_CONFIG: Record<string, string> = {};
+
+// ─── Tab override helpers (localStorage) ─────────────────────────────────────
+const LS_TAB_OVERRIDES_KEY = 'vinyldns-ui-tab-overrides';
+
+function loadTabOverrides(): Record<string, ConfigTab> {
+  try { return JSON.parse(localStorage.getItem(LS_TAB_OVERRIDES_KEY) ?? '{}') as Record<string, ConfigTab>; } catch { return {}; }
+}
+function saveTabOverrides(overrides: Record<string, ConfigTab>): void {
+  localStorage.setItem(LS_TAB_OVERRIDES_KEY, JSON.stringify(overrides));
 }
 
 // ─── TagInput ─────────────────────────────────────────────────────────────────
@@ -135,98 +172,142 @@ function TagInput({ tags, onChange, placeholder = 'Type and press Enter…' }: T
   );
 }
 
-// ─── BackendCard ──────────────────────────────────────────────────────────────
+// ─── BoolToggle ───────────────────────────────────────────────────────────────
 
-interface BackendCardProps {
-  backend: Backend;
-  isDefault: boolean;
-  onChange: (b: Backend) => void;
-}
-
-function BackendCard({ backend, isDefault, onChange }: BackendCardProps) {
-  const [open, setOpen] = useState(false);
-
-  const update = (patch: Partial<Backend>) => onChange({ ...backend, ...patch });
-  const updateZone = (patch: Partial<BackendConn>) =>
-    update({ zoneConnection: { ...backend.zoneConnection, ...patch } });
-  const updateTransfer = (patch: Partial<BackendConn>) =>
-    update({ transferConnection: { ...backend.transferConnection, ...patch } });
-
+function BoolToggle({ value, onChange, label, desc }: {
+  value: boolean; onChange: () => void; label: string; desc?: string;
+}) {
   return (
-    <div className={`adm-backend-card${isDefault ? ' adm-backend-card--default' : ''}`}>
-      <div className="adm-backend-card__header" onClick={() => setOpen(!open)}>
-        <div className="adm-backend-card__title">
-          <i className="bi bi-hdd-network-fill adm-backend-card__icon" />
-          <span className="adm-backend-card__id">{backend.id}</span>
-          {isDefault && <span className="adm-badge adm-badge--primary ms-2">Default</span>}
+    <div className="adm-form-group">
+      <div className="d-flex align-items-center justify-content-between gap-3">
+        <div style={{ minWidth: 0 }}>
+          <div className="adm-label" style={{ wordBreak: 'break-all' }}>{label}</div>
+          {desc && <div style={{ fontSize: '0.7rem', color: 'var(--adm-text-muted)', marginTop: '0.1rem' }}>{desc}</div>}
         </div>
-        <div className="adm-backend-card__meta">
-          <i className={`bi bi-chevron-${open ? 'up' : 'down'} adm-backend-card__chevron`} />
+        <div className="d-flex align-items-center gap-2 flex-shrink-0">
+          <span className={`adm-toggle-label${value ? ' adm-toggle-label--on' : ''}`}>{value ? 'true' : 'false'}</span>
+          <button type="button" className={`adm-toggle-btn${value ? ' adm-toggle-btn--on' : ' adm-toggle-btn--off'}`} onClick={onChange} aria-pressed={value}>
+            <span className="adm-toggle-btn__knob" />
+          </button>
         </div>
       </div>
+    </div>
+  );
+}
 
+// ─── AclRuleCard ──────────────────────────────────────────────────────────────
+
+function AclRuleCard({ rule, index, label = 'Rule', open = false, onOpen, onChange, onRemove }: {
+  rule: Record<string, unknown>;
+  index: number;
+  label?: string;
+  open?: boolean;
+  onOpen?: () => void;
+  onChange: (r: Record<string, unknown>) => void;
+  onRemove?: () => void;
+}) {
+  const setField = (k: string, v: unknown) => onChange({ ...rule, [k]: v });
+  const arrayKeys = Object.keys(rule).filter(k => Array.isArray(rule[k]));
+  const scalarKeys = Object.keys(rule).filter(k => !Array.isArray(rule[k]));
+  return (
+    <div className="adm-acl-card">
+      <div className="adm-acl-card__header" onClick={() => onOpen?.()}>
+        <div className="adm-acl-card__title">
+          <i className="bi bi-shield-check adm-acl-card__icon" />
+          <span>{label} {index + 1}</span>
+        </div>
+        <div className="adm-acl-card__actions">
+          {onRemove && (
+            <button type="button" className="adm-tag__remove" onClick={e => { e.stopPropagation(); onRemove(); }} aria-label="Remove rule" title="Remove this ACL rule">
+              <i className="bi bi-trash3" />
+            </button>
+          )}
+          <i className={`bi bi-chevron-${open ? 'up' : 'down'} adm-acl-card__chevron`} />
+        </div>
+      </div>
       {open && (
-        <div className="adm-backend-card__body">
-          <div className="row g-3">
-            <div className="col-md-6">
-              <div className="adm-conn-block">
-                <div className="adm-conn-block__label">
-                  <i className="bi bi-arrow-left-right" /> Zone Connection
-                </div>
-                <div className="adm-form-group">
-                  <label className="adm-label">Name</label>
-                  <input className="adm-input" value={backend.zoneConnection.name}
-                    onChange={e => updateZone({ name: e.target.value })} />
-                </div>
-                <div className="adm-form-group">
-                  <label className="adm-label">Key Name</label>
-                  <input className="adm-input" value={backend.zoneConnection.keyName}
-                    onChange={e => updateZone({ keyName: e.target.value })} />
-                </div>
-                <div className="adm-form-group">
-                  <label className="adm-label">Key</label>
-                  <input className="adm-input adm-input--mono" type="password" value={backend.zoneConnection.key}
-                    onChange={e => updateZone({ key: e.target.value })} />
-                </div>
-                <div className="adm-form-group">
-                  <label className="adm-label">Primary Server</label>
-                  <input className="adm-input" value={backend.zoneConnection.primaryServer}
-                    onChange={e => updateZone({ primaryServer: e.target.value })} />
+        <div className="adm-acl-card__body">
+          <div className="row g-2">
+            {scalarKeys.map(k => (
+              <div key={k} className="col-md-4">
+                <div className="adm-form-group" style={{ marginBottom: '0.4rem' }}>
+                  <label className="adm-label" style={{ fontSize: '0.65rem' }}>{k}</label>
+                  <input
+                    className="adm-input"
+                    value={String(rule[k] ?? '')}
+                    onChange={e => setField(k, e.target.value)}
+                  />
                 </div>
               </div>
-            </div>
-            <div className="col-md-6">
-              <div className="adm-conn-block">
-                <div className="adm-conn-block__label">
-                  <i className="bi bi-arrow-repeat" /> Transfer Connection
-                </div>
-                <div className="adm-form-group">
-                  <label className="adm-label">Name</label>
-                  <input className="adm-input" value={backend.transferConnection.name}
-                    onChange={e => updateTransfer({ name: e.target.value })} />
-                </div>
-                <div className="adm-form-group">
-                  <label className="adm-label">Key Name</label>
-                  <input className="adm-input" value={backend.transferConnection.keyName}
-                    onChange={e => updateTransfer({ keyName: e.target.value })} />
-                </div>
-                <div className="adm-form-group">
-                  <label className="adm-label">Key</label>
-                  <input className="adm-input adm-input--mono" type="password" value={backend.transferConnection.key}
-                    onChange={e => updateTransfer({ key: e.target.value })} />
-                </div>
-                <div className="adm-form-group">
-                  <label className="adm-label">Primary Server</label>
-                  <input className="adm-input" value={backend.transferConnection.primaryServer}
-                    onChange={e => updateTransfer({ primaryServer: e.target.value })} />
+            ))}
+            {arrayKeys.map(k => (
+              <div key={k} className="col-md-6">
+                <div className="adm-form-group" style={{ marginBottom: '0.4rem' }}>
+                  <label className="adm-label" style={{ fontSize: '0.65rem' }}>{k}</label>
+                  <TagInput
+                    tags={rule[k] as string[]}
+                    onChange={v => setField(k, v)}
+                    placeholder={`Add ${k}…`}
+                  />
                 </div>
               </div>
-            </div>
-            <div className="col-12">
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── BackendEditor ──────────────────────────────────────────────────────────
+
+type BEConn = { name: string; 'key-name': string; key: string; 'primary-server': string };
+type BEEntry = { id: string; 'zone-connection': BEConn; 'transfer-connection': BEConn; 'tsig-usage': string };
+type BESettings = { legacy: boolean; backends: BEEntry[] };
+type BEProvider = { 'class-name': string; settings: BESettings };
+type BERoot = { 'default-backend-id': string; 'backend-providers': BEProvider[] };
+
+const EMPTY_CONN: BEConn = { name: '', 'key-name': '', key: '', 'primary-server': '' };
+const EMPTY_ENTRY: BEEntry = { id: '', 'zone-connection': { ...EMPTY_CONN }, 'transfer-connection': { ...EMPTY_CONN }, 'tsig-usage': 'always' };
+
+function BackendItemCard({ entry, index, isDefault = false, open = false, onOpen, onChange, onRemove }: {
+  entry: BEEntry; index: number; isDefault?: boolean; open?: boolean; onOpen?: () => void;
+  onChange: (e: BEEntry) => void; onRemove?: () => void;
+}) {
+  const upd = (patch: Partial<BEEntry>) => onChange({ ...entry, ...patch });
+  const updConn = (type: 'zone-connection' | 'transfer-connection', patch: Partial<BEConn>) =>
+    upd({ [type]: { ...(entry[type] ?? EMPTY_CONN), ...patch } });
+  const CONN_FIELDS = ['name', 'key-name', 'key', 'primary-server'] as const;
+  return (
+    <div className={`adm-acl-card${isDefault ? ' adm-acl-card--default' : ''}`}>
+      <div className="adm-acl-card__header" onClick={() => onOpen?.()}>
+        <div className="adm-acl-card__title">
+          <i className="bi bi-hdd-network adm-acl-card__icon" />
+          <span>Backend {index + 1}{entry.id ? ` — ${entry.id}` : ''}</span>
+          {isDefault && <span className="adm-badge adm-badge--primary ms-2" style={{ fontSize: '0.62rem' }}>Default</span>}
+        </div>
+        <div className="adm-acl-card__actions">
+          {onRemove && (
+            <button type="button" className="adm-tag__remove" onClick={e => { e.stopPropagation(); onRemove(); }} aria-label="Remove backend">
+              <i className="bi bi-trash3" />
+            </button>
+          )}
+          <i className={`bi bi-chevron-${open ? 'up' : 'down'} adm-acl-card__chevron`} />
+        </div>
+      </div>
+      {open && (
+        <div className="adm-acl-card__body">
+          <div className="row g-3 mb-2">
+            <div className="col-md-6">
               <div className="adm-form-group">
-                <label className="adm-label">TSIG Usage</label>
-                <select className="adm-input adm-select" value={backend.tsigUsage}
-                  onChange={e => update({ tsigUsage: e.target.value })}>
+                <label className="adm-label">id</label>
+                <input className="adm-input" value={entry.id ?? ''} onChange={e => upd({ id: e.target.value })} />
+              </div>
+            </div>
+            <div className="col-md-6">
+              <div className="adm-form-group">
+                <label className="adm-label">tsig-usage</label>
+                <select className="adm-input adm-select" value={entry['tsig-usage'] ?? 'always'} onChange={e => upd({ 'tsig-usage': e.target.value })}>
                   <option value="always">always</option>
                   <option value="never">never</option>
                   <option value="auto">auto</option>
@@ -234,8 +315,89 @@ function BackendCard({ backend, isDefault, onChange }: BackendCardProps) {
               </div>
             </div>
           </div>
+          <div className="row g-3">
+            {(['zone-connection', 'transfer-connection'] as const).map(type => (
+              <div key={type} className="col-md-6">
+                <div className="adm-conn-block">
+                  <div className="adm-conn-block__label">
+                    <i className={`bi ${type === 'zone-connection' ? 'bi-arrow-left-right' : 'bi-arrow-repeat'}`} /> {type}
+                  </div>
+                  {CONN_FIELDS.map(f => (
+                    <div key={f} className="adm-form-group">
+                      <label className="adm-label" style={{ fontSize: '0.65rem' }}>{f}</label>
+                      <input
+                        className={`adm-input${f === 'key' ? ' adm-input--mono' : ''}`}
+                        type={f === 'key' ? 'password' : 'text'}
+                        value={entry[type]?.[f] ?? ''}
+                        onChange={e => updConn(type, { [f]: e.target.value } as Partial<BEConn>)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function BackendEditor({ value, onChange, openIdx, onToggle }: {
+  value: string; onChange: (v: string) => void;
+  openIdx: number | null; onToggle: (i: number) => void;
+}) {
+  let root: BERoot = { 'default-backend-id': '', 'backend-providers': [] };
+  try { root = JSON.parse(value) as BERoot; } catch {}
+  const provider: BEProvider = root['backend-providers']?.[0] ?? { 'class-name': '', settings: { legacy: false, backends: [] } };
+  const backends: BEEntry[] = provider.settings?.backends ?? [];
+
+  const save = (patch: Partial<BERoot>) => onChange(JSON.stringify({ ...root, ...patch }));
+  const saveProvider = (patch: Partial<BEProvider>) => save({ 'backend-providers': [{ ...provider, ...patch }] });
+  const saveSettings = (patch: Partial<BESettings>) => saveProvider({ settings: { ...provider.settings, ...patch } });
+  const saveBackends = (list: BEEntry[]) => saveSettings({ backends: list });
+
+  return (
+    <div>
+      <div className="adm-be-header-row mb-2">
+        <div className="adm-be-header-field">
+          <label className="adm-label adm-be-header-field__label">default-backend-id</label>
+          <input className="adm-input" value={root['default-backend-id'] ?? ''}
+            onChange={e => save({ 'default-backend-id': e.target.value })} />
+        </div>
+      </div>
+      <div className="adm-be-header-row mb-3">
+        <div className="adm-be-header-field adm-be-header-field--grow">
+          <label className="adm-label adm-be-header-field__label">class-name</label>
+          <input className="adm-input" value={provider['class-name'] ?? ''}
+            onChange={e => saveProvider({ 'class-name': e.target.value })} />
+        </div>
+        <div className="adm-be-header-field">
+          <BoolToggle
+            value={provider.settings?.legacy ?? false}
+            onChange={() => saveSettings({ legacy: !provider.settings?.legacy })}
+            label="legacy"
+          />
+        </div>
+      </div>
+      <div className="adm-sub-label mb-2" style={{ justifyContent: 'space-between' }}>
+        <span><i className="bi bi-diagram-3-fill" /> backends</span>
+        <button type="button" className="adm-add-row-btn" style={{ marginBottom: 0 }}
+          onClick={() => saveBackends([...backends, { ...EMPTY_ENTRY, 'zone-connection': { ...EMPTY_CONN }, 'transfer-connection': { ...EMPTY_CONN } }])}>
+          <i className="bi bi-plus-lg" /> Add Backend
+        </button>
+      </div>
+      <div className="adm-backend-list">
+        {backends.map((b, i) => (
+          <BackendItemCard key={i} entry={b} index={i}
+            isDefault={b.id !== '' && b.id === root['default-backend-id']}
+            open={openIdx === i}
+            onOpen={() => onToggle(i)}
+            onChange={updated => { const list = [...backends]; list[i] = updated; saveBackends(list); }}
+            onRemove={backends.length > 1 ? () => saveBackends(backends.filter((_, j) => j !== i)) : undefined}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -245,115 +407,43 @@ function BackendCard({ backend, isDefault, onChange }: BackendCardProps) {
 export function AdminPage() {
   const { profile } = useProfile();
   const { addAlert } = useAlerts();
-  const isSuper = profile?.isSuper ?? false;
 
   // Config state
-  const [config, setConfig] = useState<AppConfig>({
-    className: 'vinyldns.api.backend.dns.DnsBackendProviderLoader',
-    legacy: false,
-    defaultBackendId: 'default',
-    backends: [
-      {
-        id: 'default',
-        zoneConnection: {
-          name: 'vinyldns.',
-          keyName: 'vinyldns.',
-          key: 'nzisn+4G2ldMn0q1CV3vsg==',
-          primaryServer: '127.0.0.1:19001',
-        },
-        transferConnection: {
-          name: 'vinyldns.',
-          keyName: 'vinyldns.',
-          key: 'nzisn+4G2ldMn0q1CV3vsg==',
-          primaryServer: '127.0.0.1:19001',
-        },
-        tsigUsage: 'always',
-      },
-      {
-        id: 'func-test-backend',
-        zoneConnection: {
-          name: 'vinyldns.',
-          keyName: 'vinyldns.',
-          key: 'nzisn+4G2ldMn0q1CV3vsg==',
-          primaryServer: '127.0.0.1:19001',
-        },
-        transferConnection: {
-          name: 'vinyldns.',
-          keyName: 'vinyldns.',
-          key: 'nzisn+4G2ldMn0q1CV3vsg==',
-          primaryServer: '127.0.0.1:19001',
-        },
-        tsigUsage: 'always',
-      },
-    ],
-    approvedNameServers: [
-      '172.17.42.1.',
-      'ns1.parent.com.',
-      'ns1.parent.com1.',
-      'ns1.parent.com2.',
-      'ns1.parent.com3.',
-      'ns1.parent.com4.',
-    ],
-    highValueDomains: {
-      regexList: ['high-value-domain.*'],
-      ipList: [
-        '192.0.1.252',
-        '192.0.1.253',
-        '192.0.2.252',
-        '192.0.2.253',
-        '192.0.3.252',
-        '192.0.3.253',
-        '192.0.4.252',
-        '192.0.4.253',
-        'fd69:27cc:fe91:0:0:0:0:ffff',
-        'fd69:27cc:fe91:0:0:0:ffff:0',
-        'fd69:27cc:fe92:0:0:0:0:ffff',
-        'fd69:27cc:fe92:0:0:0:ffff:0',
-        'fd69:27cc:fe93:0:0:0:0:ffff',
-        'fd69:27cc:fe93:0:0:0:ffff:0',
-        'fd69:27cc:fe94:0:0:0:0:ffff',
-        'fd69:27cc:fe94:0:0:0:ffff:0',
-      ],
-    },
-    manualReviewDomains: {
-      domainList: ['needs-review.*'],
-      ipList: [
-        '192.0.1.254',
-        '192.0.1.255',
-        '192.0.2.254',
-        '192.0.2.255',
-        '192.0.3.254',
-        '192.0.3.255',
-        '192.0.4.254',
-        '192.0.4.255',
-        'fd69:27cc:fe91:0:0:0:ffff:1',
-        'fd69:27cc:fe91:0:0:0:ffff:2',
-        'fd69:27cc:fe92:0:0:0:ffff:1',
-        'fd69:27cc:fe92:0:0:0:ffff:2',
-        'fd69:27cc:fe93:0:0:0:ffff:1',
-        'fd69:27cc:fe93:0:0:0:ffff:2',
-        'fd69:27cc:fe94:0:0:0:ffff:1',
-        'fd69:27cc:fe94:0:0:0:ffff:2',
-      ],
-      zoneNameList: [
-        'zone.requires.review.',
-        'zone.requires.review1.',
-        'zone.requires.review2.',
-        'zone.requires.review3.',
-        'zone.requires.review4.',
-      ],
-    },
-  });
-  const [configLoading] = useState(false);
-  const [configError] = useState<string | null>(null);
+  const [flatConfig, setFlatConfig] = useState<Record<string, string>>(INITIAL_FLAT_CONFIG);
+  const [expandedConfig, setExpandedConfig] = useState<ExpandedConfig | null>(null);
+  // Tab overrides are stored in localStorage (browser-local, non-polluting)
+  const userTabOverridesRef = useRef<Record<string, ConfigTab>>({});
+  const [userTabOverrides, setUserTabOverrides] = useState<Record<string, ConfigTab>>({});
+  // Tracks which API-level keys the user has edited since last fetch/save
+  const dirtyApiKeys = useRef(new Set<string>());
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [activeTab, setActiveTab] = useState<ConfigTab>('backend');
+  const [createStatus, setCreateStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [deleteStatus, setDeleteStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [deleteSelectMode, setDeleteSelectMode] = useState(false);
+  const [selectedDeleteKeys, setSelectedDeleteKeys] = useState<Set<string>>(new Set());
+
+  // Create modal
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createRows, setCreateRows] = useState<Array<{ tab: ConfigTab; key: string; value: string }>>([{ tab: 'boolean', key: '', value: 'false' }]);
+  const [createSubmitAttempted, setCreateSubmitAttempted] = useState(false);
+  const [activeTab, setActiveTab] = useState<ConfigTab>('boolean');
+  const [pageTab, setPageTab] = useState<'config' | 'users'>('config');
+  // Accordion: tracks which card index is open per array/json key (null = all collapsed)
+  const [openCardIndex, setOpenCardIndex] = useState<Record<string, number | null>>({});
+  const toggleCard = (key: string, i: number) =>
+    setOpenCardIndex(prev => ({ ...prev, [key]: prev[key] === i ? null : i }));
   const [reloadStatus, setReloadStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [reloadMsg, setReloadMsg] = useState('');
-  const [lastReloadTime, setLastReloadTime] = useState<string | null>(null);
-
-  // User mgmt state
-  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [reloadPreviewOpen, setReloadPreviewOpen] = useState(false);
+  const [reloadPreviewData, setReloadPreviewData] = useState<PendingChanges>({});
+  const [reloadPreviewLoading, setReloadPreviewLoading] = useState(false);
+  const [reloadConfirmStatus, setReloadConfirmStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [lockLoading, setLockLoading] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [permLoading, setPermLoading] = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
 
   // Panel A – Lock / Unlock
   const [lockUsername, setLockUsername] = useState('');
@@ -362,113 +452,293 @@ export function AdminPage() {
 
   // Panel B – Check Status
   const [statusUsername, setStatusUsername] = useState('');
-  const [statusResult, setStatusResult] = useState<ManagedUser | 'notfound' | null>(null);
+  const [statusResult, setStatusResult] = useState<ManagedUser | 'notfound' | 'empty' | null>(null);
 
   // Panel C – Update Permission
   const [permUsername, setPermUsername] = useState('');
-  const [permRole, setPermRole] = useState<Role>('normal');
+  const [permOp, setPermOp] = useState<PermOp>('MakeSuper');
   const [permResult, setPermResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const [confirmModal, setConfirmModal] = useState<{
     type: 'lock' | 'unlock' | 'role';
-    userId: string;
-    newRole?: Role;
+    permOp?: PermOp;
+    user: ManagedUser;
   } | null>(null);
 
   // ── Config helpers ────────────────────────────────────────────────────────
 
-  const fetchConfig = () => { /* will be wired to GET /appconfig later */ };
-
-  useEffect(() => { fetchConfig(); }, []);
-
-  const handleConfigUpdate = () => {
-    setUpdateStatus('success');
-    addAlert('success', 'Configuration saved successfully.');
-    setTimeout(() => setUpdateStatus('idle'), 3000);
-  };
-
-  const patchHVD = (patch: Partial<HighValueConfig>) =>
-    setConfig(c => ({ ...c, highValueDomains: { ...c.highValueDomains, ...patch } }));
-
-  const patchMRD = (patch: Partial<ManualReviewConfig>) =>
-    setConfig(c => ({ ...c, manualReviewDomains: { ...c.manualReviewDomains, ...patch } }));
-
-  const updateBackend = (updated: Backend) =>
-    setConfig(c => ({
-      ...c,
-      backends: c.backends.map(b => b.id === updated.id ? updated : b),
-    }));
-
-  const handleReload = () => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString();
-    const dateStr = now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    setLastReloadTime(`${dateStr} at ${timeStr}`);
-    setReloadStatus('success');
-    setReloadMsg('Configuration reloaded successfully at ' + timeStr);
-    fetchConfig();
-    setTimeout(() => setReloadStatus('idle'), 4000);
-    // POST /appconfig/refresh will be wired here later
-  };
-
-  // ── User helpers ──────────────────────────────────────────────────────────
-
-  const applyRole = (userId: string, role: Role) => {
-    setUsers(us => us.map(u => u.id !== userId ? u : {
-      ...u,
-      isSuper: role === 'super',
-      isSupport: role === 'support',
-    }));
-  };
-
-  const applyLock = (userId: string, lock: boolean) => {
-    setUsers(us => us.map(u => u.id !== userId ? u : {
-      ...u,
-      lockStatus: lock ? 'Locked' : 'Unlocked',
-    }));
-  };
-
-  const handleLockSubmit = () => {
-    const q = lockUsername.trim().toLowerCase();
-    if (!q) return;
-    const found = users.find(u => u.userName.toLowerCase() === q);
-    if (!found) { setLockResult({ ok: false, msg: `User "${lockUsername}" not found.` }); return; }
-    const alreadyInState = found.lockStatus === (lockAction === 'lock' ? 'Locked' : 'Unlocked');
-    if (alreadyInState) {
-      setLockResult({ ok: false, msg: `User "${found.userName}" is already ${found.lockStatus.toLowerCase()}.` });
-      return;
+  const fetchConfig = async () => {
+    setConfigLoading(true);
+    setConfigError(null);
+    try {
+      const entries = await getAllConfigs();
+      const result = expandApiEntries(entries);
+      dirtyApiKeys.current.clear();
+      // Load overrides from localStorage, pruning any stale keys
+      const overrides = loadTabOverrides();
+      const liveKeys = new Set(Object.keys(result.flat));
+      const pruned = Object.fromEntries(
+        Object.entries(overrides).filter(([k]) => liveKeys.has(k)),
+      ) as Record<string, ConfigTab>;
+      userTabOverridesRef.current = pruned;
+      // Persist pruned overrides back if any stale entries were removed
+      if (Object.keys(pruned).length !== Object.keys(overrides).length) {
+        saveTabOverrides(pruned);
+      }
+      setFlatConfig(result.flat);
+      setExpandedConfig(result);
+      setUserTabOverrides(pruned);
+    } catch {
+      setConfigError('Failed to load configuration. Please try again.');
+    } finally {
+      setConfigLoading(false);
     }
-    setConfirmModal({ type: lockAction, userId: found.id });
   };
 
-  const handleStatusCheck = () => {
-    const q = statusUsername.trim().toLowerCase();
-    if (!q) return;
-    const found = users.find(u => u.userName.toLowerCase() === q);
-    setStatusResult(found ?? 'notfound');
-  };
+  useEffect(() => { void fetchConfig(); }, []);
 
-  const handlePermSubmit = () => {
-    const q = permUsername.trim().toLowerCase();
-    if (!q) return;
-    const found = users.find(u => u.userName.toLowerCase() === q);
-    if (!found) { setPermResult({ ok: false, msg: `User "${permUsername}" not found.` }); return; }
-    const current = getRoleFromUser(found);
-    if (current === permRole) {
-      setPermResult({ ok: false, msg: `"${found.userName}" already has the ${roleMeta(permRole).label} role.` });
-      return;
+  const handleConfigUpdate = async () => {
+    setUpdateStatus('loading');
+    try {
+      if (!expandedConfig) { setUpdateStatus('idle'); return; }
+      const changedApiKeys = [...dirtyApiKeys.current];
+      if (changedApiKeys.length === 0) {
+        setUpdateStatus('idle');
+        addAlert('info', 'No changes to save.');
+        return;
+      }
+      const changedEntries = buildSavableEntries(changedApiKeys, flatConfig, expandedConfig);
+      await updateAllConfigEntries(changedEntries);
+      dirtyApiKeys.current.clear();
+      setUpdateStatus('success');
+      addAlert('success', 'Configuration saved successfully.');
+      setTimeout(() => setUpdateStatus('idle'), 3000);
+    } catch {
+      setUpdateStatus('error');
+      addAlert('danger', 'Failed to save configuration. Please try again.');
+      setTimeout(() => setUpdateStatus('idle'), 3000);
     }
-    setConfirmModal({ type: 'role', userId: found.id, newRole: permRole });
   };
 
-  // ── Tab meta ──────────────────────────────────────────────────────────────
+  const handleConfigCreate = async () => {
+    setCreateSubmitAttempted(true);
+    const validRows = createRows.filter(r => r.key && r.value.trim() !== '');
+    if (validRows.length < createRows.length) return;
+    setCreateStatus('loading');
+    try {
+      const entries = validRows.map(r => ({ key: r.key, value: r.value }));
+      await createAllConfigEntries(entries);
+      // Remember which tab the user selected for each new key (persisted to API)
+      for (const r of validRows) {
+        if (r.tab) userTabOverridesRef.current[r.key] = r.tab as ConfigTab;
+      }
+      saveTabOverrides(userTabOverridesRef.current);
+      // Switch to the tab of the first created key
+      const firstTab = validRows[0]?.tab;
+      if (firstTab) setActiveTab(firstTab);
+      setCreateStatus('success');
+      addAlert('success', `Created ${entries.length} config entr${entries.length === 1 ? 'y' : 'ies'} successfully.`);
+      setCreateModalOpen(false);
+      setCreateRows([{ tab: 'boolean', key: '', value: 'false' }]);
+      setCreateSubmitAttempted(false);
+      void fetchConfig();
+      setTimeout(() => setCreateStatus('idle'), 3000);
+    } catch (err: unknown) {
+      setCreateStatus('error');
+      let msg = 'Failed to create configuration. Please try again.';
+      if (err && typeof err === 'object') {
+        const e = err as { response?: { data?: unknown }; message?: string };
+        const d = e.response?.data;
+        if (typeof d === 'string' && d.trim()) msg = d.trim();
+        else if (d && typeof d === 'object') {
+          const od = d as { message?: string; error?: string };
+          msg = od.message ?? od.error ?? e.message ?? msg;
+        } else if (e.message) {
+          msg = e.message;
+        }
+      }
+      addAlert('danger', msg);
+      setTimeout(() => setCreateStatus('idle'), 3000);
+    }
+  };
 
-  const tabs: { id: ConfigTab; label: string; icon: string }[] = [
-    { id: 'backend',      label: 'DNS Backends',      icon: 'bi-hdd-network-fill' },
-    { id: 'nameservers',  label: 'Name Servers',       icon: 'bi-signpost-split-fill' },
-    { id: 'highvalue',    label: 'High-Value Domains', icon: 'bi-shield-lock-fill' },
-    { id: 'manualreview', label: 'Manual Review',      icon: 'bi-clipboard2-check-fill' },
-  ];
+  const handleConfigDelete = async () => {
+    if (selectedDeleteKeys.size === 0) return;
+    setDeleteStatus('loading');
+    const apiKeysToDelete = [...new Set([...selectedDeleteKeys].map(k => flatKeyToApiKey(k, expandedConfig?.reverseMap ?? {})))];
+    try {
+      for (const k of apiKeysToDelete) { await deleteConfigEntry(k); }
+      setDeleteStatus('success');
+      addAlert('success', `Deleted ${apiKeysToDelete.length} key(s) successfully.`);
+      setDeleteSelectMode(false);
+      setSelectedDeleteKeys(new Set());
+      void fetchConfig();
+      setTimeout(() => setDeleteStatus('idle'), 3000);
+    } catch {
+      setDeleteStatus('error');
+      addAlert('danger', 'Failed to delete config. Please try again.');
+      setDeleteSelectMode(false);
+      setSelectedDeleteKeys(new Set());
+      setTimeout(() => setDeleteStatus('idle'), 3000);
+    }
+  };
+
+  // ── Flat config helpers ─────────────────────────────────────────────────────
+
+  const setKey = (k: string, v: string) => {
+    dirtyApiKeys.current.add(flatKeyToApiKey(k, expandedConfig?.reverseMap ?? {}));
+    setFlatConfig(c => ({ ...c, [k]: v }));
+  };
+  const bool  = (k: string) => flatConfig[k] === 'true';
+  const toggleBool = (k: string) => setKey(k, bool(k) ? 'false' : 'true');
+
+  const handleReload = async () => {
+    setReloadPreviewLoading(true);
+    try {
+      const pending = await fetchEffectiveConfig();
+      if (Object.keys(pending).length === 0) {
+        addAlert('info', 'Config is up to date. No pending changes to apply.');
+        return;
+      }
+      setReloadPreviewData(pending);
+      setReloadPreviewOpen(true);
+    } catch {
+      addAlert('danger', 'Failed to fetch effective configuration. Please try again.');
+    } finally {
+      setReloadPreviewLoading(false);
+    }
+  };
+
+  const handleConfirmReload = async () => {
+    setReloadConfirmStatus('loading');
+    try {
+      const result = await reloadAppConfig();
+      setReloadStatus('success');
+      setReloadMsg(result.message ?? 'Configuration reloaded successfully.');
+      setReloadPreviewOpen(false);
+      setReloadConfirmStatus('idle');
+      void fetchConfig();
+      setTimeout(() => setReloadStatus('idle'), 4000);
+    } catch {
+      setReloadConfirmStatus('error');
+      setReloadMsg('Failed to reload configuration. Please try again.');
+      setTimeout(() => { setReloadConfirmStatus('idle'); setReloadStatus('error'); }, 4000);
+    }
+  };
+
+  // ── User action handlers ──────────────────────────────────────────────────
+
+  const handleLockSubmit = async () => {
+    const q = lockUsername.trim();
+    if (!q) { setLockResult({ ok: false, msg: 'Username is mandatory.' }); return; }
+    setLockLoading(true);
+    setLockResult(null);
+    try {
+      const res = await adminService.getUserByIdOrName(q);
+      const found = toManagedUser(res.data);
+      if (!found) { setLockResult({ ok: false, msg: `User "${q}" not found.` }); return; }
+      if (lockAction === 'lock' && found.lockStatus === 'Locked') {
+        setLockResult({ ok: false, msg: `"${found.userName}" is already locked.` }); return;
+      }
+      if (lockAction === 'unlock' && found.lockStatus === 'Unlocked') {
+        setLockResult({ ok: false, msg: `"${found.userName}" is already unlocked.` }); return;
+      }
+      setConfirmModal({ type: lockAction, user: found });
+    } catch {
+      setLockResult({ ok: false, msg: 'Failed to look up user. Please try again.' });
+    } finally {
+      setLockLoading(false);
+    }
+  };
+
+  const handleStatusCheck = async () => {
+    const q = statusUsername.trim();
+    if (!q) { setStatusResult('empty'); return; }
+    setStatusLoading(true);
+    setStatusResult(null);
+    try {
+      const res = await adminService.getUserByIdOrName(q);
+      const found = toManagedUser(res.data);
+      setStatusResult(found ?? 'notfound');
+    } catch {
+      setStatusResult('notfound');
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const handlePermSubmit = async () => {
+    const q = permUsername.trim();
+    if (!q) { setPermResult({ ok: false, msg: 'Username is mandatory.' }); return; }
+    setPermLoading(true);
+    setPermResult(null);
+    try {
+      const res = await adminService.getUserByIdOrName(q);
+      const found = toManagedUser(res.data);
+      if (!found) { setPermResult({ ok: false, msg: `User "${q}" not found.` }); return; }
+      if (permOp === 'MakeSuper' && found.isSuper) {
+        setPermResult({ ok: false, msg: `"${found.userName}" is already a Super User.` }); return;
+      }
+      if (permOp === 'RemoveSuper' && !found.isSuper) {
+        setPermResult({ ok: false, msg: `"${found.userName}" is not a Super User.` }); return;
+      }
+      if (permOp === 'MakeSupport' && found.isSupport) {
+        setPermResult({ ok: false, msg: `"${found.userName}" is already a Support User.` }); return;
+      }
+      if (permOp === 'RemoveSupport' && !found.isSupport) {
+        setPermResult({ ok: false, msg: `"${found.userName}" is not a Support User.` }); return;
+      }
+      setConfirmModal({ type: 'role', user: found, permOp });
+    } catch {
+      setPermResult({ ok: false, msg: 'Failed to look up user. Please try again.' });
+    } finally {
+      setPermLoading(false);
+    }
+  };
+
+  const handleModalConfirm = async () => {
+    if (!confirmModal) return;
+    setModalLoading(true);
+    try {
+      const { type, user } = confirmModal;
+      if (type === 'lock') {
+        await adminService.lockUser(user.id);
+        setLockResult({ ok: true, msg: `"${user.userName}" has been locked successfully.` });
+      } else if (type === 'unlock') {
+        await adminService.unlockUser(user.id);
+        setLockResult({ ok: true, msg: `"${user.userName}" has been unlocked successfully.` });
+      } else if (type === 'role' && confirmModal.permOp) {
+        await adminService.updatePermission(user.id, confirmModal.permOp);
+        setPermResult({ ok: true, msg: `Permission updated: ${PERM_OP_LABELS[confirmModal.permOp]} applied to "${user.userName}".` });
+      }
+      setConfirmModal(null);
+    } catch {
+      setLockResult({ ok: false, msg: 'Action failed. Please try again.' });
+      setConfirmModal(null);
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
+  // ── Visible tabs — driven entirely by keys returned from GET /appconfig ───
+
+  // ── Derived tabs — computed from actual flat config, no hardcoded key lists ──
+
+  const { tabs: derivedTabs, tabKeyMap } = useMemo(
+    () => deriveTabsFromFlat(flatConfig, expandedConfig?.reverseMap ?? {}, userTabOverrides),
+    [flatConfig, expandedConfig, userTabOverrides],
+  );
+
+  const visibleTabs = useMemo(
+    () => derivedTabs.filter(t => (tabKeyMap[t.id] ?? []).some(k => k in flatConfig)),
+    [derivedTabs, tabKeyMap, flatConfig],
+  );
+
+  useEffect(() => {
+    if (visibleTabs.length > 0 && !visibleTabs.some(t => t.id === activeTab)) {
+      setActiveTab(visibleTabs[0].id);
+    }
+  }, [visibleTabs]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -483,37 +753,48 @@ export function AdminPage() {
           <h1 className="adm-hero__title">Admin Control Panel</h1>
         </div>
         <div className="adm-hero__actions">
-          <div className="adm-last-reload">
-            <i className="bi bi-clock-history" />
-            <span>
-              Last reloaded:{' '}
-              <strong>{lastReloadTime ?? '—'}</strong>
-            </span>
-          </div>
-          <button
-            className={`adm-reload-btn${reloadStatus === 'loading' ? ' adm-reload-btn--loading' : ''}${reloadStatus === 'success' ? ' adm-reload-btn--success' : ''}${reloadStatus === 'error' ? ' adm-reload-btn--error' : ''}`}
-            onClick={handleReload}
-            disabled={reloadStatus === 'loading'}
-          >
-            <i className={`bi ${reloadStatus === 'success' ? 'bi-check2-circle' : reloadStatus === 'error' ? 'bi-exclamation-circle' : 'bi-arrow-clockwise'} adm-reload-btn__icon`} />
-            <span>
-              {reloadStatus === 'loading' ? 'Reloading…'
-                : reloadStatus === 'success' ? 'Reloaded!'
-                : reloadStatus === 'error' ? 'Failed'
-                : 'Reload Config'}
-            </span>
-          </button>
+          {pageTab === 'config' && (
+            <button
+              className={`adm-reload-btn${reloadPreviewLoading ? ' adm-reload-btn--loading' : ''}${reloadStatus === 'success' ? ' adm-reload-btn--success' : ''}${reloadStatus === 'error' ? ' adm-reload-btn--error' : ''}`}
+              onClick={() => void handleReload()}
+              disabled={reloadPreviewLoading}
+            >
+              <i className={`bi ${reloadStatus === 'success' ? 'bi-check2-circle' : reloadStatus === 'error' ? 'bi-exclamation-circle' : 'bi-arrow-clockwise'} adm-reload-btn__icon`} />
+              <span>
+                {reloadPreviewLoading ? 'Loading preview…'
+                  : reloadStatus === 'success' ? 'Reloaded!'
+                  : reloadStatus === 'error' ? 'Failed'
+                  : 'Reload Config'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
-      {reloadStatus === 'success' && (
-        <div className="adm-toast adm-toast--success">
-          <i className="bi bi-check-circle-fill" /> {reloadMsg}
+      {(reloadStatus === 'success' || reloadStatus === 'error') && (
+        <div className={`adm-toast adm-toast--${reloadStatus === 'error' ? 'error' : 'success'}`}>
+          <i className={`bi ${reloadStatus === 'error' ? 'bi-exclamation-circle-fill' : 'bi-check-circle-fill'}`} /> {reloadMsg}
         </div>
       )}
 
+      {/* ═══ PAGE-LEVEL TABS ════════════════════════════════════════════════════ */}
+      <div className="vds-pill-toggle">
+        <button type="button"
+          className={`vds-pill-toggle__btn${pageTab === 'config' ? ' vds-pill-toggle__btn--active' : ''}`}
+          onClick={() => setPageTab('config')}
+        >
+          <i className="bi bi-sliders2" /> Configuration
+        </button>
+        <button type="button"
+          className={`vds-pill-toggle__btn${pageTab === 'users' ? ' vds-pill-toggle__btn--active' : ''}`}
+          onClick={() => setPageTab('users')}
+        >
+          <i className="bi bi-people-fill" /> User Access
+        </button>
+      </div>
+
       {/* ═══ SECTION 1 – CONFIG ════════════════════════════════════════════════ */}
-      <section className="adm-section">
+      {pageTab === 'config' && <section className="adm-section">
         <div className="adm-section__header">
           <div className="adm-section__title">
             <div className="adm-section__title-left">
@@ -522,26 +803,63 @@ export function AdminPage() {
               </span>
               Configuration Profile
             </div>
-            <button
-              className={`adm-update-btn${updateStatus === 'loading' ? ' adm-update-btn--loading' : ''}${updateStatus === 'success' ? ' adm-update-btn--success' : ''}`}
-              onClick={handleConfigUpdate}
-              disabled={updateStatus === 'loading' || configLoading}
-            >
-              <i className={`bi ${updateStatus === 'success' ? 'bi-check2-circle' : updateStatus === 'error' ? 'bi-exclamation-circle' : 'bi-floppy-fill'}`} />
-              {' '}{updateStatus === 'loading' ? 'Saving…' : updateStatus === 'success' ? 'Saved!' : updateStatus === 'error' ? 'Failed' : 'Update'}
-            </button>
+            <div className="adm-btn-group">
+              <button
+                className={`adm-create-btn${createStatus === 'loading' ? ' adm-create-btn--loading' : ''}${createStatus === 'success' ? ' adm-create-btn--success' : ''}${createStatus === 'error' ? ' adm-create-btn--error' : ''}`}
+                onClick={() => { setCreateRows([{ tab: 'boolean', key: '', value: 'false' }]); setCreateSubmitAttempted(false); setCreateModalOpen(true); }}
+                disabled={createStatus === 'loading' || configLoading || deleteSelectMode}
+              >
+                <i className={`bi ${createStatus === 'success' ? 'bi-check2-circle' : createStatus === 'error' ? 'bi-exclamation-circle' : 'bi-plus-circle-fill'}`} />
+                {' '}{createStatus === 'loading' ? 'Creating…' : createStatus === 'success' ? 'Created!' : createStatus === 'error' ? 'Failed' : 'Create'}
+              </button>
+              <button
+                className={`adm-update-btn${updateStatus === 'loading' ? ' adm-update-btn--loading' : ''}${updateStatus === 'success' ? ' adm-update-btn--success' : ''}${updateStatus === 'error' ? ' adm-update-btn--error' : ''}`}
+                onClick={() => void handleConfigUpdate()}
+                disabled={updateStatus === 'loading' || configLoading || deleteSelectMode}
+              >
+                <i className={`bi ${updateStatus === 'success' ? 'bi-check2-circle' : updateStatus === 'error' ? 'bi-exclamation-circle' : 'bi-floppy-fill'}`} />
+                {' '}{updateStatus === 'loading' ? 'Saving…' : updateStatus === 'success' ? 'Saved!' : updateStatus === 'error' ? 'Failed' : 'Update'}
+              </button>
+              {!deleteSelectMode ? (
+                <button
+                  className={`adm-delete-btn${deleteStatus === 'loading' ? ' adm-delete-btn--loading' : ''}${deleteStatus === 'success' ? ' adm-delete-btn--success' : ''}${deleteStatus === 'error' ? ' adm-delete-btn--error' : ''}`}
+                  onClick={() => { setDeleteSelectMode(true); setSelectedDeleteKeys(new Set()); }}
+                  disabled={deleteStatus === 'loading' || configLoading}
+                >
+                  <i className={`bi ${deleteStatus === 'success' ? 'bi-check2-circle' : deleteStatus === 'error' ? 'bi-exclamation-circle' : 'bi-trash3-fill'}`} />
+                  {' '}{deleteStatus === 'loading' ? 'Deleting…' : deleteStatus === 'success' ? 'Deleted!' : deleteStatus === 'error' ? 'Failed' : 'Delete'}
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="adm-btn adm-btn--ghost"
+                    onClick={() => { setDeleteSelectMode(false); setSelectedDeleteKeys(new Set()); }}
+                  >
+                    <i className="bi bi-x-lg" /> Cancel
+                  </button>
+                  <button
+                    className="adm-delete-btn"
+                    onClick={() => void handleConfigDelete()}
+                    disabled={selectedDeleteKeys.size === 0 || deleteStatus === 'loading'}
+                  >
+                    <i className="bi bi-trash3-fill" /> Delete ({selectedDeleteKeys.size})
+                  </button>
+                </>
+              )}
+            </div>
           </div>
           <div className="adm-section__desc">
-            Edit backend, name server, and domain policy settings. Click <strong>Reload Config</strong> to apply.
+            Edit configuration values by tab. <strong>Update</strong> saves changes; <strong>Create</strong> initialises all keys; click <strong>Delete</strong> to select which keys to remove. Click <strong>Reload Config</strong> to apply changes at runtime.
           </div>
         </div>
 
         {/* Tabs */}
         <div className={`adm-tabs${configLoading ? ' d-none' : ''}`}>
-          {tabs.map(t => (
+          {visibleTabs.map(t => (
             <button
               key={t.id}
               className={`adm-tab${activeTab === t.id ? ' adm-tab--active' : ''}`}
+              data-tab={t.id}
               onClick={() => setActiveTab(t.id)}
             >
               <i className={`bi ${t.icon}`} />
@@ -549,6 +867,31 @@ export function AdminPage() {
             </button>
           ))}
         </div>
+
+        {/* Delete key selector — shown below tabs */}
+        {deleteSelectMode && !configLoading && (
+          <div className="adm-delete-select-bar">
+            <div className="adm-delete-select-bar__label">
+              <i className="bi bi-trash3-fill" /> Select keys to delete:
+            </div>
+            <div className="adm-delete-select-bar__keys">
+              {(tabKeyMap[activeTab] ?? []).filter(k => k in flatConfig).map(k => (
+                <label key={k} className={`adm-delete-key-check${selectedDeleteKeys.has(k) ? ' adm-delete-key-check--selected' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={selectedDeleteKeys.has(k)}
+                    onChange={e => {
+                      const next = new Set(selectedDeleteKeys);
+                      if (e.target.checked) next.add(k); else next.delete(k);
+                      setSelectedDeleteKeys(next);
+                    }}
+                  />
+                  {k}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="adm-tab-panel">
 
@@ -560,184 +903,296 @@ export function AdminPage() {
           )}
           {configError && (
             <div className="adm-inline-msg adm-inline-msg--err">
-              <i className="bi bi-exclamation-circle-fill" /> {configError}
-              <button className="btn btn-sm ms-3" onClick={() => void fetchConfig()}>Retry</button>
+              <i className="bi bi-exclamation-circle-fill adm-inline-msg__icon" />
+              <span className="adm-inline-msg__text">{configError}</span>
+              <button className="adm-inline-msg__retry" onClick={() => void fetchConfig()}>Retry</button>
             </div>
           )}
 
-          {/* ── BACKEND ─────────────────────────────────────────────────────── */}
-          {!configLoading && activeTab === 'backend' && (
+
+          {/* BOOLEAN */}
+          {!configLoading && activeTab === 'boolean' && (
             <div>
-              <div className="adm-provider-block">
-                <div className="adm-sub-label mb-2">
-                  <i className="bi bi-cpu-fill" /> Provider Settings
-                </div>
-                <div className="row g-3 mb-1">
-                  <div className="col-md-8">
-                    <div className="adm-form-group">
-                      <label className="adm-label">Class Name</label>
-                      <input
-                        className="adm-input"
-                        value={config.className}
-                        onChange={e => setConfig(c => ({ ...c, className: e.target.value }))}
-                      />
-                    </div>
+              <div className="row g-2">
+                {(tabKeyMap['boolean'] ?? []).filter(k => k in flatConfig).map(k => (
+                  <div key={k} className="col-md-6">
+                    <BoolToggle value={flatConfig[k] === 'true'} onChange={() => toggleBool(k)} label={k} />
                   </div>
-                  <div className="col-md-4">
-                    <div className="adm-form-group">
-                      <label className="adm-label">Legacy Mode</label>
-                      <div className="adm-toggle-row">
-                        <button
-                          type="button"
-                          className={`adm-toggle-btn${config.legacy ? ' adm-toggle-btn--on' : ' adm-toggle-btn--off'}`}
-                          onClick={() => setConfig(c => ({ ...c, legacy: !c.legacy }))}
-                          aria-pressed={config.legacy}
-                        >
-                          <span className="adm-toggle-btn__knob" />
-                        </button>
-                        <span className={`adm-toggle-label${config.legacy ? ' adm-toggle-label--on' : ''}`}>
-                          {config.legacy ? 'true' : 'false'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="adm-field-row mb-3">
-                <label className="adm-label">Default Backend ID</label>
-                <input
-                  className="adm-input adm-input--sm"
-                  value={config.defaultBackendId}
-                  onChange={e => setConfig(c => ({ ...c, defaultBackendId: e.target.value }))}
-                />
-              </div>
-              <div className="adm-sub-label mb-2">
-                <i className="bi bi-diagram-3-fill" /> Configured Backends
-              </div>
-              <div className="adm-backend-list">
-                {config.backends.map(b => (
-                  <BackendCard
-                    key={b.id}
-                    backend={b}
-                    isDefault={b.id === config.defaultBackendId}
-                    onChange={updateBackend}
-                  />
                 ))}
               </div>
             </div>
           )}
 
-          {/* ── NAME SERVERS ─────────────────────────────────────────────────── */}
-          {!configLoading && activeTab === 'nameservers' && (
+          {/* NUMERIC */}
+          {!configLoading && activeTab === 'numeric' && (
             <div>
-              <div className="adm-field-desc">
-                <i className="bi bi-info-circle" /> Fully-qualified name-servers that VinylDNS will treat as approved. Type a value and press <kbd>Enter</kbd> to add.
-              </div>
-              <TagInput
-                tags={config.approvedNameServers}
-                onChange={v => setConfig(c => ({ ...c, approvedNameServers: v }))}
-                placeholder="e.g. ns1.example.com."
-              />
-              <div className="adm-count-badge mt-2">
-                <i className="bi bi-tag-fill" /> {config.approvedNameServers.length} server{config.approvedNameServers.length !== 1 ? 's' : ''}
+              <div className="row g-2">
+                {(tabKeyMap['numeric'] ?? []).filter(k => k in flatConfig).map(k => (
+                  <div key={k} className="col-sm-6 col-md-4 col-lg-3">
+                    <div className="adm-form-group">
+                      <label className="adm-label" style={{ fontSize: '0.68rem' }}>{k}</label>
+                      <input className="adm-input" type="number" value={flatConfig[k] ?? ''} onChange={e => setKey(k, e.target.value)} />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* ── HIGH-VALUE DOMAINS ───────────────────────────────────────────── */}
-          {!configLoading && activeTab === 'highvalue' && (
-            <div className="row g-4">
-              <div className="col-md-6">
-                <div className="adm-list-card adm-list-card--red">
-                  <div className="adm-list-card__header">
-                    <i className="bi bi-regex" />
-                    <span>Regex List</span>
-                    <span className="adm-list-card__count">{config.highValueDomains.regexList.length}</span>
+          {/* STRING */}
+          {!configLoading && activeTab === 'string' && (
+            <div>
+              <div className="row g-3">
+                {(tabKeyMap['string'] ?? []).filter(k => k in flatConfig).map(k => (
+                  <div key={k} className="col-md-8">
+                    <div className="adm-form-group">
+                      <label className="adm-label">{k}</label>
+                      <textarea className="adm-input adm-input--wrap" value={flatConfig[k] ?? ''} onChange={e => setKey(k, e.target.value)} rows={1} />
+                    </div>
                   </div>
-                  <p className="adm-list-card__desc">Applied to all record types except PTR.</p>
-                  <TagInput
-                    tags={config.highValueDomains.regexList}
-                    onChange={v => patchHVD({ regexList: v })}
-                    placeholder="e.g. high-value-domain.*"
-                  />
-                </div>
-              </div>
-              <div className="col-md-6">
-                <div className="adm-list-card adm-list-card--orange">
-                  <div className="adm-list-card__header">
-                    <i className="bi bi-diagram-2-fill" />
-                    <span>IP List</span>
-                    <span className="adm-list-card__count">{config.highValueDomains.ipList.length}</span>
-                  </div>
-                  <p className="adm-list-card__desc">Used exclusively for PTR records. Supports IPv4 and IPv6.</p>
-                  <TagInput
-                    tags={config.highValueDomains.ipList}
-                    onChange={v => patchHVD({ ipList: v })}
-                    placeholder="e.g. 192.0.2.252"
-                  />
-                </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* ── MANUAL REVIEW ────────────────────────────────────────────────── */}
-          {!configLoading && activeTab === 'manualreview' && (
-            <div className="row g-4">
-              <div className="col-md-4">
-                <div className="adm-list-card adm-list-card--purple">
-                  <div className="adm-list-card__header">
-                    <i className="bi bi-fonts" />
-                    <span>Domain List</span>
-                    <span className="adm-list-card__count">{config.manualReviewDomains.domainList.length}</span>
+          {/* ARRAY */}
+          {!configLoading && activeTab === 'array' && (
+            <div className="d-flex flex-column gap-3">
+              {(tabKeyMap['array'] ?? []).filter(k => k in flatConfig).map(k => {
+                let arr: unknown[] = [];
+                let arrParseOk = false;
+                try { const p = JSON.parse(flatConfig[k]); if (Array.isArray(p)) { arr = p; arrParseOk = true; } } catch {}
+                if (!arrParseOk) return (
+                  <div key={k} className="adm-array-card">
+                    <div className="adm-array-card__header">
+                      <div className="adm-sub-label"><i className="bi bi-list-ul" /> {k}</div>
+                    </div>
+                    <textarea className="adm-input adm-input--wrap" value={flatConfig[k] ?? ''} rows={3}
+                      onChange={e => setKey(k, e.target.value)}
+                      placeholder='["value1","value2"]' />
                   </div>
-                  <p className="adm-list-card__desc">FQDNs / regex for all record types except PTR.</p>
-                  <TagInput
-                    tags={config.manualReviewDomains.domainList}
-                    onChange={v => patchMRD({ domainList: v })}
-                    placeholder="e.g. needs-review.*"
-                  />
-                </div>
-              </div>
-              <div className="col-md-4">
-                <div className="adm-list-card adm-list-card--teal">
-                  <div className="adm-list-card__header">
-                    <i className="bi bi-diagram-2-fill" />
-                    <span>IP List</span>
-                    <span className="adm-list-card__count">{config.manualReviewDomains.ipList.length}</span>
+                );
+                const isPrimitive = arr.every(item => typeof item !== 'object' || item === null);
+                return (
+                  <div key={k} className="adm-array-card">
+                    <div className="adm-array-card__header">
+                      <div className="adm-sub-label"><i className="bi bi-list-ul" /> {k}</div>
+                      {!isPrimitive && (
+                        <button type="button" className="adm-add-row-btn" style={{ marginBottom: 0 }}
+                          onClick={() => {
+                            // Clone structure of first item with empty values so fields appear
+                            const template = arr[0] && typeof arr[0] === 'object' && arr[0] !== null
+                              ? Object.fromEntries(Object.entries(arr[0] as Record<string, unknown>).map(
+                                  ([field, val]) => [field, Array.isArray(val) ? [] : typeof val === 'number' ? 0 : ''],
+                                ))
+                              : {};
+                            setKey(k, JSON.stringify([...arr, template]));
+                          }}>
+                          <i className="bi bi-plus-lg" /> Add Item
+                        </button>
+                      )}
+                    </div>
+                    {isPrimitive ? (
+                      <div style={{ maxWidth: '560px' }}>
+                        <TagInput
+                          tags={arr as string[]}
+                          onChange={v => setKey(k, JSON.stringify(v))}
+                          placeholder={`Add to ${k}…`}
+                        />
+                      </div>
+                    ) : (
+                      <div className="adm-backend-list mt-2">
+                        {arr.map((item, i) => (
+                          <AclRuleCard
+                            key={i}
+                            rule={item as Record<string, unknown>}
+                            index={i}
+                            open={openCardIndex[k] === i}
+                            onOpen={() => toggleCard(k, i)}
+                            onChange={updated => {
+                              const newArr = [...arr];
+                              newArr[i] = updated;
+                              setKey(k, JSON.stringify(newArr));
+                            }}
+                            onRemove={arr.length > 1 ? () => setKey(k, JSON.stringify(arr.filter((_, j) => j !== i))) : undefined}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <p className="adm-list-card__desc">Used exclusively for PTR records.</p>
-                  <TagInput
-                    tags={config.manualReviewDomains.ipList}
-                    onChange={v => patchMRD({ ipList: v })}
-                    placeholder="e.g. 192.0.1.254"
-                  />
-                </div>
-              </div>
-              <div className="col-md-4">
-                <div className="adm-list-card adm-list-card--cyan">
-                  <div className="adm-list-card__header">
-                    <i className="bi bi-globe2" />
-                    <span>Zone Name List</span>
-                    <span className="adm-list-card__count">{config.manualReviewDomains.zoneNameList.length}</span>
+                );
+              })}
+            </div>
+          )}
+
+          {/* JSON */}
+          {!configLoading && activeTab === 'json' && (
+            <div className="d-flex flex-column gap-3">
+              {(tabKeyMap['json'] ?? []).filter(k => k in flatConfig).map(k => {
+                let obj: Record<string, unknown> = {};
+                let jsonParseOk = false;
+                try { const p = JSON.parse(flatConfig[k]); if (typeof p === 'object' && p !== null && !Array.isArray(p)) { obj = p as Record<string, unknown>; jsonParseOk = true; } } catch {}
+                if (!jsonParseOk) return (
+                  <div key={k} className="adm-array-card">
+                    <div className="adm-array-card__header">
+                      <div className="adm-sub-label"><i className="bi bi-braces" /> {k}</div>
+                    </div>
+                    <textarea className="adm-input adm-input--wrap" value={flatConfig[k] ?? ''} rows={4}
+                      onChange={e => setKey(k, e.target.value)}
+                      placeholder='{"key":"value"}' />
                   </div>
-                  <p className="adm-list-card__desc">Zone names that always require review.</p>
-                  <TagInput
-                    tags={config.manualReviewDomains.zoneNameList}
-                    onChange={v => patchMRD({ zoneNameList: v })}
-                    placeholder="e.g. zone.requires.review."
-                  />
-                </div>
-              </div>
+                );
+                return (
+                  <div key={k} className="adm-array-card">
+                    <div className="adm-array-card__header">
+                      <div className="adm-sub-label"><i className="bi bi-braces" /> {k}</div>
+                    </div>
+                    {'backend-providers' in obj ? (
+                      <BackendEditor value={flatConfig[k]} onChange={v => setKey(k, v)}
+                        openIdx={openCardIndex[k] ?? null}
+                        onToggle={i => toggleCard(k, i)} />
+                    ) : (
+                    <div className="row g-3">
+                      {Object.entries(obj).map(([field, val]) => {
+                        if (Array.isArray(val)) {
+                          const hasObjects = val.some(item => typeof item === 'object' && item !== null);
+                          // derive a contextual label from the field name
+                          const itemLabel = field.includes('backend') ? 'Backend'
+                            : field.includes('setting') ? 'Entry'
+                            : field.includes('rule') ? 'Rule'
+                            : 'Item';
+                          // build a blank template from the first item's structure
+                          const cloneTemplate = (src: unknown[]): Record<string, unknown> =>
+                            src[0] && typeof src[0] === 'object' && src[0] !== null
+                              ? Object.fromEntries(Object.entries(src[0] as Record<string, unknown>).map(
+                                  ([fk, fv]) => [fk, Array.isArray(fv) ? [] : typeof fv === 'number' ? 0 : ''],
+                                ))
+                              : {};
+                          if (hasObjects) {
+                            return (
+                              <div key={field} className="col-12">
+                                <div className="adm-sub-label mb-2" style={{ justifyContent: 'space-between' }}>
+                                  <span><i className="bi bi-list-ul" /> {field}</span>
+                                  <button type="button" className="adm-add-row-btn" style={{ marginBottom: 0 }}
+                                    onClick={() => {
+                                      let cur: Record<string, unknown> = {};
+                                      try { cur = JSON.parse(flatConfig[k]) as Record<string, unknown>; } catch {}
+                                      setKey(k, JSON.stringify({ ...cur, [field]: [...val, cloneTemplate(val)] }));
+                                    }}>
+                                    <i className="bi bi-plus-lg" /> Add Item
+                                  </button>
+                                </div>
+                                <div className="adm-backend-list">
+                                  {(val as Record<string, unknown>[]).map((item, i) => (
+                                    <AclRuleCard key={i} rule={item} index={i} label={itemLabel}
+                                      open={openCardIndex[`${k}.${field}`] === i}
+                                      onOpen={() => toggleCard(`${k}.${field}`, i)}
+                                      onChange={updated => {
+                                        let cur: Record<string, unknown> = {};
+                                        try { cur = JSON.parse(flatConfig[k]) as Record<string, unknown>; } catch {}
+                                        const newArr = [...(cur[field] as unknown[])];
+                                        newArr[i] = updated;
+                                        setKey(k, JSON.stringify({ ...cur, [field]: newArr }));
+                                      }}
+                                      onRemove={val.length > 1 ? () => {
+                                        let cur: Record<string, unknown> = {};
+                                        try { cur = JSON.parse(flatConfig[k]) as Record<string, unknown>; } catch {}
+                                        setKey(k, JSON.stringify({ ...cur, [field]: (val as unknown[]).filter((_, j) => j !== i) }));
+                                      } : undefined}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div key={field} className="col-md-8">
+                              <div className="adm-form-group">
+                                <label className="adm-label">{field}</label>
+                                <TagInput
+                                  tags={val as string[]}
+                                  onChange={v => {
+                                    let cur: Record<string, unknown> = {};
+                                    try { cur = JSON.parse(flatConfig[k]) as Record<string, unknown>; } catch {}
+                                    setKey(k, JSON.stringify({ ...cur, [field]: v }));
+                                  }}
+                                  placeholder={`Add ${field}…`}
+                                />
+                              </div>
+                            </div>
+                          );
+                        }
+                        if (typeof val === 'boolean') {
+                          return (
+                            <div key={field} className="col-md-6">
+                              <BoolToggle
+                                value={val}
+                                onChange={() => {
+                                  let cur: Record<string, unknown> = {};
+                                  try { cur = JSON.parse(flatConfig[k]) as Record<string, unknown>; } catch {}
+                                  setKey(k, JSON.stringify({ ...cur, [field]: !val }));
+                                }}
+                                label={field}
+                              />
+                            </div>
+                          );
+                        }
+                        if (typeof val === 'object' && val !== null) {
+                          return (
+                            <div key={field} className="col-12">
+                              <div className="adm-form-group">
+                                <label className="adm-label">{field}</label>
+                                <textarea
+                                  className="adm-input"
+                                  rows={4}
+                                  value={JSON.stringify(val, null, 2)}
+                                  onChange={e => {
+                                    try {
+                                      const parsed: unknown = JSON.parse(e.target.value);
+                                      let cur: Record<string, unknown> = {};
+                                      try { cur = JSON.parse(flatConfig[k]) as Record<string, unknown>; } catch {}
+                                      setKey(k, JSON.stringify({ ...cur, [field]: parsed }));
+                                    } catch { /* ignore invalid JSON while typing */ }
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        }
+                        const isNum = typeof val === 'number';
+                        return (
+                          <div key={field} className={isNum ? 'col-md-4' : 'col-md-8'}>
+                            <div className="adm-form-group">
+                              <label className="adm-label">{field}</label>
+                              <input
+                                className="adm-input"
+                                type={isNum ? 'number' : 'text'}
+                                value={String(val ?? '')}
+                                onChange={e => {
+                                  let cur: Record<string, unknown> = {};
+                                  try { cur = JSON.parse(flatConfig[k]) as Record<string, unknown>; } catch {}
+                                  setKey(k, JSON.stringify({ ...cur, [field]: isNum ? (parseFloat(e.target.value) || 0) : e.target.value }));
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
         </div>
-      </section>
+      </section>}
 
-      {/* ═══ SECTION 2 – USER MANAGEMENT (super only) ═════════════════════════ */}
-      {isSuper ? (
-        <section className="adm-section">
-          <div className="adm-section__header">
+
+      {/* ═══ SECTION 2 – USER MANAGEMENT ══════════════════════════════════════ */}
+      {pageTab === 'users' && <section className="adm-section">
+        <div className="adm-section__header">
             <div className="adm-section__title">
               <div className="adm-section__title-left">
                 <span className="adm-section__icon adm-section__icon--violet">
@@ -774,7 +1229,7 @@ export function AdminPage() {
                     placeholder="Enter the username"
                     value={lockUsername}
                     onChange={e => { setLockUsername(e.target.value); setLockResult(null); }}
-                    onKeyDown={e => e.key === 'Enter' && handleLockSubmit()}
+                    onKeyDown={e => { if (e.key === 'Enter') void handleLockSubmit(); }}
                   />
                 </div>
 
@@ -797,7 +1252,7 @@ export function AdminPage() {
                 </div>
 
                 {lockResult && (
-                  <div className={`adm-inline-msg ${lockResult.ok ? 'adm-inline-msg--ok' : 'adm-inline-msg--err'}`}>
+                  <div className={`adm-inline-msg mt-3 ${lockResult.ok ? 'adm-inline-msg--ok' : 'adm-inline-msg--err'}`}>
                     <i className={`bi ${lockResult.ok ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill'}`} />
                     {lockResult.msg}
                   </div>
@@ -805,8 +1260,10 @@ export function AdminPage() {
               </div>
 
               <div className="adm-action-panel__footer">
-                <button className="adm-panel-btn adm-panel-btn--primary" onClick={handleLockSubmit}>
-                  <i className="bi bi-send-fill" /> Submit
+                <button className="adm-panel-btn adm-panel-btn--primary" onClick={() => void handleLockSubmit()} disabled={lockLoading}>
+                  {lockLoading
+                    ? <><span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" /> Checking…</>
+                    : <><i className="bi bi-send-fill" /> Submit</>}
                 </button>
                 <button className="adm-panel-btn adm-panel-btn--ghost" onClick={() => { setLockUsername(''); setLockAction('lock'); setLockResult(null); }}>
                   <i className="bi bi-x-lg" /> Clear
@@ -835,18 +1292,24 @@ export function AdminPage() {
                     placeholder="Enter the username"
                     value={statusUsername}
                     onChange={e => { setStatusUsername(e.target.value); setStatusResult(null); }}
-                    onKeyDown={e => e.key === 'Enter' && handleStatusCheck()}
+                    onKeyDown={e => { if (e.key === 'Enter') void handleStatusCheck(); }}
                   />
                 </div>
 
                 {/* Result */}
+                                {statusResult === 'empty' && (
+                  <div className="adm-inline-msg adm-inline-msg--err mt-3">
+                    <i className="bi bi-exclamation-circle-fill" /> Username is mandatory.
+                  </div>
+                )}
+
                 {statusResult === 'notfound' && (
                   <div className="adm-inline-msg adm-inline-msg--err mt-3">
                     <i className="bi bi-person-x-fill" /> User <strong>{statusUsername}</strong> not found.
                   </div>
                 )}
 
-                {statusResult && statusResult !== 'notfound' && (() => {
+                {statusResult && statusResult !== 'notfound' && statusResult !== 'empty' && (() => {
                   const u = statusResult;
                   const role = getRoleFromUser(u);
                   const rm = roleMeta(role);
@@ -869,9 +1332,6 @@ export function AdminPage() {
                         <span className={rm.cls}>
                           <i className={`bi ${rm.icon}`} /> {rm.label}
                         </span>
-                        <span className="adm-status-card__since">
-                          <i className="bi bi-calendar3" /> Since {u.created}
-                        </span>
                       </div>
                     </div>
                   );
@@ -879,8 +1339,10 @@ export function AdminPage() {
               </div>
 
               <div className="adm-action-panel__footer">
-                <button className="adm-panel-btn adm-panel-btn--blue" onClick={handleStatusCheck}>
-                  <i className="bi bi-binoculars-fill" /> Check Status
+                <button className="adm-panel-btn adm-panel-btn--blue" onClick={() => void handleStatusCheck()} disabled={statusLoading}>
+                  {statusLoading
+                    ? <><span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" /> Checking…</>
+                    : <><i className="bi bi-binoculars-fill" /> Check Status</>}
                 </button>
                 <button className="adm-panel-btn adm-panel-btn--ghost" onClick={() => { setStatusUsername(''); setStatusResult(null); }}>
                   <i className="bi bi-x-lg" /> Clear
@@ -909,23 +1371,24 @@ export function AdminPage() {
                     placeholder="Enter the username"
                     value={permUsername}
                     onChange={e => { setPermUsername(e.target.value); setPermResult(null); }}
-                    onKeyDown={e => e.key === 'Enter' && handlePermSubmit()}
+                    onKeyDown={e => { if (e.key === 'Enter') void handlePermSubmit(); }}
                   />
                 </div>
 
                 <label className="adm-label mt-3">Select Permission</label>
                 <div className="adm-perm-radio-group">
                   {([
-                    { value: 'super'   as Role, label: 'Super User',   icon: 'bi-shield-fill-check', mod: 'super'   },
-                    { value: 'support' as Role, label: 'Support User',  icon: 'bi-headset',            mod: 'support' },
-                    { value: 'normal'  as Role, label: 'Normal User',   icon: 'bi-person-fill',        mod: 'normal'  },
+                    { value: 'MakeSuper'     as PermOp, label: 'Make Super User',    icon: 'bi-shield-fill-check',  mod: 'super'   },
+                    { value: 'RemoveSuper'   as PermOp, label: 'Remove Super User',  icon: 'bi-shield-slash-fill',  mod: 'normal'  },
+                    { value: 'MakeSupport'   as PermOp, label: 'Make Support User',  icon: 'bi-headset',            mod: 'support' },
+                    { value: 'RemoveSupport' as PermOp, label: 'Remove Support User',icon: 'bi-person-dash-fill',   mod: 'normal'  },
                   ]).map(opt => (
                     <label
                       key={opt.value}
-                      className={`adm-perm-radio adm-perm-radio--${opt.mod}${permRole === opt.value ? ' adm-perm-radio--active' : ''}`}
+                      className={`adm-perm-radio adm-perm-radio--${opt.mod}${permOp === opt.value ? ' adm-perm-radio--active' : ''}`}
                     >
-                      <input type="radio" name="permRole" value={opt.value} checked={permRole === opt.value}
-                        onChange={() => setPermRole(opt.value)} />
+                      <input type="radio" name="permOp" value={opt.value} checked={permOp === opt.value}
+                        onChange={() => setPermOp(opt.value)} />
                       <span className="adm-perm-radio__dot" />
                       <i className={`bi ${opt.icon} adm-perm-radio__ico`} />
                       {opt.label}
@@ -934,7 +1397,7 @@ export function AdminPage() {
                 </div>
 
                 {permResult && (
-                  <div className={`adm-inline-msg ${permResult.ok ? 'adm-inline-msg--ok' : 'adm-inline-msg--err'}`}>
+                  <div className={`adm-inline-msg mt-3 ${permResult.ok ? 'adm-inline-msg--ok' : 'adm-inline-msg--err'}`}>
                     <i className={`bi ${permResult.ok ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill'}`} />
                     {permResult.msg}
                   </div>
@@ -942,35 +1405,24 @@ export function AdminPage() {
               </div>
 
               <div className="adm-action-panel__footer">
-                <button className="adm-panel-btn adm-panel-btn--violet" onClick={handlePermSubmit}>
-                  <i className="bi bi-send-fill" /> Submit
+                <button className="adm-panel-btn adm-panel-btn--violet" onClick={() => void handlePermSubmit()} disabled={permLoading}>
+                  {permLoading
+                    ? <><span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" /> Checking…</>
+                    : <><i className="bi bi-send-fill" /> Submit</>}
                 </button>
-                <button className="adm-panel-btn adm-panel-btn--ghost" onClick={() => { setPermUsername(''); setPermRole('normal'); setPermResult(null); }}>
+                <button className="adm-panel-btn adm-panel-btn--ghost" onClick={() => { setPermUsername(''); setPermOp('MakeSuper'); setPermResult(null); }}>
                   <i className="bi bi-x-lg" /> Clear
                 </button>
               </div>
             </div>
 
           </div>
-        </section>
-      ) : (
-        <section className="adm-section adm-section--locked">
-          <div className="adm-locked-notice">
-            <i className="bi bi-shield-lock-fill adm-locked-notice__icon" />
-            <div>
-              <div className="adm-locked-notice__title">Super User Access Required</div>
-              <div className="adm-locked-notice__sub">
-                User Access Management is only available to super users. Contact an administrator to request elevated permissions.
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
+
+      </section>}
 
       {/* ═══ CONFIRM MODAL ════════════════════════════════════════════════════ */}
       {confirmModal && (() => {
-        const user = users.find(u => u.id === confirmModal.userId);
-        if (!user) return null;
+        const user = confirmModal.user;
         const isLockAction = confirmModal.type === 'lock' || confirmModal.type === 'unlock';
         const isLock = confirmModal.type === 'lock';
 
@@ -984,7 +1436,7 @@ export function AdminPage() {
                 <span className="adm-modal__title">
                   {isLockAction
                     ? `${isLock ? 'Lock' : 'Unlock'} user "${user.userName}"?`
-                    : `Change role for "${user.userName}"?`}
+                    : `Change permission for "${user.userName}"?`}
                 </span>
                 <button className="adm-modal__close" onClick={() => setConfirmModal(null)} aria-label="Close">
                   <i className="bi bi-x-lg" />
@@ -999,8 +1451,8 @@ export function AdminPage() {
                   </p>
                 ) : (
                   <p>
-                    You are changing <strong>{user.userName}</strong>'s role to{' '}
-                    <strong>{roleMeta(confirmModal.newRole!).label}</strong>.
+                    You are about to <strong>{confirmModal.permOp ? PERM_OP_LABELS[confirmModal.permOp] : ''}</strong> for{' '}
+                    <strong>{user.userName}</strong>.
                     This affects their permissions across the entire system.
                   </p>
                 )}
@@ -1011,31 +1463,194 @@ export function AdminPage() {
                 </button>
                 <button
                   className={`adm-btn ${isLockAction ? (isLock ? 'adm-btn--danger' : 'adm-btn--success') : 'adm-btn--primary'}`}
-                  onClick={() => {
-                    if (isLockAction) {
-                      applyLock(confirmModal.userId, isLock);
-                      setLockResult({ ok: true, msg: `User "${user.userName}" has been ${isLock ? 'locked' : 'unlocked'} successfully.` });
-                      // refresh status panel if it's showing the same user
-                      setStatusResult(prev =>
-                        prev && prev !== 'notfound' && prev.id === confirmModal.userId
-                          ? { ...prev, lockStatus: isLock ? 'Locked' : 'Unlocked' }
-                          : prev
-                      );
-                    } else if (confirmModal.newRole) {
-                      applyRole(confirmModal.userId, confirmModal.newRole);
-                      setPermResult({ ok: true, msg: `"${user.userName}" is now a ${roleMeta(confirmModal.newRole).label}.` });
-                    }
-                    setConfirmModal(null);
-                  }}
+                  onClick={() => void handleModalConfirm()}
+                  disabled={modalLoading}
                 >
-                  <i className={`bi ${isLockAction ? (isLock ? 'bi-lock-fill' : 'bi-unlock-fill') : 'bi-check2-circle'}`} />
-                  Confirm
+                  {modalLoading
+                    ? <><div className="spinner-border spinner-border-sm" role="status" /> Working…</>
+                    : <><i className={`bi ${isLockAction ? (isLock ? 'bi-lock-fill' : 'bi-unlock-fill') : 'bi-check2-circle'}`} /> Confirm</>}
                 </button>
               </div>
             </div>
           </div>
         );
       })()}
+
+      {/* ═══ CREATE CONFIG MODAL ══════════════════════════════════════════════ */}
+      {createModalOpen && (
+        <div className="adm-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setCreateModalOpen(false); }}>
+          <div className="adm-modal adm-modal--wide">
+            <div className="adm-modal__header">
+              <div className="adm-modal__icon adm-modal__icon--green">
+                <i className="bi bi-plus-circle-fill" />
+              </div>
+              <span className="adm-modal__title">Create Config Entries</span>
+              <button className="adm-modal__close" onClick={() => { setCreateModalOpen(false); setCreateSubmitAttempted(false); }} aria-label="Close">
+                <i className="bi bi-x-lg" />
+              </button>
+            </div>
+            <div className="adm-modal__body adm-create-modal-body">
+              <div className="adm-create-rows">
+                {createRows.map((row, i) => {
+                  const keyMissing = createSubmitAttempted && !row.key.trim();
+                  const valMissing = createSubmitAttempted && row.tab !== 'boolean' && !row.value.trim();
+                  return (
+                    <div key={i} className="adm-create-row">
+                      <div className="adm-create-row__num">{i + 1}</div>
+                      <select
+                        className="adm-input adm-select adm-create-row__tab"
+                        value={row.tab}
+                        onChange={e => {
+                          const newTab = e.target.value as ConfigTab;
+                          const defaultValue = newTab === 'boolean' ? 'false' : newTab === 'numeric' ? '0' : '';
+                          setCreateRows(rows => rows.map((r, j) => j === i ? { ...r, tab: newTab, key: '', value: defaultValue } : r));
+                        }}
+                      >
+                        {(Object.keys(TAB_DISPLAY) as ConfigTab[]).map(t => <option key={t} value={t}>{TAB_DISPLAY[t].label}</option>)}
+                      </select>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                        <input
+                          className={`adm-input adm-create-row__key${keyMissing ? ' is-invalid' : ''}`}
+                          placeholder="enter key name"
+                          value={row.key}
+                          onChange={e => setCreateRows(rows => rows.map((r, j) => j === i ? { ...r, key: e.target.value } : r))}
+                        />
+                        {keyMissing && <span style={{ fontSize: '0.68rem', color: '#dc3545' }}><i className="bi bi-exclamation-circle" /> Key is required</span>}
+                      </div>
+                      {row.tab === 'boolean' ? (
+                        <div className="adm-create-row__value adm-create-row__value--toggle">
+                          <span className={`adm-toggle-label${row.value === 'true' ? ' adm-toggle-label--on' : ''}`}>
+                            {row.value === 'true' ? 'true' : 'false'}
+                          </span>
+                          <button
+                            type="button"
+                            className={`adm-toggle-btn${row.value === 'true' ? ' adm-toggle-btn--on' : ' adm-toggle-btn--off'}`}
+                            onClick={() => setCreateRows(rows => rows.map((r, j) => j === i ? { ...r, value: r.value === 'true' ? 'false' : 'true' } : r))}
+                            aria-pressed={row.value === 'true'}
+                          >
+                            <span className="adm-toggle-btn__knob" />
+                          </button>
+                        </div>
+                      ) : row.tab === 'numeric' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                          <input
+                            className={`adm-input adm-create-row__value${valMissing ? ' is-invalid' : ''}`}
+                            type="number"
+                            placeholder="0"
+                            value={row.value}
+                            onChange={e => setCreateRows(rows => rows.map((r, j) => j === i ? { ...r, value: e.target.value } : r))}
+                          />
+                          {valMissing && <span style={{ fontSize: '0.68rem', color: '#dc3545' }}><i className="bi bi-exclamation-circle" /> Value is required</span>}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: 1 }}>
+                          <textarea
+                            className={`adm-input adm-create-row__value${valMissing ? ' is-invalid' : ''}`}
+                            placeholder={row.tab === 'array' ? '["value1","value2"]' : row.tab === 'json' ? '{"key":"value"}' : 'plain string'}
+                            rows={2}
+                            value={row.value}
+                            onChange={e => setCreateRows(rows => rows.map((r, j) => j === i ? { ...r, value: e.target.value } : r))}
+                          />
+                          {valMissing && <span style={{ fontSize: '0.68rem', color: '#dc3545' }}><i className="bi bi-exclamation-circle" /> Value is required</span>}
+                        </div>
+                      )}
+                      <button
+                          type="button"
+                          className="adm-tag__remove adm-create-row__remove"
+                          onClick={() => setCreateRows(rows => rows.filter((_, j) => j !== i))}
+                          aria-label="Remove row"
+                          disabled={createRows.length === 1}
+                          title={createRows.length === 1 ? 'Cannot remove the only row' : 'Remove row'}
+                        >
+                          <i className="bi bi-x" />
+                        </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                className="adm-add-row-btn"
+                onClick={() => setCreateRows(rows => [...rows, { tab: 'boolean', key: '', value: 'false' }])}
+              >
+                <i className="bi bi-plus" /> Add Row
+              </button>
+            </div>
+            <div className="adm-modal__footer">
+              <button className="adm-btn adm-btn--ghost" onClick={() => { setCreateModalOpen(false); setCreateSubmitAttempted(false); }}>Cancel</button>
+              <button
+                className="adm-btn adm-btn--primary"
+                onClick={() => void handleConfigCreate()}
+                disabled={createStatus === 'loading'}
+              >
+                {createStatus === 'loading'
+                  ? <><div className="spinner-border spinner-border-sm" role="status" /> Creating…</>
+                  : <><i className="bi bi-plus-circle-fill" /> Create</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ RELOAD PREVIEW MODAL ══════════════════════════════════════════════ */}
+      {reloadPreviewOpen && (
+        <div className="adm-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setReloadPreviewOpen(false); }}>
+          <div className="adm-modal adm-modal--wide">
+            <div className="adm-modal__header">
+              <div className="adm-modal__icon adm-modal__icon--blue">
+                <i className="bi bi-arrow-clockwise" />
+              </div>
+              <span className="adm-modal__title">Effective Config Preview</span>
+              <button className="adm-modal__close" onClick={() => setReloadPreviewOpen(false)} aria-label="Close">
+                <i className="bi bi-x-lg" />
+              </button>
+            </div>
+            <div className="adm-modal__body adm-reload-preview-body">
+              {Object.keys(reloadPreviewData).length === 0 ? (
+                <div className="adm-field-desc" style={{ padding: '1.5rem', textAlign: 'center' }}>
+                  <i className="bi bi-check-circle" style={{ fontSize: '1.5rem', marginBottom: '0.5rem', display: 'block', color: 'var(--adm-success)' }} />
+                  No effective Config Preview available.
+                </div>
+              ) : (
+                <>
+                  <p className="adm-reload-preview-hint">
+                    <i className="bi bi-info-circle" />{' '}
+                    The following {Object.keys(reloadPreviewData).length} pending change(s) will be applied on reload.
+                  </p>
+                  <div className="adm-reload-preview-table">
+                    <div className="adm-reload-preview-row adm-reload-preview-row--header">
+                      <span className="adm-reload-preview-row__key">Key</span>
+                      <span className="adm-reload-preview-row__from">Current</span>
+                      <span className="adm-reload-preview-row__to">New Value</span>
+                    </div>
+                    {Object.entries(reloadPreviewData).map(([key, { from, to }]) => (
+                      <div key={key} className="adm-reload-preview-row">
+                        <span className="adm-reload-preview-row__key">{key}</span>
+                        <span className="adm-reload-preview-row__from adm-reload-preview-row__from--old">{from === null ? 'null' : from}</span>
+                        <span className="adm-reload-preview-row__to adm-reload-preview-row__to--new">{to === null ? 'null' : to}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="adm-modal__footer">
+              <button className="adm-btn adm-btn--ghost" onClick={() => setReloadPreviewOpen(false)}>Cancel</button>
+              {Object.keys(reloadPreviewData).length > 0 && (
+                <button
+                  className="adm-btn adm-btn--primary"
+                  onClick={() => void handleConfirmReload()}
+                  disabled={reloadConfirmStatus === 'loading'}
+                >
+                  {reloadConfirmStatus === 'loading'
+                    ? <><div className="spinner-border spinner-border-sm" role="status" /> Reloading…</>
+                    : <><i className="bi bi-arrow-clockwise" /> Reload Config</>}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
