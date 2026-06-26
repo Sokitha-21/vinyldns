@@ -20,179 +20,359 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RecordsTable } from "../../../components/records/RecordsTable";
 import { renderWithProviders } from "../../utils/renderWithProviders";
+import type { RecordSet } from "../../../types/record";
 
-function recordRow(overrides: Record<string, unknown> = {}) {
+function record(overrides: Partial<RecordSet> = {}): RecordSet {
   return {
     id: "rec-1",
+    zoneId: "zone-1",
+    zoneName: "example.com.",
+    fqdn: "host.example.com.",
     name: "host",
     type: "A",
-    ttl: 300,
-    fqdn: "host.example.com.",
-    zoneName: "example.com.",
-    zoneId: "zone-1",
     status: "Active",
+    ttl: 300,
     records: [{ address: "1.2.3.4" }],
-    accessLevel: "Write",
-    zoneShared: false,
     ...overrides,
-  };
+  } as RecordSet;
 }
 
 describe("<RecordsTable />", () => {
   it("renders the empty state when no records are provided", () => {
     renderWithProviders(<RecordsTable records={[]} />);
+
     expect(screen.getByText("No records found")).toBeInTheDocument();
-  });
-
-  it("renders the table headers in the default configuration", () => {
-    renderWithProviders(<RecordsTable records={[recordRow()]} />);
-    expect(screen.getByText("FQDN")).toBeInTheDocument();
-    expect(screen.getByText("TYPE")).toBeInTheDocument();
-    expect(screen.getByText("TTL")).toBeInTheDocument();
-    expect(screen.getByText("RECORD DATA")).toBeInTheDocument();
-    expect(screen.getByText("ZONE")).toBeInTheDocument();
-  });
-
-  it("omits the ZONE column when showZone=false", () => {
-    renderWithProviders(
-      <RecordsTable records={[recordRow()]} showZone={false} />,
-    );
-    expect(screen.queryByText("ZONE")).not.toBeInTheDocument();
-  });
-
-  it("renders the OWNER GROUP column when showOwnerGroup=true", () => {
-    renderWithProviders(
-      <RecordsTable
-        records={[recordRow({ ownerGroupName: "Team Eng" })]}
-        showOwnerGroup
-      />,
-    );
-    expect(screen.getByText("OWNER GROUP")).toBeInTheDocument();
-  });
-
-  it("renders the FQDN and the type badge", () => {
-    renderWithProviders(<RecordsTable records={[recordRow()]} />);
-    expect(screen.getByText("host.example.com.")).toBeInTheDocument();
-    expect(screen.getByText("A")).toBeInTheDocument();
-  });
-
-  it("invokes onToggleSort when the FQDN header is clicked", async () => {
-    const onToggleSort = vi.fn();
-    renderWithProviders(
-      <RecordsTable
-        records={[recordRow()]}
-        nameSort="ASC"
-        onToggleSort={onToggleSort}
-      />,
-    );
-    await userEvent.click(screen.getByText("FQDN"));
-    expect(onToggleSort).toHaveBeenCalledWith("DESC");
-  });
-
-  it("flips sort DESC → ASC when nameSort is DESC", async () => {
-    const onToggleSort = vi.fn();
-    renderWithProviders(
-      <RecordsTable
-        records={[recordRow()]}
-        nameSort="DESC"
-        onToggleSort={onToggleSort}
-      />,
-    );
-    await userEvent.click(screen.getByText("FQDN"));
-    expect(onToggleSort).toHaveBeenCalledWith("ASC");
-  });
-
-  it("defaults toggle to ASC when nameSort is not provided", async () => {
-    const onToggleSort = vi.fn();
-    renderWithProviders(
-      <RecordsTable records={[recordRow()]} onToggleSort={onToggleSort} />,
-    );
-    await userEvent.click(screen.getByText("FQDN"));
-    expect(onToggleSort).toHaveBeenCalledWith("ASC");
-  });
-
-  it("renders TTL with a trailing 's' suffix", () => {
-    renderWithProviders(<RecordsTable records={[recordRow({ ttl: 600 })]} />);
-    expect(screen.getByText("600s")).toBeInTheDocument();
-  });
-
-  it("renders an em-dash when ttl is null", () => {
-    renderWithProviders(<RecordsTable records={[recordRow({ ttl: null })]} />);
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
-  });
-
-  it("renders a Shared access badge when zoneShared=true", () => {
-    renderWithProviders(
-      <RecordsTable records={[recordRow({ zoneShared: true })]} />,
-    );
-    expect(screen.getByText("Shared")).toBeInTheDocument();
-  });
-
-  it("renders a Private access badge when zoneShared=false", () => {
-    renderWithProviders(
-      <RecordsTable records={[recordRow({ zoneShared: false })]} />,
-    );
-    expect(screen.getByText("Private")).toBeInTheDocument();
-  });
-
-  it("renders View history / Edit / Delete buttons when the callbacks are provided", async () => {
-    const onViewHistory = vi.fn();
-    const onEdit = vi.fn();
-    const onDelete = vi.fn();
-    renderWithProviders(
-      <RecordsTable
-        records={[recordRow()]}
-        onViewHistory={onViewHistory}
-        onEdit={onEdit}
-        onDelete={onDelete}
-      />,
-    );
-    await userEvent.click(screen.getByTitle("View history"));
-    await userEvent.click(screen.getByTitle("Edit record"));
-    await userEvent.click(screen.getByTitle("Delete record"));
-    expect(onViewHistory).toHaveBeenCalledTimes(1);
-    expect(onEdit).toHaveBeenCalledTimes(1);
-    expect(onDelete).toHaveBeenCalledTimes(1);
-  });
-
-  it("hides Edit / Delete / View history buttons when callbacks are omitted", () => {
-    renderWithProviders(<RecordsTable records={[recordRow()]} />);
-    expect(screen.queryByTitle("Edit record")).not.toBeInTheDocument();
-    expect(screen.queryByTitle("Delete record")).not.toBeInTheDocument();
-    expect(screen.queryByTitle("View history")).not.toBeInTheDocument();
-  });
-
-  it("copies the FQDN to the clipboard when the copy button is clicked", async () => {
-    const writeText = vi
-      .spyOn(navigator.clipboard, "writeText")
-      .mockResolvedValue(undefined);
-    renderWithProviders(
-      <RecordsTable records={[recordRow({ fqdn: "abc.example.com." })]} />,
-    );
-    await userEvent.click(screen.getByTitle("Copy FQDN"));
-    expect(writeText).toHaveBeenCalledWith("abc.example.com.");
-    writeText.mockRestore();
-  });
-
-  it("renders the empty-state hint text", () => {
-    renderWithProviders(<RecordsTable records={[]} />);
     expect(
-      screen.getByText(/Enter a FQDN above and press Enter/i),
+      screen.getByText("Try adjusting the filter or add a new record."),
     ).toBeInTheDocument();
   });
 
-  it("falls back to constructing FQDN from name + zone when fqdn is missing", () => {
+  it("renders the core columns and row values for a private zone", () => {
+    renderWithProviders(<RecordsTable records={[record()]} />);
+
+    expect(screen.getByText("Name")).toBeInTheDocument();
+    expect(screen.getByText("Type")).toBeInTheDocument();
+    expect(screen.getByText("TTL")).toBeInTheDocument();
+    expect(screen.getByText("Record Data")).toBeInTheDocument();
+    expect(screen.getByText("Status")).toBeInTheDocument();
+
+    expect(screen.getByText("host")).toBeInTheDocument();
+    expect(screen.getByText("A")).toBeInTheDocument();
+    expect(screen.getByText("300s")).toBeInTheDocument();
+    expect(screen.getByText("1.2.3.4")).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
+  });
+
+  it("renders the private zone banner and pill when not shared", () => {
+    renderWithProviders(
+      <RecordsTable records={[record()]} isSharedZone={false} />,
+    );
+
+    expect(screen.getByText("Private Zone")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This zone is private — ownership transfer is not available.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Owner Group Name")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Ownership Transfer Status"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the shared zone banner, pill and ownership columns when shared", () => {
+    renderWithProviders(<RecordsTable records={[record()]} isSharedZone />);
+
+    expect(screen.getByText("Shared Zone")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Ownership columns are shown because this zone is shared.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Owner Group Name")).toBeInTheDocument();
+    expect(screen.getByText("Ownership Transfer Status")).toBeInTheDocument();
+  });
+
+  it("shows an unassigned owner label when the record has no owner group", () => {
+    renderWithProviders(<RecordsTable records={[record()]} isSharedZone />);
+
+    expect(screen.getByText("Unassigned")).toBeInTheDocument();
+  });
+
+  it("shows the owner group name when the record has an owner group", () => {
     renderWithProviders(
       <RecordsTable
         records={[
-          recordRow({
-            fqdn: undefined,
-            name: "web",
-            zoneName: "example.com.",
+          record({ ownerGroupId: "grp-1", ownerGroupName: "Platform Team" }),
+        ]}
+        isSharedZone
+      />,
+    );
+
+    expect(screen.getByText("Platform Team")).toBeInTheDocument();
+  });
+
+  it("formats the record data for multiple record types", () => {
+    renderWithProviders(
+      <RecordsTable
+        records={[
+          record({
+            id: "r-cname",
+            type: "CNAME",
+            records: [{ cname: "alias.example.com." }],
+          }),
+          record({
+            id: "r-mx",
+            type: "MX",
+            records: [{ preference: 10, exchange: "mail.example.com." }],
+          }),
+          record({ id: "r-txt", type: "TXT", records: [{ text: "hello" }] }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("alias.example.com.")).toBeInTheDocument();
+    expect(screen.getByText("10 mail.example.com.")).toBeInTheDocument();
+    expect(screen.getByText('"hello"')).toBeInTheDocument();
+  });
+
+  it("collapses record data beyond three entries into a more indicator", () => {
+    renderWithProviders(
+      <RecordsTable
+        records={[
+          record({
+            records: [
+              { address: "1.1.1.1" },
+              { address: "2.2.2.2" },
+              { address: "3.3.3.3" },
+              { address: "4.4.4.4" },
+            ],
           }),
         ]}
       />,
     );
-    expect(screen.getByText("web.example.com.")).toBeInTheDocument();
+
+    expect(screen.getByText("+1 more")).toBeInTheDocument();
+  });
+
+  it("renders an em dash when a record has no data", () => {
+    renderWithProviders(<RecordsTable records={[record({ records: [] })]} />);
+
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("invokes onEdit when the edit button is clicked", async () => {
+    const onEdit = vi.fn();
+    const rec = record();
+    renderWithProviders(<RecordsTable records={[rec]} onEdit={onEdit} />);
+
+    await userEvent.click(screen.getByTitle("Edit record"));
+
+    expect(onEdit).toHaveBeenCalledWith(rec);
+  });
+
+  it("invokes onDelete when the delete button is clicked", async () => {
+    const onDelete = vi.fn();
+    const rec = record();
+    renderWithProviders(<RecordsTable records={[rec]} onDelete={onDelete} />);
+
+    await userEvent.click(screen.getByTitle("Delete record"));
+
+    expect(onDelete).toHaveBeenCalledWith(rec);
+  });
+
+  it("omits the actions column when no action handlers are provided", () => {
+    renderWithProviders(<RecordsTable records={[record()]} />);
+
+    expect(screen.queryByText("Actions")).not.toBeInTheDocument();
+  });
+
+  it("renders a claim button when a shared record has no owner group", async () => {
+    const onRequestOwnership = vi.fn();
+    const rec = record();
+    renderWithProviders(
+      <RecordsTable
+        records={[rec]}
+        isSharedZone
+        onRequestOwnership={onRequestOwnership}
+      />,
+    );
+
+    const claimButton = screen.getByTitle("Claim ownership of this record");
+    await userEvent.click(claimButton);
+
+    expect(onRequestOwnership).toHaveBeenCalledWith(rec);
+  });
+
+  it("renders a request button when a shared record is owned by another group", async () => {
+    const onRequestOwnership = vi.fn();
+    const rec = record({ ownerGroupId: "grp-owner" });
+    renderWithProviders(
+      <RecordsTable
+        records={[rec]}
+        isSharedZone
+        userGroupIds={["grp-mine"]}
+        onRequestOwnership={onRequestOwnership}
+      />,
+    );
+
+    const requestButton = screen.getByTitle("Request ownership transfer");
+    await userEvent.click(requestButton);
+
+    expect(onRequestOwnership).toHaveBeenCalledWith(rec);
+  });
+
+  it("hides ownership actions when the user's only group already owns the record", () => {
+    renderWithProviders(
+      <RecordsTable
+        records={[record({ ownerGroupId: "grp-mine" })]}
+        isSharedZone
+        userGroupIds={["grp-mine"]}
+        onRequestOwnership={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByTitle("Request ownership transfer"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTitle("Claim ownership of this record"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders a disabled pending button for a pending review without permissions", () => {
+    renderWithProviders(
+      <RecordsTable
+        records={[
+          record({
+            ownerGroupId: "grp-owner",
+            recordSetGroupChange: { ownershipTransferStatus: "PendingReview" },
+          }),
+        ]}
+        isSharedZone
+        userGroupIds={[]}
+        onRequestOwnership={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByTitle("Ownership request is pending review"),
+    ).toBeDisabled();
+  });
+
+  it("lets a requestor cancel their pending ownership request", async () => {
+    const onCloseOwnershipRequest = vi.fn();
+    const rec = record({
+      ownerGroupId: "grp-owner",
+      recordSetGroupChange: {
+        ownershipTransferStatus: "PendingReview",
+        requestedOwnerGroupId: "grp-mine",
+      },
+    });
+    renderWithProviders(
+      <RecordsTable
+        records={[rec]}
+        isSharedZone
+        userGroupIds={["grp-mine"]}
+        onRequestOwnership={vi.fn()}
+        onCloseOwnershipRequest={onCloseOwnershipRequest}
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByTitle("Your request is pending — click to cancel"),
+    );
+    await userEvent.click(screen.getByText("Cancel Request"));
+
+    expect(onCloseOwnershipRequest).toHaveBeenCalledWith(rec);
+  });
+
+  it("lets an owner approve a pending ownership request", async () => {
+    const onApproveOwnership = vi.fn();
+    const rec = record({
+      ownerGroupId: "grp-owner",
+      recordSetGroupChange: {
+        ownershipTransferStatus: "PendingReview",
+        requestedOwnerGroupId: "grp-other",
+      },
+    });
+    renderWithProviders(
+      <RecordsTable
+        records={[rec]}
+        isSharedZone
+        userGroupIds={["grp-owner"]}
+        onApproveOwnership={onApproveOwnership}
+        onRejectOwnership={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByTitle("Ownership actions"));
+    await userEvent.click(screen.getByText("Approve"));
+
+    expect(onApproveOwnership).toHaveBeenCalledWith(rec);
+  });
+
+  it("lets an owner reject a pending ownership request", async () => {
+    const onRejectOwnership = vi.fn();
+    const rec = record({
+      ownerGroupId: "grp-owner",
+      recordSetGroupChange: {
+        ownershipTransferStatus: "PendingReview",
+        requestedOwnerGroupId: "grp-other",
+      },
+    });
+    renderWithProviders(
+      <RecordsTable
+        records={[rec]}
+        isSharedZone
+        userGroupIds={["grp-owner"]}
+        onApproveOwnership={vi.fn()}
+        onRejectOwnership={onRejectOwnership}
+      />,
+    );
+
+    await userEvent.click(screen.getByTitle("Ownership actions"));
+    await userEvent.click(screen.getByText("Reject"));
+
+    expect(onRejectOwnership).toHaveBeenCalledWith(rec);
+  });
+
+  it("gives a super user approve, reject and cancel actions on a pending request", async () => {
+    const onApproveOwnership = vi.fn();
+    const onCloseOwnershipRequest = vi.fn();
+    const rec = record({
+      ownerGroupId: "grp-owner",
+      recordSetGroupChange: {
+        ownershipTransferStatus: "PendingReview",
+        requestedOwnerGroupId: "grp-other",
+      },
+    });
+    renderWithProviders(
+      <RecordsTable
+        records={[rec]}
+        isSharedZone
+        isSuper
+        onApproveOwnership={onApproveOwnership}
+        onRejectOwnership={vi.fn()}
+        onCloseOwnershipRequest={onCloseOwnershipRequest}
+      />,
+    );
+
+    await userEvent.click(screen.getByTitle("Ownership actions"));
+    expect(screen.getByText("Approve")).toBeInTheDocument();
+    expect(screen.getByText("Reject")).toBeInTheDocument();
+    expect(screen.getByText("Cancel Request")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("Cancel Request"));
+
+    expect(onCloseOwnershipRequest).toHaveBeenCalledWith(rec);
+  });
+
+  it("renders the status badge text for an inactive record", () => {
+    renderWithProviders(
+      <RecordsTable records={[record({ status: "Inactive" })]} />,
+    );
+
+    expect(screen.getByText("Inactive")).toBeInTheDocument();
   });
 });

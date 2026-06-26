@@ -19,7 +19,7 @@ import {
   recStatusClass,
   recStatusLabel,
   summarizeRecordData,
-} from "../../../components/records/RecordsTable";
+} from "../../../components/records/RecordsSearchTable";
 
 describe("recStatusClass", () => {
   it.each([

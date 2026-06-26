@@ -151,7 +151,7 @@ const OWNERSHIP_STATUS_META: Record<string, { cls: string; icon: string; label: 
 };
 
 function OwnershipStatusBadge({ status }: { status?: string }) {
-  if (!status || status === 'None') {
+  if (!status || status === 'None' || status === 'AutoApproved') {
     return <span className="vds-ownership-badge vds-ownership-badge--none">—</span>;
   }
   const meta = OWNERSHIP_STATUS_META[status];
