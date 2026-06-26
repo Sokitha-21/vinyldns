@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState } from "react";
 
 export interface Crumb {
   label: string;
   to?: string;
+  state?: unknown;
 }
 
 interface BreadcrumbContextValue {
@@ -31,7 +32,11 @@ const BreadcrumbContext = createContext<BreadcrumbContextValue>({
   setCrumbs: () => {},
 });
 
-export function BreadcrumbProvider({ children }: { children: React.ReactNode }) {
+export function BreadcrumbProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [crumbs, setCrumbs] = useState<Crumb[] | null>(null);
   return (
     <BreadcrumbContext.Provider value={{ crumbs, setCrumbs }}>
