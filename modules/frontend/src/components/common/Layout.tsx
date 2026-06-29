@@ -77,7 +77,7 @@ export function Layout({ children }: LayoutProps) {
       await fetch('/regenerate-creds', { method: 'POST' });
       addAlert('success', 'Credentials regenerated successfully');
     } catch {
-      addAlert('danger', 'Failed to regenerate credentials');
+      addAlert("danger", "Failed to regenerate credentials");
     }
   };
 

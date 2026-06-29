@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import React from 'react';
+import React from "react";
 
 interface PaginationProps {
   onPrev: () => void;
@@ -22,26 +22,80 @@ interface PaginationProps {
   prevEnabled: boolean;
   nextEnabled: boolean;
   panelTitle?: string;
+  rangeLabel?: string;
+  /** Total count displayed as "X–Y of Z". Shown alongside rangeLabel when provided. */
+  totalCount?: number;
 }
 
-export function Pagination({ onPrev, onNext, prevEnabled, nextEnabled, panelTitle }: PaginationProps) {
+interface PaginatedSectionProps extends PaginationProps {
+  /** When false the pagination bars are hidden entirely */
+  show: boolean;
+  children: React.ReactNode;
+}
+
+/**
+ * Renders a top Pagination bar, then children, then a bottom Pagination bar.
+ * Both bars are only rendered when `show` is true.
+ */
+export function PaginatedSection({
+  show,
+  children,
+  ...paginationProps
+}: PaginatedSectionProps) {
   return (
-    <div className="d-flex align-items-center gap-2 mt-3">
-      {panelTitle && <span className="text-muted small">{panelTitle}</span>}
-      <button
-        className="btn btn-outline-secondary btn-sm"
-        onClick={onPrev}
-        disabled={!prevEnabled}
-      >
-        <i className="bi bi-chevron-left" /> Previous
-      </button>
-      <button
-        className="btn btn-outline-secondary btn-sm"
-        onClick={onNext}
-        disabled={!nextEnabled}
-      >
-        Next <i className="bi bi-chevron-right" />
-      </button>
+    <>
+      {show && <Pagination {...paginationProps} />}
+      {children}
+      {show && <Pagination {...paginationProps} />}
+    </>
+  );
+}
+
+export function Pagination({
+  onPrev,
+  onNext,
+  prevEnabled,
+  nextEnabled,
+  panelTitle,
+  rangeLabel,
+  totalCount,
+}: PaginationProps) {
+  const label = rangeLabel ?? panelTitle;
+  // Build the displayed label — append " of <total>" when a totalCount is given.
+  const displayLabel = label
+    ? totalCount != null
+      ? `${label} of ${totalCount}`
+      : label
+    : undefined;
+
+  return (
+    <div
+      className="d-flex justify-content-end align-items-center gap-2 my-2"
+      style={{ minHeight: 32 }}
+    >
+      {prevEnabled && (
+        <button className="vds-pagination-btn" onClick={onPrev}>
+          <i className="bi bi-chevron-left" style={{ fontSize: "0.75rem" }} />
+          <span>Previous</span>
+        </button>
+      )}
+      {displayLabel && (
+        <span className="vds-pagination-label">
+          {!rangeLabel && (
+            <i
+              className="bi bi-layers"
+              style={{ fontSize: "0.7rem", marginRight: 3 }}
+            />
+          )}
+          {displayLabel}
+        </span>
+      )}
+      {nextEnabled && (
+        <button className="vds-pagination-btn" onClick={onNext}>
+          <span>Next</span>
+          <i className="bi bi-chevron-right" style={{ fontSize: "0.75rem" }} />
+        </button>
+      )}
     </div>
   );
 }

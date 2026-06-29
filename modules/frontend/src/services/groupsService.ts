@@ -14,12 +14,18 @@
  * limitations under the License.
  */
 
-import api, { urlBuilder } from './api';
-import type { Group, GroupListResponse, GroupMember, GroupChangesResponse } from '../types/group';
+import api, { urlBuilder } from "./api";
+import type {
+  Group,
+  GroupListResponse,
+  GroupMember,
+  GroupChangesResponse,
+  GroupCount,
+} from "../types/group";
 
 export const groupsService = {
   createGroup(data: Partial<Group>) {
-    return api.post<Group>('/groups', data);
+    return api.post<Group>("/groups", data);
   },
 
   getGroup(id: string) {
@@ -27,7 +33,7 @@ export const groupsService = {
   },
 
   listEmailDomains() {
-    return api.get<string[]>('/groups/valid/domains');
+    return api.get<string[]>("/groups/valid/domains");
   },
 
   deleteGroup(id: string) {
@@ -43,7 +49,11 @@ export const groupsService = {
     return api.get<{ members: GroupMember[] }>(url);
   },
 
-  addGroupMember(groupId: string, memberId: string, data: Partial<GroupMember>) {
+  addGroupMember(
+    groupId: string,
+    memberId: string,
+    data: Partial<GroupMember>,
+  ) {
     return api.put(`/groups/${groupId}/members/${memberId}`, data);
   },
 
@@ -51,24 +61,21 @@ export const groupsService = {
     return api.delete(`/groups/${groupId}/members/${memberId}`);
   },
 
-  getGroups(
-    ignoreAccess?: boolean,
-    query?: string,
-    maxItems?: number
-  ) {
+  getGroups(ignoreAccess?: boolean, query?: string, maxItems?: number) {
     const params = {
       maxItems,
       groupNameFilter: query || undefined,
       ignoreAccess,
     };
-    return api.get<GroupListResponse>(urlBuilder('/groups', params));
+    return api.get<GroupListResponse>(urlBuilder("/groups", params));
   },
 
   getGroupsAbridged(
     limit?: number,
     startFrom?: string,
     ignoreAccess?: boolean,
-    query?: string
+    query?: string,
+    roleFilter?: number, // 0=admin, 1=member, 2=norole
   ) {
     const params = {
       maxItems: limit,
@@ -76,14 +83,19 @@ export const groupsService = {
       groupNameFilter: query || undefined,
       ignoreAccess,
       abridged: true,
+      roleFilter,
     };
-    return api.get<GroupListResponse>(urlBuilder('/groups', params));
+    return api.get<GroupListResponse>(urlBuilder("/groups", params));
   },
 
   getGroupChanges(groupId: string, count?: number, startFrom?: string) {
     const params = { startFrom, maxItems: count };
     return api.get<GroupChangesResponse>(
-      urlBuilder(`/groups/${groupId}/groupchanges`, params)
+      urlBuilder(`/groups/${groupId}/activity`, params),
     );
+  },
+
+  countGroups() {
+    return api.get<GroupCount>("/groups/count");
   },
 };

@@ -14,19 +14,22 @@
  * limitations under the License.
  */
 
-import React from 'react';
+import React from "react";
 
 interface LoadingSpinnerProps {
   message?: string;
 }
 
-export function LoadingSpinner({ message = 'Loading...' }: LoadingSpinnerProps) {
+export function LoadingSpinner({ message }: LoadingSpinnerProps) {
   return (
-    <div className="d-flex justify-content-center align-items-center py-5">
-      <div className="spinner-border text-primary me-2" role="status">
-        <span className="visually-hidden">Loading...</span>
+    <div className="vds-loader-backdrop">
+      <div className="vds-loader-ring" />
+      <div className="vds-loader-dots">
+        <span />
+        <span />
+        <span />
       </div>
-      <span className="text-muted">{message}</span>
+      {message && <span className="vds-loader-msg">{message}</span>}
     </div>
   );
 }

@@ -15,20 +15,20 @@
  */
 
 export type RecordType =
-  | 'A'
-  | 'AAAA'
-  | 'CNAME'
-  | 'MX'
-  | 'NS'
-  | 'PTR'
-  | 'SOA'
-  | 'SPF'
-  | 'SRV'
-  | 'SSHFP'
-  | 'TXT'
-  | 'NAPTR'
-  | 'DS'
-  | 'CAA';
+  | "A"
+  | "AAAA"
+  | "CNAME"
+  | "MX"
+  | "NS"
+  | "PTR"
+  | "SOA"
+  | "SPF"
+  | "SRV"
+  | "SSHFP"
+  | "TXT"
+  | "NAPTR"
+  | "DS"
+  | "CAA";
 
 export interface RecordData {
   address?: string;
@@ -64,20 +64,35 @@ export interface RecordData {
   value?: string;
 }
 
+export type OwnershipTransferStatus =
+  | "AutoApproved"
+  | "Cancelled"
+  | "ManuallyApproved"
+  | "ManuallyRejected"
+  | "Requested"
+  | "PendingReview";
+
+export interface RecordSetGroupChange {
+  ownershipTransferStatus?: OwnershipTransferStatus;
+  requestedOwnerGroupId?: string | null;
+}
+
 export interface RecordSet {
   id: string;
   zoneId: string;
   zoneName?: string;
+  fqdn?: string;
   name: string;
   type: RecordType;
-  status: 'Active' | 'Inactive' | 'Pending' | 'PendingDelete' | 'PendingUpdate';
+  status: "Active" | "Inactive" | "Pending" | "PendingDelete" | "PendingUpdate";
   created?: string;
   updated?: string;
   ttl: number;
   records: RecordData[];
-  account?: string;
-  accessLevel?: string;
   ownerGroupId?: string;
+  ownerGroupName?: string;
+  zoneShared?: boolean;
+  recordSetGroupChange?: RecordSetGroupChange;
 }
 
 export interface RecordSetListResponse {
@@ -96,6 +111,8 @@ export interface RecordSetChange {
   userId: string;
   id: string;
   zoneId: string;
+  updates?: { recordSet?: RecordSet };
+  userName?: string;
 }
 
 export interface RecordSetChangesResponse {

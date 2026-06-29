@@ -36,17 +36,34 @@ function getErrorMessage(error: { response?: { data?: string | { errors?: string
 
 /** Hook for global recordset search page */
 export function useRecords() {
-  const [nameFilter, setNameFilter] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [nameSort, setNameSort] = useState('');
-  const [ownerGroupFilter, setOwnerGroupFilter] = useState('');
-  const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
-    nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
+  const [nameFilter, setNameFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [nameSort, setNameSort] = useState("");
+  const [ownerGroupFilter, setOwnerGroupFilter] = useState("");
+  const {
+    paging,
+    setMaxItems,
+    nextPageUpdate,
+    prevPageUpdate,
+    getPrevStartFrom,
+    resetPaging,
+    currentPage,
+    prevPageEnabled,
+    getPanelTitle,
+  } = usePaging(100);
   const { addAlert } = useAlerts();
   const queryClient = useQueryClient();
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['recordsets', nameFilter, typeFilter, nameSort, ownerGroupFilter, paging.next],
+    queryKey: [
+      "recordsets",
+      nameFilter,
+      typeFilter,
+      nameSort,
+      ownerGroupFilter,
+      paging.maxItems,
+      paging.next,
+    ],
     queryFn: async () => {
       const res = await recordsService.listRecordSetData(
         paging.maxItems,
@@ -54,60 +71,94 @@ export function useRecords() {
         nameFilter,
         typeFilter,
         nameSort,
-        ownerGroupFilter
+        ownerGroupFilter,
       );
       return res.data;
     },
   });
 
+  // Wrap each mutation's error callback through `getErrorMessage` so user-
+  // facing alerts always contain the server's validation messages rather than
+  // the raw Axios error string.
   const createRecordMutation = useMutation({
-    mutationFn: ({ zoneId, record }: { zoneId: string; record: Partial<RecordSet> }) =>
-      recordsService.createRecordSet(zoneId, record),
+    mutationFn: ({
+      zoneId,
+      record,
+    }: {
+      zoneId: string;
+      record: Partial<RecordSet>;
+    }) => recordsService.createRecordSet(zoneId, record),
     onSuccess: () => {
-      addAlert('success', 'Record created successfully');
-      void queryClient.invalidateQueries({ queryKey: ['recordsets'] });
+      addAlert("success", "Record created successfully");
+      void queryClient.invalidateQueries({ queryKey: ["recordsets"] });
     },
     onError: (err: unknown) => {
-      addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
+      addAlert(
+        "danger",
+        getErrorMessage(err as Parameters<typeof getErrorMessage>[0]),
+      );
     },
   });
 
   const updateRecordMutation = useMutation({
-    mutationFn: ({ zoneId, recordSetId, record }: { zoneId: string; recordSetId: string; record: Partial<RecordSet> }) =>
-      recordsService.updateRecordSet(zoneId, recordSetId, record),
+    mutationFn: ({
+      zoneId,
+      recordSetId,
+      record,
+    }: {
+      zoneId: string;
+      recordSetId: string;
+      record: Partial<RecordSet>;
+    }) => recordsService.updateRecordSet(zoneId, recordSetId, record),
     onSuccess: () => {
-      addAlert('success', 'Record updated successfully');
-      void queryClient.invalidateQueries({ queryKey: ['recordsets'] });
+      addAlert("success", "Record updated successfully");
+      void queryClient.invalidateQueries({ queryKey: ["recordsets"] });
     },
     onError: (err: unknown) => {
-      addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
+      addAlert(
+        "danger",
+        getErrorMessage(err as Parameters<typeof getErrorMessage>[0]),
+      );
     },
   });
 
   const deleteRecordMutation = useMutation({
-    mutationFn: ({ zoneId, recordSetId }: { zoneId: string; recordSetId: string }) =>
-      recordsService.deleteRecordSet(zoneId, recordSetId),
+    mutationFn: ({
+      zoneId,
+      recordSetId,
+    }: {
+      zoneId: string;
+      recordSetId: string;
+    }) => recordsService.deleteRecordSet(zoneId, recordSetId),
     onSuccess: () => {
-      addAlert('success', 'Record deleted successfully');
-      void queryClient.invalidateQueries({ queryKey: ['recordsets'] });
+      addAlert("success", "Record deleted successfully");
+      void queryClient.invalidateQueries({ queryKey: ["recordsets"] });
     },
     onError: (err: unknown) => {
-      addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
+      addAlert(
+        "danger",
+        getErrorMessage(err as Parameters<typeof getErrorMessage>[0]),
+      );
     },
   });
 
-  const search = useCallback((filters: {
-    name?: string;
-    type?: string;
-    sort?: string;
-    ownerGroup?: string;
-  }) => {
-    setNameFilter(filters.name ?? '');
-    setTypeFilter(filters.type ?? '');
-    setNameSort(filters.sort ?? '');
-    setOwnerGroupFilter(filters.ownerGroup ?? '');
-    resetPaging();
-  }, [resetPaging]);
+  // Resetting pagination on every new search prevents the cursor from
+  // a previous query leaking into the new one and returning an off-page result.
+  const search = useCallback(
+    (filters: {
+      name?: string;
+      type?: string;
+      sort?: string;
+      ownerGroup?: string;
+    }) => {
+      setNameFilter(filters.name ?? "");
+      setTypeFilter(filters.type ?? "");
+      setNameSort(filters.sort ?? "");
+      setOwnerGroupFilter(filters.ownerGroup ?? "");
+      resetPaging();
+    },
+    [resetPaging],
+  );
 
   const nextPage = useCallback(() => {
     nextPageUpdate(data?.recordSets?.length ?? 0, data?.nextId);
@@ -116,6 +167,12 @@ export function useRecords() {
   const prevPage = useCallback(() => {
     prevPageUpdate(getPrevStartFrom());
   }, [prevPageUpdate, getPrevStartFrom]);
+
+  const nextPageEnabled = Boolean(data?.nextId);
+
+  const pageSizes = ([10, 25, 50, 100] as const).filter(
+    (s) => s <= paging.maxItems || nextPageEnabled,
+  );
 
   return {
     records: data?.recordSets ?? [],
@@ -128,6 +185,10 @@ export function useRecords() {
     nextPageEnabled,
     prevPageEnabled,
     getPanelTitle,
+    pageSize: paging.maxItems,
+    setPageSize: setMaxItems,
+    pageSizes,
+    currentPage,
     refetch,
     createRecord: createRecordMutation.mutate,
     updateRecord: updateRecordMutation.mutate,
@@ -142,7 +203,6 @@ export function useZoneRecords(zoneId: string) {
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
     nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
   const { addAlert } = useAlerts();
-  const queryClient = useQueryClient();
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['zone-recordsets', zoneId, nameFilter, typeFilter, paging.next],
@@ -164,7 +224,7 @@ export function useZoneRecords(zoneId: string) {
       recordsService.createRecordSet(zoneId, record),
     onSuccess: () => {
       addAlert('success', 'Record created successfully');
-      void queryClient.invalidateQueries({ queryKey: ['zone-recordsets', zoneId] });
+      void refetch();
     },
     onError: (err: unknown) => {
       addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
@@ -176,7 +236,7 @@ export function useZoneRecords(zoneId: string) {
       recordsService.updateRecordSet(zoneId, recordSetId, record),
     onSuccess: () => {
       addAlert('success', 'Record updated successfully');
-      void queryClient.invalidateQueries({ queryKey: ['zone-recordsets', zoneId] });
+      void refetch();
     },
     onError: (err: unknown) => {
       addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
@@ -188,7 +248,7 @@ export function useZoneRecords(zoneId: string) {
       recordsService.deleteRecordSet(zoneId, recordSetId),
     onSuccess: () => {
       addAlert('success', 'Record deleted successfully');
-      void queryClient.invalidateQueries({ queryKey: ['zone-recordsets', zoneId] });
+      void refetch();
     },
     onError: (err: unknown) => {
       addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
@@ -222,5 +282,8 @@ export function useZoneRecords(zoneId: string) {
     createRecord: createRecordMutation.mutate,
     updateRecord: updateRecordMutation.mutate,
     deleteRecord: deleteRecordMutation.mutate,
+    isCreatePending: createRecordMutation.isPending,
+    isUpdatePending: updateRecordMutation.isPending,
+    isDeletePending: deleteRecordMutation.isPending,
   };
 }
