@@ -923,6 +923,7 @@ class VinylDNS @Inject() (
       )
     }
   }
+  
   def updateUserPermission(userId: String, status: String): Action[AnyContent] = userAction.async { implicit request =>
     if (request.user.isSuper) {
       val vinyldnsRequest =
