@@ -30,7 +30,7 @@ import {
 } from '../../services/configService';
 import api from '../../services/api';
 
-// ── Mock the axios api instance ───────────────────────────────────────────────
+// Mock the axios api instance
 
 vi.mock('../../services/api', () => ({
   default: {
