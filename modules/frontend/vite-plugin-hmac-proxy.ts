@@ -70,6 +70,10 @@ interface AppConfig {
   api: {
     port: number;
   };
+  portal: {
+    port: number;
+    dist: string;
+  };
 }
 
 /**
@@ -148,6 +152,10 @@ function readAppConfig(): AppConfig {
     },
     api: {
       port: parseInt(flat['api.port'] ?? '9000', 10),
+    },
+    portal: {
+      port: parseInt(flat["portal.port"] ?? "9001", 10),
+      dist: flat["portal.dist"] ?? "",
     },
   };
 }
@@ -842,9 +850,80 @@ function proxyToApiWithLog(
   proxyReq.end();
 }
 
-// ── Vite plugin ───────────────────────────────────────────────────────────────
+// ── Vite plugin / Express backend ────────────────────────────────────────────
 
 import type { Express } from "express";
+
+/**
+ * Reads `portal.port` and `portal.dist` from application.conf synchronously.
+ * Handles both block form  ( portal { port = N } )  and flat form  ( portal.port = N ).
+ */
+export function readServerPort(): number {
+  const content = fs.readFileSync(
+    path.resolve(process.cwd(), "application.conf"),
+    "utf8"
+  );
+
+  // portal {
+  //   port = 9001
+  // }
+  const blockMatch = content.match(/\bportal\s*\{([^}]*)\}/s);
+  if (blockMatch) {
+    const m = blockMatch[1].match(/\bport\s*=\s*(\d+)/);
+    if (m) {
+      return Number(m[1]);
+    }
+  }
+
+  // portal.port = 9001
+  const flatMatch = content.match(/\bportal\.port\s*=\s*(\d+)/);
+  if (flatMatch) {
+    return Number(flatMatch[1]);
+  }
+
+  throw new Error("portal.port is not configured in application.conf");
+}
+
+// Handles both block form  ( portal { dist = N } )  and flat form  ( portal.dist = N ).
+
+export function readDistPath(): string {
+  const content = fs.readFileSync(
+    path.resolve(process.cwd(), "application.conf"),
+    "utf8"
+  );
+
+  // portal {
+  //   dist = "/opt/vinyldns-react/dist"
+  // }
+  const blockMatch = content.match(/\bportal\s*\{([^}]*)\}/s);
+  if (blockMatch) {
+    const m = blockMatch[1].match(/\bdist\s*=\s*"([^"]+)"/);
+    if (m) {
+      return m[1];
+    }
+  }
+
+  // portal.dist = "/opt/vinyldns-react/dist"
+  const flatMatch = content.match(/\bportal\.dist\s*=\s*"([^"]+)"/);
+  if (flatMatch) {
+    return flatMatch[1];
+  }
+
+  throw new Error("portal.dist is not configured in application.conf");
+}
+
+/**
+ * Vite dev-server plugin — registers the same HMAC-proxy middleware on
+ * Vite's Connect server so `npm run dev` also gets auth + signing.
+ */
+export function hmacProxyPlugin(): Plugin {
+  return {
+    name: 'vinyldns-hmac-proxy',
+    configureServer(server) {
+      createBackend(server.middlewares as unknown as Express);
+    },
+  };
+}
 
 export function createBackend(app: Express) {
     app.use(async (req, res, next) => {

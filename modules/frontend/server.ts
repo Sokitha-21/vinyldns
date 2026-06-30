@@ -2,26 +2,28 @@ import express from "express";
 import path from "path";
 import cookieParser from "cookie-parser";
 
-import { createBackend } from "./vite-plugin-hmac-proxy.js";
+import {
+  createBackend,
+  readServerPort,
+  readDistPath,
+} from "./vite-plugin-hmac-proxy.js";
 
 const app = express();
 
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Register API/backend middleware first
 createBackend(app);
 
-// Serve React build
-app.use(express.static("/Users/jvelku299@apac.comcast.com/Documents/projects/vinyldns/vinyldns/modules/frontend/dist"));
+const distPath = readDistPath();
+
+app.use(express.static(distPath));
 
 app.use((req, res) => {
-    res.sendFile("/Users/jvelku299@apac.comcast.com/Documents/projects/vinyldns/vinyldns/modules/frontend/dist/index.html");
+  res.sendFile(path.join(distPath, "index.html"));
 });
 
-const port = 9100;
+const port = readServerPort();
 
 app.listen(port, () => {
-    console.log(`Backend listening on ${port}`);
+  console.log(`Backend listening on ${port}`);
 });

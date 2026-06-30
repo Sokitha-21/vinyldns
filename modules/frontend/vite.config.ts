@@ -17,7 +17,7 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { hmacProxyPlugin } from './vite-plugin-hmac-proxy';
+import { hmacProxyPlugin, readServerPort } from './vite-plugin-hmac-proxy';
 import { readFileSync, createReadStream, existsSync } from 'fs';
 
 // Read the canonical version from version.sbt at the repo root.
@@ -35,9 +35,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
-    // Signs all VinylDNS API requests with AWS V4 HMAC (service=VinylDNS,
-    // region=us-east-1) and proxies them to http://localhost:9000.
-    // This replaces the signing work the Play portal used to do.
+    hmacProxyPlugin(),
     // Serve images directly from the microsite img directory under /img/*
     {
       name: 'serve-microsite-img',
@@ -73,7 +71,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 9001,
+    port: readServerPort(),
     strictPort: true,   // fail hard rather than silently falling back to 9002+
   },
   test: {
