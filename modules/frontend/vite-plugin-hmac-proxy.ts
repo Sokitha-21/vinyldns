@@ -44,6 +44,7 @@
 import type { Plugin } from 'vite';
 import crypto from 'crypto';
 import http from 'http';
+import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import ldapjs from 'ldapjs';
@@ -66,13 +67,40 @@ interface AppConfig {
     database: string;
     user: string;
     password: string;
+    ssl: boolean;
   };
   api: {
+    url: string;      // full api URL e.g. https://sample.net:9443
+    protocol: string; // "http" or "https"
+    hostname: string;
     port: number;
   };
   portal: {
     port: number;
     dist: string;
+  };
+  oidc: {
+    enabled: boolean;
+    /** OIDC discovery URL or authorization endpoint */
+    authorizationEndpoint: string;
+    tokenEndpoint: string;
+    logoutEndpoint: string;
+    clientId: string;
+    clientSecret: string;
+    redirectUri: string;
+    scope: string;
+    jwtUsernameField: string;
+    jwtFirstnameField: string;
+    jwtLastnameField: string;
+    jwtEmailField: string;
+  };
+  crypto: {
+    type: string;
+    secret: string;
+    obfV1Pw: string;
+    obfV1Iv: string;
+    obfV1Iterations: number;
+    obfV1KeyLength: number;
   };
 }
 
@@ -129,11 +157,24 @@ function readAppConfig(): AppConfig {
     }
   }
 
-  // mysql.endpoint = "host:port" or bare host:port
-  const endpoint = flat['mysql.endpoint'] ?? 'localhost:19002';
-  const colonIdx = endpoint.lastIndexOf(':');
-  const mysqlHost = colonIdx !== -1 ? endpoint.slice(0, colonIdx) : endpoint;
-  const mysqlPort = colonIdx !== -1 ? parseInt(endpoint.slice(colonIdx + 1), 10) : 19002;
+  // mysql.endpoint (plain "host:port") OR mysql.settings.url (JDBC URL)
+  // jdbc:mariadb://host:port/database?useSSL=true&...
+  const endpoint = flat['mysql.endpoint'] ?? flat['mysql.settings.url'] ?? 'localhost:3306';
+  let mysqlHost: string;
+  let mysqlPort: number;
+  let mysqlSsl = false;
+
+  if (endpoint.startsWith('jdbc:')) {
+    // jdbc:protocol://host:port/database?params
+    const jdbcMatch = endpoint.match(/\/\/([^/:?]+)(?::(\d+))?(?:\/|\?|$)/);
+    mysqlHost = jdbcMatch?.[1] ?? 'localhost';
+    mysqlPort = jdbcMatch?.[2] ? parseInt(jdbcMatch[2], 10) : 3306;
+    mysqlSsl  = /useSSL=true/i.test(endpoint);
+  } else {
+    const colonIdx = endpoint.lastIndexOf(':');
+    mysqlHost = colonIdx !== -1 ? endpoint.slice(0, colonIdx) : endpoint;
+    mysqlPort = colonIdx !== -1 ? parseInt(endpoint.slice(colonIdx + 1), 10) : 19002;
+  }
 
   return {
     ldap: {
@@ -145,28 +186,118 @@ function readAppConfig(): AppConfig {
     },
     mysql: {
       host:     mysqlHost,
-      port:     isNaN(mysqlPort) ? 19002 : mysqlPort,
+      port:     isNaN(mysqlPort) ? 3306 : mysqlPort,
       database: flat['mysql.settings.name']     ?? 'vinyldns',
       user:     flat['mysql.settings.user']     ?? 'root',
       password: flat['mysql.settings.password'] ?? 'pass',
+      ssl:      mysqlSsl,
     },
-    api: {
-      port: parseInt(flat['api.port'] ?? '9000', 10),
-    },
+    api: (() => {
+      // Prefer the full backend URL (Scala Play config key) over bare port
+      const rawUrl =
+        flat['api.url'] ??
+        `http://localhost:${flat['api.port'] ?? '9000'}`;
+      let parsed: URL;
+      try { parsed = new URL(rawUrl); } catch { parsed = new URL('http://localhost:9000'); }
+      const protocol = parsed.protocol.replace(':', '');
+      const defaultPort = protocol === 'https' ? 443 : 80;
+      const port = parsed.port ? parseInt(parsed.port, 10) : defaultPort;
+      // Normalise to no trailing slash
+      const url = `${protocol}://${parsed.hostname}${ port !== defaultPort ? ':' + port : '' }`;
+      return { url, protocol, hostname: parsed.hostname, port };
+    })(),
     portal: {
       port: parseInt(flat["portal.port"] ?? "9001", 10),
       dist: flat["portal.dist"] ?? "",
+    },
+    oidc: {
+      enabled:               flat['oidc.enabled'] === 'true',
+      authorizationEndpoint: flat['oidc.authorization-endpoint']  ?? flat['oidc.authorization_endpoint'] ?? '',
+      tokenEndpoint:         flat['oidc.token-endpoint']          ?? flat['oidc.tokenEndpoint']          ?? '',
+      logoutEndpoint:        flat['oidc.logout-endpoint']         ?? flat['oidc.logoutEndpoint']         ?? '',
+      clientId:              flat['oidc.client-id']               ?? flat['oidc.clientId']               ?? '',
+      clientSecret:          flat['oidc.secret']                  ?? '',
+      redirectUri:           flat['oidc.redirect-uri']            ?? flat['oidc.redirectUri']            ?? '',
+      scope:                 flat['oidc.scope']                   ?? 'openid profile email',
+      jwtUsernameField:      flat['oidc.jwt-username-field']      ?? 'preferred_username',
+      jwtFirstnameField:     flat['oidc.jwt-firstname-field']     ?? 'given_name',
+      jwtLastnameField:      flat['oidc.jwt-lastname-field']      ?? 'family_name',
+      jwtEmailField:         flat['oidc.jwt-email-field']         ?? 'email',
+    },
+    crypto: {
+      type:            flat['crypto.type']                          ?? '',
+      secret:          flat['crypto.secret']                        ?? '',
+      obfV1Pw:         flat['crypto.obfuscator.v1.pw']             ?? '',
+      obfV1Iv:         flat['crypto.obfuscator.v1.iv']             ?? '',
+      obfV1Iterations: parseInt(flat['crypto.obfuscator.v1.iterations']  ?? '4096', 10),
+      obfV1KeyLength:  parseInt(flat['crypto.obfuscator.v1.key-length']  ?? '128',  10),
     },
   };
 }
 
 let _config: AppConfig | undefined;
 function getConfig(): AppConfig {
-  if (!_config) _config = readAppConfig();
+  if (!_config) {
+    _config = readAppConfig();
+    if (_config.oidc.enabled) {
+      console.log(
+        `[hmac-proxy] OIDC mode (Azure AD) — auth handled natively by Node.js.\n` +
+        `              Token endpoint : ${_config.oidc.tokenEndpoint}\n` +
+        `              Redirect URI   : ${_config.oidc.redirectUri || `http://localhost:${_config.portal.port}`}\n` +
+        `              API backend    : ${_config.api.url}\n` +
+        `              NOTE: redirect-uri in application.conf must match the Azure AD app registration.`
+      );
+    }
+  }
   return _config;
 }
 
-// ── fixed constants ───────────────────────────────────────────────────────────
+// ── Credential decryption (pluggable) ───────────────────────────────────────
+/** Function that decrypts an encrypted credential value from MySQL. */
+export type CredentialDecryptor =
+  (value: string, cryptoConfig: AppConfig['crypto']) => string;
+
+/** Options accepted by hmacProxyPlugin() and createBackend(). */
+export interface ProxyOptions {
+  /**
+   * Optional credential decryptor.  When omitted (the default) credential
+   * values are passed through unchanged — correct for NoOpCrypto or plaintext
+   * key storage.
+   */
+  credentialDecryptor?: CredentialDecryptor;
+}
+
+/** Module-level decryptor set once at startup. */
+let _credentialDecryptor: CredentialDecryptor = (v) => v; // default: no-op
+
+function decryptVinylDnsCredential(value: string): string {
+  return _credentialDecryptor(value, getConfig().crypto);
+}
+
+/**
+ * Initialises the credential decryptor before the server handles any requests.
+ *
+ * If `override` is supplied it is used directly.  Otherwise the proxy
+ * attempts to load an optional local module `./credential-decryptor.js`
+ * (compiled from the gitignored `credential-decryptor.ts` when present).
+ * If the file does not exist the default no-op passthrough is kept.
+ *
+ * The import path is held in a variable so TypeScript and Vite do not try to
+ * statically resolve or bundle the optional module.
+ */
+export async function initDecryptor(override?: CredentialDecryptor): Promise<void> {
+  if (override) {
+    _credentialDecryptor = override;
+    return;
+  }
+  // Variable path prevents static analysis — module is optional and gitignored.
+  const modulePath = './credential-decryptor.js';
+  const mod = await import(/* @vite-ignore */ modulePath).catch(() => null);
+  if (mod && typeof mod.decryptCredential === 'function') {
+    _credentialDecryptor = mod.decryptCredential;
+    console.log('[hmac-proxy] credential decryptor loaded from credential-decryptor.js');
+  }
+}
 
 const SERVICE = 'VinylDNS';
 const REGION  = 'us-east-1';
@@ -504,6 +635,7 @@ function openMysqlConnection() {
   return mysql.createConnection({
     host: cfg.host, port: cfg.port, database: cfg.database,
     user: cfg.user, password: cfg.password,
+    ...(cfg.ssl ? { ssl: { rejectUnauthorized: false } } : {}),
   });
 }
 
@@ -524,10 +656,16 @@ async function getUserCredentials(username: string): Promise<VinylUser | null> {
     const row = rows[0];
     const dataBlob: Buffer = row.data as Buffer;
     const proto = decodeUserProto(dataBlob);
+    const rawSecret = proto.secretKey ?? '';
+    const secretKey = decryptVinylDnsCredential(rawSecret);
+    console.log(
+      `[hmac-proxy] getUserCredentials(${username}): accessKey="${proto.accessKey ?? row.access_key}" ` +
+      `secretKey len=${secretKey.length} (first 6: "${secretKey.substring(0, 6)}")`
+    );
     return {
       userName:   username,
       accessKey:  proto.accessKey  ?? (row.access_key as string),
-      secretKey:  proto.secretKey  ?? '',
+      secretKey,
       id:         proto.id          ?? '',
       firstName:  proto.firstName,
       lastName:   proto.lastName,
@@ -700,7 +838,7 @@ function buildAuthHeaders(
   accessKey: string,
   secretKey: string,
 ): Record<string, string> {
-  const apiPort = getConfig().api.port;
+  const apiCfg = getConfig().api;
   const now = new Date();
   // yyyyMMddTHHmmssZ  (ISO-8601 compact, UTC, no milliseconds)
   const dateTime =
@@ -714,14 +852,24 @@ function buildAuthHeaders(
     'Z';
   const dateStamp = dateTime.slice(0, 8);
 
-  const hostHeader = `localhost:${apiPort}`;
+  // Use hostname only (no port) for the HMAC host header.
+  // The VinylDNS API is typically behind a reverse proxy/load balancer that
+  // terminates TLS and strips the port from the Host header before forwarding.
+  // If we sign with "hostname:port" but the API sees "hostname", the signatures
+  // will not match.  Using just the hostname matches the Scala Play portal's
+  // behaviour (Java's URI.getHost() returns hostname without port).
+  const hostHeader = apiCfg.hostname;
   const bodyHash   = sha256Hex(bodyBuf);
 
-  // Headers to sign (sorted alphabetically by key)
+  // Headers to sign (sorted alphabetically by key).
+  // VinylDNS uses standard AWS Sig V4 for non-S3: sign only host + x-amz-date.
+  // x-amz-content-sha256 is intentionally NOT a signed header (matching boto3 /
+  // botocore SigV4Auth behaviour for non-S3 services and the functional test
+  // client in aws_request_signer.py).  Including it causes a mismatch when a
+  // reverse proxy strips the header before the API verifies the signature.
   const signMap: Record<string, string> = {
-    host:                 hostHeader,
-    'x-amz-content-sha256': bodyHash,
-    'x-amz-date':         dateTime,
+    host:         hostHeader,
+    'x-amz-date': dateTime,
   };
 
   const sortedNames   = Object.keys(signMap).sort();
@@ -778,17 +926,19 @@ function proxyToApi(
   bodyBuf: Buffer,
   serverRes: http.ServerResponse,
 ): void {
-  const target = query ? `${path}?${query}` : path;
+  const apiCfg = getConfig().api;
+  const target  = query ? `${path}?${query}` : path;
+  const transport = apiCfg.protocol === 'https' ? https : http;
 
   const options: http.RequestOptions = {
-    hostname: 'localhost',
-    port:     getConfig().api.port,
+    hostname: apiCfg.hostname,
+    port:     apiCfg.port,
     method:   method.toUpperCase(),
     path:     target,
     headers:  reqHeaders,
   };
 
-  const proxyReq = http.request(options, (proxyRes) => {
+  const proxyReq = transport.request(options, (proxyRes) => {
     // Pass through status + headers
     serverRes.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers as Record<string, string>);
     proxyRes.pipe(serverRes, { end: true });
@@ -821,18 +971,22 @@ function proxyToApiWithLog(
   query: string,
   reqHeaders: Record<string, string>,
   bodyBuf: Buffer,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   serverRes: http.ServerResponse,
 ): void {
-  const target = query ? `${path}?${query}` : path;
+  const apiCfg2  = getConfig().api;
+  const target   = query ? `${path}?${query}` : path;
+  const transport2 = apiCfg2.protocol === 'https' ? https : http;
+
   const options: http.RequestOptions = {
-    hostname: 'localhost',
-    port:     getConfig().api.port,
+    hostname: apiCfg2.hostname,
+    port:     apiCfg2.port,
     method:   method.toUpperCase(),
     path:     target,
     headers:  reqHeaders,
   };
 
-  const proxyReq = http.request(options, (proxyRes) => {
+  const proxyReq = transport2.request(options, (proxyRes) => {
     const status = proxyRes.statusCode ?? 502;
     const qs = query ? `?${query}` : '';
     console.log(`[hmac-proxy] ← ${method} ${path}${qs} → HTTP ${status}`);
@@ -848,6 +1002,191 @@ function proxyToApiWithLog(
 
   if (bodyBuf.length > 0) proxyReq.write(bodyBuf);
   proxyReq.end();
+}
+
+// ── OIDC pass-through helpers ─────────────────────────────────────────────────
+
+/**
+ * In OIDC mode the Scala Play portal (localhost:{api.port}) handles all auth
+ * and signs API calls.  This function forwards a request to it transparently,
+ * preserving the Play session cookie so the browser stays authenticated.
+ *
+ * Path mapping:
+ *   /users/*, /groups/*, /zones/*, /recordsets/*, /dnschanges/*
+ *     → /api{path}   (Scala Play routes carry the /api/ prefix)
+ *   Everything else (callbacks, logout, creds endpoints)
+ *     → same path
+ */
+function proxyToScalaPortal(
+  method: string,
+  targetPath: string,
+  query: string,
+  req: http.IncomingMessage,
+  bodyBuf: Buffer,
+  serverRes: http.ServerResponse,
+): void {
+  const port = getConfig().api.port;
+  const urlTarget = query ? `${targetPath}?${query}` : targetPath;
+
+  const headers: Record<string, string> = {};
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (typeof v === 'string') headers[k] = v;
+    else if (Array.isArray(v)) headers[k] = v.join(', ');
+  }
+  headers['host'] = `localhost:${port}`;
+  if (bodyBuf.length > 0) headers['content-length'] = String(bodyBuf.length);
+
+  const options: http.RequestOptions = {
+    hostname: 'localhost',
+    port,
+    method:   method.toUpperCase(),
+    path:     urlTarget,
+    headers,
+  };
+
+  const proxyReq = http.request(options, (proxyRes) => {
+    console.log(`[hmac-proxy] OIDC proxy → ${method} ${urlTarget} HTTP ${proxyRes.statusCode}`);
+    serverRes.writeHead(
+      proxyRes.statusCode ?? 502,
+      proxyRes.headers as Record<string, string | string[]>,
+    );
+    proxyRes.pipe(serverRes, { end: true });
+  });
+
+  proxyReq.on('error', (err: NodeJS.ErrnoException) => {
+    const detail = err.code
+      ? `${err.code}: ${err.message}`
+      : (err.message || String(err));
+    console.error(`[hmac-proxy] Scala Play proxy error (${method} ${urlTarget}): ${detail}`);
+    if (!serverRes.headersSent) serverRes.writeHead(502);
+    serverRes.end(JSON.stringify({ error: 'Backend unavailable', detail }));
+  });
+
+  if (bodyBuf.length > 0) proxyReq.write(bodyBuf);
+  proxyReq.end();
+}
+
+/** API prefixes that need /api/ prepended when forwarding to Scala Play. */
+const SCALA_API_PREFIXES = [
+  '/users', '/groups', '/zones', '/recordsets', '/dnschanges', '/batchrecordsets',
+];
+
+// SCALA_PASS_THROUGH / SCALA_API_PREFIXES are kept for reference but no longer used.
+// OIDC auth is now handled natively by Node.js (see /callback handler below).
+
+/**
+ * Decodes the payload of a JWT without verifying the signature.
+ * The token arrived over TLS directly from the Azure AD token endpoint so we
+ * trust it at this point; full JWK verification can be added later.
+ */
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const parts = token.split('.');
+  if (parts.length < 2) return {};
+  try {
+    // base64url → base64 standard → Buffer → JSON
+    const padded = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = Buffer.from(padded, 'base64').toString('utf8');
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Exchanges an authorization code for tokens at the Azure AD token endpoint.
+ * Uses client_secret authentication (the "secret" field in the OIDC config).
+ */
+function exchangeOidcCode(
+  code: string,
+  redirectUri: string,
+): Promise<{ idToken: string; accessToken: string }> {
+  const cfg = getConfig().oidc;
+  const body = new URLSearchParams({
+    grant_type:    'authorization_code',
+    code,
+    redirect_uri:  redirectUri,
+    client_id:     cfg.clientId,
+    client_secret: cfg.clientSecret,
+  }).toString();
+
+  return new Promise((resolve, reject) => {
+    const u = new URL(cfg.tokenEndpoint);
+    const opts: https.RequestOptions = {
+      hostname: u.hostname,
+      port:     u.port || '443',
+      path:     u.pathname + u.search,
+      method:   'POST',
+      headers:  {
+        'Content-Type':   'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    };
+    const req = https.request(opts, (tokenRes) => {
+      let raw = '';
+      tokenRes.on('data', (chunk: string) => { raw += chunk; });
+      tokenRes.on('end', () => {
+        try {
+          const parsed = JSON.parse(raw) as Record<string, string>;
+          if (parsed['error']) {
+            reject(new Error(`OIDC token error: ${parsed['error']} – ${parsed['error_description'] ?? ''}`));
+          } else {
+            resolve({ idToken: parsed['id_token'] ?? '', accessToken: parsed['access_token'] ?? '' });
+          }
+        } catch (e) {
+          reject(new Error(`Failed to parse OIDC token response: ${raw}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+/**
+ * Cached OIDC discovery document.  Fetched once on the first /api/authmode
+ * request when authorization-endpoint looks like a discovery URL.
+ */
+let _oidcDiscovery: Record<string, string> | undefined;
+
+/**
+ * Returns the real OIDC authorization_endpoint.
+ * If the configured value is a .well-known/openid-configuration discovery URL
+ * we fetch it and extract the real endpoint (result is cached).
+ */
+async function resolveAuthEndpoint(): Promise<string> {
+  const cfg = getConfig().oidc;
+  const configured = cfg.authorizationEndpoint;
+
+  if (!configured) return '';
+  if (!configured.includes('.well-known/openid-configuration')) return configured;
+
+  if (_oidcDiscovery) return _oidcDiscovery['authorization_endpoint'] ?? '';
+
+  console.log(`[hmac-proxy] Fetching OIDC discovery document: ${configured}`);
+  return new Promise((resolve) => {
+    const u = new URL(configured);
+    const opts: http.RequestOptions = {
+      hostname: u.hostname,
+      port:     u.port || (u.protocol === 'https:' ? 443 : 80),
+      path:     u.pathname + u.search,
+      method:   'GET',
+    };
+    // Use https if needed
+    const transport = u.protocol === 'https:' ? require('https') as typeof http : http;
+    transport.get(opts as never, (res: http.IncomingMessage) => {
+      let raw = '';
+      res.on('data', (c: string) => { raw += c; });
+      res.on('end', () => {
+        try {
+          _oidcDiscovery = JSON.parse(raw) as Record<string, string>;
+          const ep = _oidcDiscovery['authorization_endpoint'] ?? '';
+          console.log(`[hmac-proxy] OIDC discovered authorization_endpoint: ${ep}`);
+          resolve(ep);
+        } catch { resolve(''); }
+      });
+    }).on('error', () => resolve(''));
+  });
 }
 
 // ── Vite plugin / Express backend ────────────────────────────────────────────
@@ -916,22 +1255,179 @@ export function readDistPath(): string {
  * Vite dev-server plugin — registers the same HMAC-proxy middleware on
  * Vite's Connect server so `npm run dev` also gets auth + signing.
  */
-export function hmacProxyPlugin(): Plugin {
+export function hmacProxyPlugin(opts?: ProxyOptions): Plugin {
   return {
     name: 'vinyldns-hmac-proxy',
     configureServer(server) {
-      createBackend(server.middlewares as unknown as Express);
+      // Return an async post-hook so Vite awaits decryptor init before
+      // the dev server starts accepting requests.
+      return async () => {
+        await createBackend(server.middlewares as unknown as Express, opts);
+      };
     },
   };
 }
 
-export function createBackend(app: Express) {
+export async function createBackend(app: Express, opts?: ProxyOptions): Promise<void> {
+  await initDecryptor(opts?.credentialDecryptor);
     app.use(async (req, res, next) => {
         const url   = req.url ?? '/';
         const qIdx  = url.indexOf('?');
         const path  = qIdx === -1 ? url  : url.slice(0, qIdx);
         const query = qIdx === -1 ? ''   : url.slice(qIdx + 1);
         const method = (req.method ?? 'GET').toUpperCase();
+
+        // ── GET /api/authmode ──────────────────────────────────────────────
+        // Tells the frontend which auth mode is active.
+        // In OIDC mode also returns the one-time authorization URL so the
+        // React login page can redirect the browser directly to Azure AD.
+        if (path === '/api/authmode' && method === 'GET') {
+          const oidcCfg = getConfig().oidc;
+          if (oidcCfg.enabled) {
+            try {
+              const authEndpoint = await resolveAuthEndpoint();
+              const loginId    = uuidv4();
+              const redirectUri = oidcCfg.redirectUri
+                ? `${oidcCfg.redirectUri}/callback/${loginId}`
+                : `http://localhost:${readServerPort()}/callback/${loginId}`;
+              const params = new URLSearchParams({
+                client_id:     oidcCfg.clientId,
+                response_type: 'code',
+                redirect_uri:  redirectUri,
+                scope:         oidcCfg.scope,
+                nonce:         crypto.randomBytes(16).toString('hex'),
+                state:         loginId,
+              });
+              const loginUrl = `${authEndpoint}?${params.toString()}`;
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ mode: 'oidc', loginUrl }));
+            } catch {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Failed to resolve OIDC authorization endpoint' }));
+            }
+          } else {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ mode: 'ldap' }));
+          }
+          return;
+        }
+
+        // ── GET /login (OIDC mode) ─────────────────────────────────────────
+        // Redirect directly to Azure AD.  React normally uses /api/authmode
+        // to get the loginUrl, but a direct browser navigation here also works.
+        if (path === '/login' && method === 'GET' && getConfig().oidc.enabled) {
+          try {
+            const oidcCfg  = getConfig().oidc;
+            const authEndpoint = await resolveAuthEndpoint();
+            const loginId  = uuidv4();
+            const redirectUri = oidcCfg.redirectUri
+              ? `${oidcCfg.redirectUri}/callback/${loginId}`
+              : `http://localhost:${readServerPort()}/callback/${loginId}`;
+            const params = new URLSearchParams({
+              client_id:     oidcCfg.clientId,
+              response_type: 'code',
+              redirect_uri:  redirectUri,
+              scope:         oidcCfg.scope,
+              nonce:         crypto.randomBytes(16).toString('hex'),
+              state:         loginId,
+            });
+            res.writeHead(302, { 'Location': `${authEndpoint}?${params.toString()}` });
+            res.end();
+          } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Failed to build OIDC login URL' }));
+          }
+          return;
+        }
+
+        // ── GET /callback/:loginId (OIDC mode) ────────────────────────────
+        // Azure AD redirects here after the user authenticates.
+        // Exchange the authorization code for an id_token, decode the JWT,
+        // look up (or auto-create) the VinylDNS user in MySQL, then create
+        // a session exactly like the LDAP POST /login handler does.
+        const callbackMatch = path.match(/^\/callback\/([^/?]+)$/);
+        if (callbackMatch && method === 'GET' && getConfig().oidc.enabled) {
+          const loginId = callbackMatch[1];
+          const params  = new URLSearchParams(query);
+          const code    = params.get('code');
+          const errorParam = params.get('error');
+
+          if (errorParam) {
+            const desc = params.get('error_description') ?? errorParam;
+            console.error(`[hmac-proxy] OIDC callback error: ${desc}`);
+            res.writeHead(302, { 'Location': `/login?error=${encodeURIComponent(desc)}` });
+            res.end();
+            return;
+          }
+          if (!code) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Missing authorization code in callback' }));
+            return;
+          }
+
+          try {
+            const oidcCfg = getConfig().oidc;
+            const redirectUri = oidcCfg.redirectUri
+              ? `${oidcCfg.redirectUri}/callback/${loginId}`
+              : `http://localhost:${readServerPort()}/callback/${loginId}`;
+
+            console.log(`[hmac-proxy] OIDC callback: exchanging code for token`);
+            const { idToken } = await exchangeOidcCode(code, redirectUri);
+
+            const claims  = decodeJwtPayload(idToken);
+            const username = String(claims[oidcCfg.jwtUsernameField] ?? '').trim();
+            if (!username) {
+              console.error(`[hmac-proxy] OIDC JWT missing claim '${oidcCfg.jwtUsernameField}'. Claims:`, Object.keys(claims));
+              res.writeHead(401, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: `OIDC JWT does not contain '${oidcCfg.jwtUsernameField}' claim` }));
+              return;
+            }
+
+            const firstName = String(claims[oidcCfg.jwtFirstnameField] ?? '');
+            const lastName  = String(claims[oidcCfg.jwtLastnameField]  ?? '');
+            const email     = String(claims[oidcCfg.jwtEmailField]     ?? '');
+
+            console.log(`[hmac-proxy] OIDC login for user: ${username}`);
+
+            let user = await getUserCredentials(username);
+            if (!user) {
+              console.log(`[hmac-proxy] First OIDC login for '${username}' — creating VinylDNS account.`);
+              user = await createUser({ username, firstName, lastName, email });
+            }
+
+            if (user.lockStatus === 'Locked') {
+              console.log(`[hmac-proxy] OIDC login rejected — account '${username}' is locked.`);
+              res.writeHead(302, { 'Location': '/login?error=Account+is+locked' });
+              res.end();
+              return;
+            }
+
+            const sessionId = randomToken();
+            sessions.set(sessionId, {
+              username:   user.userName,
+              accessKey:  user.accessKey,
+              secretKey:  user.secretKey,
+              userId:     user.id,
+              firstName:  firstName || user.firstName,
+              lastName:   lastName  || user.lastName,
+              email:      email     || user.email,
+              isSuper:    user.isSuper,
+              isSupport:  user.isSupport,
+              lockStatus: user.lockStatus,
+            });
+
+            res.writeHead(302, {
+              'Location':   '/',
+              'Set-Cookie': `vinyldns_session=${sessionId}; Path=/; HttpOnly; SameSite=Lax`,
+            });
+            res.end();
+          } catch (err) {
+            console.error('[hmac-proxy] OIDC callback failed:', (err as Error).message);
+            res.writeHead(302, { 'Location': `/login?error=${encodeURIComponent((err as Error).message)}` });
+            res.end();
+          }
+          return;
+        }
 
         // ── POST /login ────────────────────────────────────────────────────
         if (path === '/login' && method === 'POST') {
@@ -1019,17 +1515,29 @@ export function createBackend(app: Express) {
           return;
         }
 
-        // ── POST /logout ───────────────────────────────────────────────────
+        // ── POST/GET /logout ───────────────────────────────────────────────
         if (path === '/logout' && (method === 'POST' || method === 'GET')) {
           const cookieHeader = req.headers['cookie'];
           const match = cookieHeader?.match(/(?:^|;\s*)vinyldns_session=([^;]+)/);
           if (match) sessions.delete(match[1]);
 
-          res.writeHead(200, {
-            'Content-Type': 'application/json',
-            'Set-Cookie': 'vinyldns_session=; Path=/; HttpOnly; Max-Age=0',
-          });
-          res.end(JSON.stringify({ ok: true }));
+          const clearCookie = 'vinyldns_session=; Path=/; HttpOnly; Max-Age=0';
+          const oidcLogout = getConfig().oidc.logoutEndpoint;
+
+          if (getConfig().oidc.enabled && oidcLogout) {
+            // Redirect to Azure AD logout, which will redirect back to our login page
+            res.writeHead(302, {
+              'Set-Cookie': clearCookie,
+              'Location':   oidcLogout,
+            });
+            res.end();
+          } else {
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Set-Cookie': clearCookie,
+            });
+            res.end(JSON.stringify({ ok: true }));
+          }
           return;
         }
 
@@ -1162,11 +1670,9 @@ export function createBackend(app: Express) {
 
           const authHdrs  = buildAuthHeaders(method, apiPath, query, bodyBuf, session.accessKey, session.secretKey);
 
-          // Re-read lockStatus from MySQL on every proxied request.
-          // Mirrors VinylDnsAction.invokeBlock: locked users are rejected mid-session
-          // without having to log out first (matches old portal behaviour).
-          const freshUser = await getUserCredentials(session.username);
-          if (freshUser?.lockStatus === 'Locked') {
+          // Check lock status from session (set at login time).
+          // Mirrors VinylDnsAction.invokeBlock: locked users are rejected mid-session.
+          if (session.lockStatus === 'Locked') {
             console.log(`[hmac-proxy] API request blocked – account '${session.username}' is locked.`);
             res.writeHead(403, { 'Content-Type': 'application/json' });
             (res as unknown as http.ServerResponse).end(JSON.stringify({

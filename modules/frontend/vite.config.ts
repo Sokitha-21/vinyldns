@@ -35,6 +35,12 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    // To wire in a credential decryptor explicitly, add:
+    //   import { decryptCredential } from './credential-decryptor';
+    //   hmacProxyPlugin({ credentialDecryptor: decryptCredential })
+    // credential-decryptor.ts is NOT committed to the repo (gitignored).
+    // Alternatively, simply place credential-decryptor.ts next to this file
+    // and it will be loaded automatically at startup.
     hmacProxyPlugin(),
     // Serve images directly from the microsite img directory under /img/*
     {

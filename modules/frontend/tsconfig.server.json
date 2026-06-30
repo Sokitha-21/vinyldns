@@ -12,6 +12,7 @@
   },
   "include": [
     "server.ts",
-    "vite-plugin-hmac-proxy.ts"
+    "vite-plugin-hmac-proxy.ts",
+    "credential-decryp*.ts"
   ]
 }

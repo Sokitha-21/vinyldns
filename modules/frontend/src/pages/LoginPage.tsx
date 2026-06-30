@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { portalConfig } from '../config/portalConfig';
 
@@ -23,10 +23,28 @@ interface LoginFormData {
   password: string;
 }
 
+interface AuthMode {
+  mode: 'ldap' | 'oidc';
+  loginUrl?: string;
+}
+
 export function LoginPage() {
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode | null>(null);
+
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>();
+
+  useEffect(() => {
+    fetch('/api/authmode', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((data: AuthMode) => setAuthMode(data))
+      .catch(() => setAuthMode({ mode: 'ldap' })); // fall back to LDAP on error
+  }, []);
+
+  const handleSsoLogin = () => {
+    if (authMode?.loginUrl) window.location.href = authMode.loginUrl;
+  };
 
   const onSubmit = async (data: LoginFormData) => {
     setLoading(true);
@@ -85,7 +103,20 @@ export function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)} noValidate>
+          {/* ── OIDC / SSO login ── */}
+          {authMode?.mode === 'oidc' && (
+            <button
+              type="button"
+              className="btn btn-primary w-100 mb-3"
+              onClick={handleSsoLogin}
+            >
+              Sign in with SSO
+            </button>
+          )}
+
+          {/* ── LDAP username / password form ── */}
+          {(authMode === null || authMode.mode === 'ldap') && (
+            <form onSubmit={handleSubmit(onSubmit)} noValidate>
             <div className="mb-3">
               <label className="form-label fw-semibold">Username</label>
               <input
@@ -129,6 +160,7 @@ export function LoginPage() {
               )}
             </button>
           </form>
+          )}
         </div>
 
         {/* Footer — version, docs, support */}

@@ -26,12 +26,20 @@ const api = axios.create({
 });
 
 /**
- * Redirect to login on 401 (session expired / not authenticated).
+ * Redirect to login only when the session-check endpoint returns 401
+ * (i.e. the session has expired or was never created).
+ * Regular API calls (zones, groups, etc.) that return 401 due to a
+ * transient HMAC error should NOT force a full logout — let the calling
+ * component handle the error instead.
  */
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error?.response?.status === 401) {
+    const url: string = error?.config?.url ?? '';
+    const isSessionCheck =
+      url.includes('/users/currentuser') ||
+      url.includes('/api/authmode');
+    if (error?.response?.status === 401 && isSessionCheck) {
       window.location.href = '/login';
     }
     return Promise.reject(error);
