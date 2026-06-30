@@ -38,7 +38,6 @@ export default defineConfig({
     // Signs all VinylDNS API requests with AWS V4 HMAC (service=VinylDNS,
     // region=us-east-1) and proxies them to http://localhost:9000.
     // This replaces the signing work the Play portal used to do.
-    hmacProxyPlugin(),
     // Serve images directly from the microsite img directory under /img/*
     {
       name: 'serve-microsite-img',

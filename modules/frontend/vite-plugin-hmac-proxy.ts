@@ -844,11 +844,10 @@ function proxyToApiWithLog(
 
 // ── Vite plugin ───────────────────────────────────────────────────────────────
 
-export function hmacProxyPlugin(): Plugin {
-  return {
-    name: 'vinyldns-hmac-proxy',
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
+import type { Express } from "express";
+
+export function createBackend(app: Express) {
+    app.use(async (req, res, next) => {
         const url   = req.url ?? '/';
         const qIdx  = url.indexOf('?');
         const path  = qIdx === -1 ? url  : url.slice(0, qIdx);
@@ -1114,6 +1113,4 @@ export function hmacProxyPlugin(): Plugin {
           (res as unknown as http.ServerResponse).end(JSON.stringify({ error: 'Proxy error' }));
         }
       });
-    },
-  };
 }
