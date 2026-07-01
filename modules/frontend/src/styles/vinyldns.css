@@ -485,6 +485,12 @@ h1.h3 {
   color: rgba(255, 255, 255, 0.3);
 }
 
+.vds-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 /* Theme toggle pill */
 .vds-theme-toggle {
   display: flex;

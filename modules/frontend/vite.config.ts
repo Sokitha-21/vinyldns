@@ -17,7 +17,11 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { hmacProxyPlugin, readServerPort } from './vite-plugin-hmac-proxy';
+import {
+  hmacProxyPlugin,
+  readOldPortalUrl,
+  readServerPort,
+} from './vite-plugin-hmac-proxy';
 import { readFileSync, createReadStream, existsSync } from 'fs';
 
 // Read the canonical version from version.sbt at the repo root.
@@ -32,6 +36,7 @@ const appVersion = versionMatch ? versionMatch[1] : 'unknown';
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
+    __OLD_PORTAL_URL__: JSON.stringify(readOldPortalUrl()),
   },
   plugins: [
     react(),

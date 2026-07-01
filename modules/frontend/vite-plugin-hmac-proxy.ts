@@ -1252,6 +1252,38 @@ export function readDistPath(): string {
 }
 
 /**
+ * Reads old portal URL from application.conf.
+ * Supports both block form ( old-portal { url = "..." } ) and
+ * flat form ( old-portal.url = "..." ).
+ */
+export function readOldPortalUrl(): string {
+  const content = fs.readFileSync(
+    path.resolve(process.cwd(), "application.conf"),
+    "utf8"
+  );
+
+  const blockMatch = content.match(/\bold-portal\s*\{([^}]*)\}/s);
+  if (blockMatch) {
+    // Filter out comment lines (starting with #) then match url
+    const blockContent = blockMatch[1]
+      .split('\n')
+      .filter(line => !line.trim().startsWith('#'))
+      .join('\n');
+    const m = blockContent.match(/\burl\s*=\s*"([^"]+)"/);
+    if (m) {
+      return m[1];
+    }
+  }
+
+  const flatMatch = content.match(/\bold-portal\.url\s*=\s*"([^"]+)"/);
+  if (flatMatch) {
+    return flatMatch[1];
+  }
+
+  return "http://localhost:9001";
+}
+
+/**
  * Vite dev-server plugin — registers the same HMAC-proxy middleware on
  * Vite's Connect server so `npm run dev` also gets auth + signing.
  */

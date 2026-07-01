@@ -41,7 +41,9 @@ export function Layout({ children }: LayoutProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [regenModalOpen, setRegenModalOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [oldPortalSwitchOn, setOldPortalSwitchOn] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const oldPortalUrl = __OLD_PORTAL_URL__;
 
   useEffect(() => {
     document.documentElement.setAttribute(
@@ -92,6 +94,15 @@ export function Layout({ children }: LayoutProps) {
       await fetch("/logout", { method: "POST" });
     } finally {
       window.location.href = "/login";
+    }
+  };
+
+  const handleOldPortalSwitch = (checked: boolean) => {
+    setOldPortalSwitchOn(checked);
+    if (checked) {
+      window.setTimeout(() => {
+        window.location.href = oldPortalUrl;
+      }, 120);
     }
   };
 
@@ -402,26 +413,41 @@ export function Layout({ children }: LayoutProps) {
               </ol>
             </nav>
 
-            {/* Right: theme toggle */}
-            <button
-              className="vds-theme-toggle"
-              onClick={() => setDarkMode((d) => !d)}
-              title={darkMode ? "Switch to Light mode" : "Switch to Dark mode"}
-              aria-label="Toggle theme"
-            >
-              <span
-                className={`vds-theme-toggle__track${darkMode ? " vds-theme-toggle__track--dark" : ""}`}
+            {/* Right: portal + theme toggles */}
+            <div className="vds-topbar__actions" aria-label="Portal and theme controls">
+              <button
+                className="vds-theme-toggle"
+                onClick={() => setDarkMode((d) => !d)}
+                title={darkMode ? "Switch to Light mode" : "Switch to Dark mode"}
+                aria-label="Toggle theme"
               >
-                <span className="vds-theme-toggle__thumb">
-                  <i
-                    className={`bi ${darkMode ? "bi-moon-stars-fill" : "bi-sun-fill"}`}
-                  />
+                <span
+                  className={`vds-theme-toggle__track${darkMode ? " vds-theme-toggle__track--dark" : ""}`}
+                >
+                  <span className="vds-theme-toggle__thumb">
+                    <i
+                      className={`bi ${darkMode ? "bi-moon-stars-fill" : "bi-sun-fill"}`}
+                    />
+                  </span>
                 </span>
-              </span>
-              <span className="vds-theme-toggle__label">
-                {darkMode ? "Dark" : "Light"}
-              </span>
-            </button>
+                <span className="vds-theme-toggle__label">
+                  {darkMode ? "Dark" : "Light"}
+                </span>
+              </button>
+              <button
+                className="vds-theme-toggle"
+                onClick={() => handleOldPortalSwitch(!oldPortalSwitchOn)}
+                title="Switch to old portal"
+                aria-label="Switch to old portal"
+              >
+                <span
+                  className={`vds-theme-toggle__track${oldPortalSwitchOn ? " vds-theme-toggle__track--dark" : ""}`}
+                >
+                  <span className="vds-theme-toggle__thumb" />
+                </span>
+                <span className="vds-theme-toggle__label">Old Portal</span>
+              </button>
+            </div>
           </div>
 
           {children}

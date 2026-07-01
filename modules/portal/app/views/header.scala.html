@@ -1,4 +1,4 @@
-@(rootAccountName: String)(implicit request: play.api.mvc.Request[Any])
+@(rootAccountName: String)(implicit request: play.api.mvc.Request[Any], meta: models.Meta)
 
 <div class="top_nav" id="fixed-top-nav">
   <div class="nav_menu">
@@ -10,6 +10,22 @@
       </div>
 
       <ul class="nav navbar-nav navbar-right">
+        <li class="portal-toggle-item">
+          <label class="portal-toggle-label" for="portal-switch-new">
+            <span class="portal-toggle-text">New Portal</span>
+            <input
+              id="portal-switch-new"
+              class="portal-toggle-checkbox"
+              type="checkbox"
+              autocomplete="off"
+              aria-label="Switch to new portal"
+              onchange="if(this.checked){setTimeout(function(){window.location.href='@meta.newPortalUrl';},120);}"
+            />
+            <span class="portal-toggle-switch">
+              <span class="portal-toggle-knob"></span>
+            </span>
+          </label>
+        </li>
         <li class="">
           <a href="javascript:;" class="user-profile dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
             <i class="fa fa-user"></i> @rootAccountName
@@ -27,3 +43,16 @@
     </nav>
   </div>
 </div>
+
+<script>
+  (function () {
+    function resetPortalSwitch() {
+      var toggle = document.getElementById('portal-switch-new');
+      if (toggle) toggle.checked = false;
+    }
+    resetPortalSwitch();
+
+    // Handle browser back/forward navigation where pages may come from bfcache.
+    window.addEventListener('pageshow', resetPortalSwitch);
+  })();
+</script>
