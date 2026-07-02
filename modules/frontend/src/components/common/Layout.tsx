@@ -224,7 +224,7 @@ export function Layout({ children }: LayoutProps) {
             <hr className="vds-divider mx-3 my-0" />
 
             {/* ── ADMIN section ── */}
-            {!collapsed && (
+            {/* {!collapsed && (
               <div className="vds-section-label px-3 pt-3 pb-1">Admin</div>
             )}
             {collapsed && <div className="vds-spacer-help" />}
@@ -244,7 +244,7 @@ export function Layout({ children }: LayoutProps) {
                   )}
                 </NavLink>
               </li>
-            </ul>
+            </ul> */}
 
             {/* Divider */}
             <hr className="vds-divider mx-3 my-0" />

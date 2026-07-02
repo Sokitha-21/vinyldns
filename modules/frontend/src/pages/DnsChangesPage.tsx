@@ -236,7 +236,7 @@ export function DnsChangesPage() {
           }}
           aria-label="Loading"
         >
-          <LoadingSpinner message="Loading changes…" />
+          <LoadingSpinner />
         </div>
       )}
       <div className="rounded-3 mb-4 d-flex justify-content-between align-items-center vds-page-header">
@@ -627,7 +627,7 @@ export function DnsChangesPage() {
 
       {isLoading ? (
         <div className="card vds-toolbar-card">
-          <LoadingSpinner message="Loading changes…" />
+          <LoadingSpinner />
         </div>
       ) : (
         <div className="card vds-toolbar-card overflow-hidden">
