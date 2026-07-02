@@ -18,7 +18,7 @@ import axios from 'axios';
 
 /** Axios instance pre-configured for the VinylDNS backend */
 const api = axios.create({
-  baseURL: '/',
+  baseURL: '/api',
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -39,7 +39,8 @@ api.interceptors.response.use(
     const isSessionCheck =
       url.includes('/users/currentuser') ||
       url.includes('/api/authmode');
-    if (error?.response?.status === 401 && isSessionCheck) {
+    const alreadyOnLogin = window.location.pathname === '/login';
+    if (error?.response?.status === 401 && isSessionCheck && !alreadyOnLogin) {
       window.location.href = '/login';
     }
     return Promise.reject(error);

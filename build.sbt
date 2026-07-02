@@ -112,7 +112,7 @@ lazy val root = (project in file("."))
   .settings(
     inConfig(IntegrationTest)(scalafmtConfigSettings)
   )
-  .aggregate(core, api, portal, mysql, sqs, r53)
+  .aggregate(core, api, portal, frontend, mysql, sqs, r53)
 
 lazy val coreBuildSettings = Seq(
   name := "core",
@@ -255,6 +255,49 @@ lazy val portal = (project in file("modules/portal"))
   )
   .dependsOn(mysql)
 
+lazy val frontendSettings = Seq(
+  libraryDependencies ++= portalDependencies,
+  routesGenerator := InjectedRoutesGenerator,
+  coverageExcludedPackages := "<empty>;views.html.*;router.*;controllers\\.javascript.*;.*Reverse.*",
+  // Source layout: app and test sources live under src/
+  scalaSource in Compile := baseDirectory.value / "src" / "app",
+  javaSource in Compile := baseDirectory.value / "src" / "app",
+  scalaSource in Test := baseDirectory.value / "src" / "test",
+  javaSource in Test := baseDirectory.value / "src" / "test",
+  unmanagedResourceDirectories in Test += baseDirectory.value / "src" / "test" / "resources",
+  javaOptions in Test += "-Dconfig.file=conf/application-test.conf",
+  javaOptions in Test += "-Dlog4j.configurationFile=conf/log4j2.xml",
+  PlayKeys.devSettings += "vinyldns.base-version" -> (version in ThisBuild).value,
+  // Build React frontend (npm run build → public/) before Play starts
+  PlayKeys.playRunHooks += PrepareFrontendHook(baseDirectory.value),
+  // Suppress known noisy-but-harmless Play dev-mode warnings
+  PlayKeys.playRunHooks += SuppressWarningsHook(),
+  // Name the launcher script "frontend"
+  executableScriptName := "frontend",
+  scriptClasspath in bashScriptDefines ~= (cp => cp :+ "lib_extra/*"),
+  mainClass in reStart := None,
+  scalacOptions ~= { opts =>
+    opts.filterNot(p => p.contains("unused"))
+  },
+  preparePortal := {
+    import scala.sys.process._
+    "./modules/frontend/deploy-to-frontend.sh" !
+  },
+  target in Universal := file("artifacts/"),
+  packageName in Universal := "vinyldns-frontend"
+)
+
+lazy val frontend = (project in file("modules/frontend"))
+  .enablePlugins(PlayScala, AutomateHeaderPlugin)
+  .disablePlugins(PlayLogback)
+  .settings(sharedSettings)
+  .settings(testSettings)
+  .settings(frontendSettings)
+  .settings(
+    name := "frontend"
+  )
+  .dependsOn(mysql)
+
 lazy val docSettings = Seq(
   git.remoteRepo := "https://github.com/vinyldns/vinyldns",
   micrositeGithubOwner := "vinyldns",
@@ -328,4 +371,5 @@ addCommandAlias(
 // Build the artifacts for release
 addCommandAlias("build-api", ";project api;clean;coverageOff;assembly")
 addCommandAlias("build-portal", ";project portal;clean;coverageOff;preparePortal;dist")
+addCommandAlias("build-frontend", ";project frontend;clean;coverageOff;preparePortal;dist")
 addCommandAlias("build", ";build-api;build-portal")

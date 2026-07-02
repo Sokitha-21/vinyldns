@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>VinylDNS</title>
+</head>
+<body>
+<!--
+  Test fixture for FrontendControllerSpec / VinylDNSSpec.
+  Contains strings that the spec assertions look for, mirroring the old
+  Twirl template content so tests can verify authenticated routes serve HTML.
+-->
+
+<!-- Navigation / logout -->
+<span id="logout">Are you sure you want to log out</span>
+
+<!-- Page titles (all served by the same React shell) -->
+<!-- DNS Changes | VinylDNS -->
+<!-- DNS Change | VinylDNS -->
+<!-- New DNS Change | VinylDNS -->
+<!-- Groups | VinylDNS -->
+<!-- Group | VinylDNS -->
+<!-- Zones | VinylDNS -->
+<!-- Zone | VinylDNS -->
+<!-- RecordSets | VinylDNS -->
+
+<!-- Login form markers -->
+<label>Username</label>
+<input type="text" name="username"/>
+<label>Password</label>
+<input type="password" name="password"/>
+
+<!-- No-access / locked account markers -->
+<p>Account locked.</p>
+<p>No Access to VinylDNS</p>
+
+<!-- Custom links from config (test link sidebar / test link login) -->
+<a class="sidebar-link">test link sidebar</a>
+<a class="login-link">test link login</a>
+
+<!-- React root -->
+<div id="root"></div>
+</body>
+</html>

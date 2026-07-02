@@ -21,6 +21,7 @@ import React, {
   useEffect,
   type ReactNode,
 } from 'react';
+import { useLocation } from 'react-router-dom';
 import { profileService } from '../services/profileService';
 import type { UserProfile } from '../types/profile';
 
@@ -38,8 +39,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const location = useLocation();
 
   useEffect(() => {
+    // Don't fetch profile on the login page — no session exists yet
+    if (location.pathname === '/login') {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     profileService
       .getAuthenticatedUserData()
