@@ -1,0 +1,89 @@
+# Routes
+# This file defines all application routes (Higher priority routes first)
+# ~~~~
+
+### Frontend pages - these are what the user can be navigate to ###
+GET           /                                  @controllers.FrontendController.index
+GET           /index                             @controllers.FrontendController.index
+GET           /login                             @controllers.FrontendController.loginPage
+GET           /logout                            @controllers.FrontendController.logout
+GET           /noaccess                          @controllers.FrontendController.noAccess
+
+GET           /groups                            @controllers.FrontendController.viewAllGroups
+GET           /groups/:gid                       @controllers.FrontendController.viewGroup(gid: String)
+GET           /zones                             @controllers.FrontendController.viewAllZones
+GET           /zones/:zid                        @controllers.FrontendController.viewZone(zid: String)
+GET           /dnschanges                        @controllers.FrontendController.viewAllBatchChanges
+GET           /dnschanges/new                    @controllers.FrontendController.viewNewBatchChange
+GET           /dnschanges/:id                    @controllers.FrontendController.viewBatchChange(id: String)
+GET           /recordsets                        @controllers.FrontendController.viewRecordSets
+
+### Routes to process requests, get data ###
+GET           /health                            @controllers.HealthController.health
+POST          /login                             @controllers.VinylDNS.login
+GET           /download-creds-file/:fileName     @controllers.VinylDNS.serveCredsFile(fileName)
+POST          /regenerate-creds                  @controllers.VinylDNS.regenerateCreds
+
+GET           /api/recordsets                    @controllers.VinylDNS.listRecordSetData
+
+GET           /api/zones                         @controllers.VinylDNS.getZones
+GET           /api/zones/backendids              @controllers.VinylDNS.getBackendIds
+GET           /api/zones/:id                     @controllers.VinylDNS.getZone(id: String)
+GET           /api/zones/:id/details             @controllers.VinylDNS.getCommonZoneDetails(id: String)
+GET           /api/zones/name/:name              @controllers.VinylDNS.getZoneByName(name: String)
+GET           /api/zones/deleted/changes         @controllers.VinylDNS.getDeletedZones
+GET           /api/zones/:id/changes             @controllers.VinylDNS.getZoneChange(id: String)
+POST          /api/zones                         @controllers.VinylDNS.addZone
+PUT           /api/zones/:id                     @controllers.VinylDNS.updateZone(id: String)
+DELETE        /api/zones/:id                     @controllers.VinylDNS.deleteZone(id: String)
+POST          /api/zones/:id/sync                @controllers.VinylDNS.syncZone(id: String)
+
+GET           /api/zones/:id/recordsets          @controllers.VinylDNS.listRecordSetsByZone(id: String)
+POST          /api/zones/:id/recordsets          @controllers.VinylDNS.addRecordSet(id: String)
+DELETE        /api/zones/:zid/recordsets/:rid    @controllers.VinylDNS.deleteRecordSet(zid: String, rid:String)
+PUT           /api/zones/:zid/recordsets/:rid    @controllers.VinylDNS.updateRecordSet(zid: String, rid:String)
+
+GET           /api/zones/:id/recordsetchanges    @controllers.VinylDNS.listRecordSetChanges(id: String)
+GET           /api/zones/:zid/recordsetcount     @controllers.VinylDNS.getRecordSetCount(zid: String)
+GET           /api/recordsetchange/history       @controllers.VinylDNS.listRecordSetChangeHistory
+
+GET           /api/groups                        @controllers.VinylDNS.getGroups
+GET           /api/groups/:gid                   @controllers.VinylDNS.getGroup(gid: String)
+GET           /api/groups/valid/domains           @controllers.VinylDNS.getValidEmailDomains
+GET           /api/groups/:gid/groupchanges      @controllers.VinylDNS.listGroupChanges(gid: String)
+GET           /api/groups/change/:gcid           @controllers.VinylDNS.getGroupChange(gcid: String)
+POST          /api/groups                        @controllers.VinylDNS.newGroup
+PUT           /api/groups/:gid                   @controllers.VinylDNS.updateGroup(gid: String)
+DELETE        /api/groups/:gid                   @controllers.VinylDNS.deleteGroup(gid: String)
+
+GET           /api/groups/:gid/members           @controllers.VinylDNS.getMemberList(gid: String)
+
+GET           /api/users/currentuser             @controllers.VinylDNS.getAuthenticatedUserData
+GET           /api/users/lookupuser/:uname       @controllers.VinylDNS.getUserDataByUsername(uname: String)
+PUT           /api/users/:uid/lock               @controllers.VinylDNS.lockUser(uid: String)
+PUT           /api/users/:uid/unlock             @controllers.VinylDNS.unlockUser(uid: String)
+GET           /api/users/:uid                    @controllers.VinylDNS.getUser(uid: String)
+
+GET           /api/dnschanges/:id                @controllers.VinylDNS.getBatchChange(id: String)
+GET           /api/dnschanges                    @controllers.VinylDNS.listBatchChanges
+POST          /api/dnschanges                    @controllers.VinylDNS.newBatchChange
+POST          /api/dnschanges/:id/cancel         @controllers.VinylDNS.cancelBatchChange(id: String)
+POST          /api/dnschanges/:id/approve        @controllers.VinylDNS.approveBatchChange(id: String)
+POST          /api/dnschanges/:id/reject         @controllers.VinylDNS.rejectBatchChange(id: String)
+
+GET           /callback/:id                      @controllers.VinylDNS.oidcCallback(id: String)
+GET           /callback/set-oidc-session/:id              @controllers.VinylDNS.setOidcSession(id: String)
+
+# Map static resources from the /public folder to the /assets URL path
+GET           /public/*file                      controllers.Assets.versioned(path="/public", file: Asset)
+
+# Map static resources from the /public folder to the /assets URL path
+GET           /public/*file                         controllers.Assets.versioned(path="/public", file: Asset)
+GET           /assets/*file                         controllers.Assets.versioned(path="/public/assets", file: Asset)
+
+# Static images served from public/ for the React frontend
+GET    /images/*file    controllers.Assets.versioned(path="/public", file: Asset)
+GET    /img/*file       controllers.Assets.versioned(path="/public", file: Asset)
+
+# Catch-all: serve React SPA for any unmatched path (React Router handles client-side routing)
+GET           /*path                               @controllers.FrontendController.catchAll(path: String)

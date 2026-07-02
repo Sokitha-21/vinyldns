@@ -30,7 +30,10 @@ export const profileService = {
     return api.get<UserProfile>(`/users/${userId}`);
   },
 
-  regenerateCredentials() {
-    return api.post('/regenerate-creds', {});
+  // /regenerate-creds has no /api/ prefix in Play's routes — use fetch with absolute path
+  async regenerateCredentials() {
+    const res = await fetch('/regenerate-creds', { method: 'POST', credentials: 'include' });
+    if (!res.ok) throw new Error('Failed to regenerate credentials');
+    return res;
   },
 };

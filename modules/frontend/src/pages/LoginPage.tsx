@@ -54,17 +54,13 @@ export function LoginPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          username: data.username,
-          password: data.password,
-        }),
+        body: JSON.stringify({ username: data.username, password: data.password }),
       });
-
-      if (res.ok) {
+      const result = (await res.json()) as { ok: boolean; error?: string };
+      if (result.ok) {
         window.location.href = '/';
       } else {
-        const body = await res.json().catch(() => ({}));
-        setError((body as { error?: string }).error ?? 'Invalid credentials. Please try again.');
+        setError(result.error ?? 'Invalid credentials. Please try again.');
       }
     } catch {
       setError('Unable to connect. Please try again.');

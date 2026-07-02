@@ -10,3 +10,8 @@ yarn.lock
 .vscode/
 *.log
 *.tmp
+# Deployment-specific files — not part of the open-source repo
+credential-decryptor.ts
+application.conf
+lib/
+server-dist/

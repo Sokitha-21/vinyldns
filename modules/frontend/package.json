@@ -10,9 +10,9 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "build:server": "tsc -p tsconfig.server.json",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "deploy:portal": "./deploy-to-frondend.sh"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.28.0",
@@ -20,9 +20,7 @@
     "axios": "^1.6.8",
     "bootstrap": "^5.3.3",
     "bootstrap-icons": "^1.11.3",
-    "cookie-parser": "^1.4.7",
     "date-fns": "^3.6.0",
-    "express": "^5.2.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.51.3",
@@ -33,9 +31,6 @@
     "@testing-library/jest-dom": "^6.4.2",
     "@testing-library/react": "^16.0.0",
     "@testing-library/user-event": "^14.5.2",
-    "@types/cookie-parser": "^1.4.9",
-    "@types/express": "^5.0.3",
-    "@types/ldapjs": "^3.0.6",
     "@types/node": "^20.12.7",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -50,10 +45,7 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
     "jsdom": "^24.0.0",
-    "ldapjs": "^3.0.7",
-    "mysql2": "^3.18.2",
     "prettier": "^3.2.5",
-    "protobufjs": "^8.0.0",
     "typescript": "^5.4.5",
     "vite": "^5.2.10",
     "vitest": "^1.5.0"
