@@ -263,11 +263,11 @@ lazy val frontendSettings = Seq(
   javaOptions in Test += "-Dlog4j.configurationFile=conf/log4j2.xml",
   PlayKeys.devSettings += "vinyldns.base-version" -> (version in ThisBuild).value,
   // Build React frontend (npm run build → public/) before Play starts
-  PlayKeys.playRunHooks += FrontendBuildHook(baseDirectory.value),
+  PlayKeys.playRunHooks += PrepareFrontendHook(baseDirectory.value),
   // Suppress known noisy-but-harmless Play dev-mode warnings
   PlayKeys.playRunHooks += SuppressWarningsHook(),
-  // Name the launcher script "portal" to match production deployment expectations
-  executableScriptName := "portal",
+  // Name the launcher script "frontend"
+  executableScriptName := "frontend",
   scriptClasspath in bashScriptDefines ~= (cp => cp :+ "lib_extra/*"),
   mainClass in reStart := None,
   scalacOptions ~= { opts =>
@@ -278,7 +278,7 @@ lazy val frontendSettings = Seq(
     "./modules/frontend/deploy-to-frontend.sh" !
   },
   target in Universal := file("artifacts/"),
-  packageName in Universal := "vinyldns-portal"
+  packageName in Universal := "vinyldns-frontend"
 )
 
 lazy val frontend = (project in file("modules/frontend"))

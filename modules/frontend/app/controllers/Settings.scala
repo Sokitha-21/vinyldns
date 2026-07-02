@@ -66,14 +66,22 @@ class Settings(private val config: Configuration) {
     config.getOptional[Boolean]("user-sync.dry-run").getOrElse(false)
 
   val graphApiUsernameAttribute: String =
-    config.getOptional[String]("user-sync.graph-api.username-attribute")
-      .getOrElse("onPremisesSamAccountName")
+    config.get[String]("user-sync.graph-api.username-attribute")
+
+  val graphApiScope: String =
+    config.get[String]("user-sync.graph-api.scope")
+
+  val graphApiUsersEndpoint: String =
+    config.get[String]("user-sync.graph-api.users-endpoint")
 
   val oidcEnabled: Boolean =
     config.getOptional[Boolean]("oidc.enabled").getOrElse(false)
 
   lazy val oidcTenantId: String =
     config.get[String]("oidc.tenant-id")
+
+  lazy val oidcTokenEndpoint: String =
+    config.get[String]("oidc.token-endpoint")
 
   lazy val oidcClientId: String =
     config.get[String]("oidc.client-id")

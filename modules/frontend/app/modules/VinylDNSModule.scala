@@ -102,10 +102,12 @@ class VinylDNSModule(environment: Environment, configuration: Configuration)
       case "graph-api" =>
         settings.validateOidcConfig()
         new GraphApiUserSyncProvider(
-          settings.oidcTenantId,
+          settings.oidcTokenEndpoint,
           settings.oidcClientId,
           settings.oidcSecret,
-          settings.graphApiUsernameAttribute
+          settings.graphApiUsernameAttribute,
+          settings.graphApiScope,
+          settings.graphApiUsersEndpoint
         )
       case "ldap" =>
         new LdapUserSyncProvider(auth)

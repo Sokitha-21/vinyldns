@@ -116,9 +116,7 @@ class VinylDNS @Inject() (
   private val logger = LoggerFactory.getLogger(classOf[VinylDNS])
   private val signer = SignerFactory.getSigner("VinylDNS", "us/east")
   private val vinyldnsServiceBackend =
-    configuration
-      .getOptional[String]("portal.vinyldns.backend.url")
-      .getOrElse("http://localhost:9000")
+    configuration.get[String]("portal.vinyldns.backend.url")
 
   implicit val lockStatusFormat: Format[LockStatus] = new Format[LockStatus] {
     def reads(json: JsValue): JsResult[LockStatus] = json match {

@@ -47,10 +47,12 @@ object NoOpUserSyncProvider extends UserSyncProvider {
 }
 
 class GraphApiUserSyncProvider(
-    tenantId: String,
+    tokenEndpoint: String,
     clientId: String,
     clientSecret: String,
-    usernameAttribute: String
+    usernameAttribute: String,
+    graphApiScope: String,
+    graphApiUsersEndpoint: String
 ) extends UserSyncProvider {
 
   private val logger = LoggerFactory.getLogger(classOf[GraphApiUserSyncProvider])
@@ -76,7 +78,7 @@ class GraphApiUserSyncProvider(
     }
 
   private def fetchAccessToken(): String = {
-    val tokenUrl = s"https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token"
+    val tokenUrl = tokenEndpoint
     val conn = new URL(tokenUrl).openConnection().asInstanceOf[HttpURLConnection]
     try {
       conn.setRequestMethod("POST")
@@ -86,7 +88,7 @@ class GraphApiUserSyncProvider(
       val body =
         s"client_id=${java.net.URLEncoder.encode(clientId, "UTF-8")}" +
           s"&client_secret=${java.net.URLEncoder.encode(clientSecret, "UTF-8")}" +
-          s"&scope=${java.net.URLEncoder.encode("https://graph.microsoft.com/.default", "UTF-8")}" +
+          s"&scope=${java.net.URLEncoder.encode(graphApiScope, "UTF-8")}" +
           s"&grant_type=client_credentials"
 
       val os = conn.getOutputStream
@@ -187,7 +189,7 @@ class GraphApiUserSyncProvider(
         // properties like onPremisesSamAccountName, employeeId, etc.
         // See https://learn.microsoft.com/en-us/graph/aad-advanced-queries
         val url =
-          s"https://graph.microsoft.com/v1.0/users?$$filter=$filter&$$select=$select&$$count=true"
+          s"$graphApiUsersEndpoint/users?$$filter=$filter&$$select=$select&$$count=true"
 
         val conn = new URL(url).openConnection().asInstanceOf[HttpURLConnection]
         try {
