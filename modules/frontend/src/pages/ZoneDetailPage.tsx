@@ -875,7 +875,7 @@ export function ZoneDetailPage() {
                               <td><span className="vds-record-type-badge">{c.recordSet.type}</span></td>
                               <td><span className={`vds-change-badge vds-change-badge--${c.changeType.toLowerCase()}`}>{c.changeType}</span></td>
                               <td><span className={`vds-zone-status-badge ${changeStatusClass(c.status)}`}>{c.status}</span></td>
-                              <td className="vds-table-secondary small">{c.userName ?? c.userId}</td>
+                              <td className="vds-table-secondary vds-table-nowrap small">{c.userName ?? c.userId}</td>
                               <td className="vds-table-secondary vds-table-nowrap small">{formatDateTime(c.created)}</td>
                               <td className="small">
                                 {c.changeType === 'Create' && (
@@ -1402,7 +1402,7 @@ export function ZoneDetailPage() {
                           </button>
                         </div>
                       </td>
-                      <td className="vds-table-secondary small">{c.userName ?? c.userId}</td>
+                      <td className="vds-table-secondary vds-table-nowrap small">{c.userName ?? c.userId}</td>
                       <td><span className={`vds-zone-status-badge ${changeStatusClass(c.status)}`}>{c.status}</span></td>
                       <td className="small">
                         {c.systemMessage && <div className="vds-table-secondary mb-1">{c.systemMessage}</div>}

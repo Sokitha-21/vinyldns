@@ -1176,7 +1176,7 @@ export function ZonesPage() {
                   <input
                     type="text"
                     className="form-control border-0 ps-0 shadow-none bg-transparent"
-                    placeholder={abanByGroup ? 'Search by admin group name' : 'Search by zone name or email'}
+                    placeholder={abanByGroup ? 'Search by admin group name' : 'Search by zone name'}
                     value={abandonedInput}
                     autoComplete="off"
                     onChange={(e) => {

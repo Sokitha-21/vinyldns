@@ -482,7 +482,7 @@ export function GroupDetailPage() {
           )}
           <div className="p-3">
             {changesLoading ? (
-              <LoadingSpinner message="Loading changes…" />
+              <LoadingSpinner />
             ) : !changesData?.changes || changesData.changes.length === 0 ? (
               <div className="vds-empty-state">
                 <i className="bi bi-clock-history fs-2 mb-2" style={{ opacity: 0.4 }} />
