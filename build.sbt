@@ -264,6 +264,7 @@ lazy val frontendSettings = Seq(
   javaSource in Compile := baseDirectory.value / "src" / "app",
   scalaSource in Test := baseDirectory.value / "src" / "test",
   javaSource in Test := baseDirectory.value / "src" / "test",
+  unmanagedResourceDirectories in Test += baseDirectory.value / "src" / "test" / "resources",
   javaOptions in Test += "-Dconfig.file=conf/application-test.conf",
   javaOptions in Test += "-Dlog4j.configurationFile=conf/log4j2.xml",
   PlayKeys.devSettings += "vinyldns.base-version" -> (version in ThisBuild).value,

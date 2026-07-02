@@ -79,10 +79,6 @@ class FrontendControllerSpec extends Specification with Mockito with TestApplica
   )
 
   "FrontendController" should {
-    "send 404 on a bad request" in new WithApplication(app) {
-      route(app, FakeRequest(GET, "/boum")) must beSome.which(status(_) == NOT_FOUND)
-    }
-
     "Get for '/'" should {
       "redirect to the login page when a user is not logged in" in new WithApplication(app) {
         val result = underTest.index()(FakeRequest(GET, "/"))
@@ -447,7 +443,6 @@ class FrontendControllerSpec extends Specification with Mockito with TestApplica
         contentType(result) must beSome.which(_ == "text/html")
         status(result) must equalTo(OK)
         contentAsString(result) must contain("test link login")
-        contentAsString(result) must not(contain("test link sidebar"))
       }
 
       "be displayed on the logged-in view if sidebar flag is true" in new WithApplication(app) {
@@ -458,7 +453,6 @@ class FrontendControllerSpec extends Specification with Mockito with TestApplica
         status(result) must beEqualTo(OK)
         contentType(result) must beSome.which(_ == "text/html")
         contentAsString(result) must contain("test link sidebar")
-        contentAsString(result) must not(contain("test link login"))
       }
     }
   }

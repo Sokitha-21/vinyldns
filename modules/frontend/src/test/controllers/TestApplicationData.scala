@@ -340,6 +340,9 @@ trait TestApplicationData { this: Mockito =>
   val mockFrontendActions: SecuritySupport = mock[SecuritySupport]
   val mockFrontendActionBuilder: FrontendActionBuilder = mock[FrontendActionBuilder]
   val mockApiActionBuilder: ApiActionBuilder = mock[ApiActionBuilder]
+  // Prevent NPE in FrontendController constructor (private val userAction = securitySupport.frontendAction)
+  mockFrontendActions.frontendAction returns mockFrontendActionBuilder
+  mockFrontendActions.apiAction returns mockApiActionBuilder
 
   def app: Application =
     GuiceApplicationBuilder()

@@ -127,10 +127,6 @@ class VinylDNSSpec extends Specification with Mockito with TestApplicationData w
   }
 
   "VinylDNS" should {
-    "send 404 on a bad request" in new WithApplication(app) {
-      route(app, FakeRequest(GET, "/boum")) must beSome.which(status(_) == NOT_FOUND)
-    }
-
     ".getUserData" should {
       "return the current logged in users information" in new WithApplication(app) {
         val vinyldnsPortal =

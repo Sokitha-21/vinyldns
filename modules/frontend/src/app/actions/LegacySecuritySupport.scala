@@ -38,7 +38,7 @@ class LegacySecuritySupport @Inject() (
    * Reads public/index.html, injects CSRF token and optional login-error meta.
    * Tries classpath first (production JAR), then filesystem (dev mode).
    */
-  private def serveReactApp(errorMsg: String = "")(implicit request: Request[AnyContent]): Result = {
+  private def serveReactApp(errorMsg: String = "", statusFn: Status = Ok)(implicit request: Request[AnyContent]): Result = {
     val csrfToken = CSRF.getToken.map(_.value).getOrElse("")
     val contentOpt: Option[String] =
       env.resourceAsStream("public/index.html")
@@ -56,7 +56,7 @@ class LegacySecuritySupport @Inject() (
           s"""\n    <meta id="login-error" content="${errorMsg.replace("\"", "&quot;")}"/>"""
         else ""
         val html = content.replace("<head>", s"""<head>\n    <meta id="csrf" name="csrf-token" content="$csrfToken"/>$errorMeta""")
-        Ok(html).as("text/html")
+        statusFn(html).as("text/html")
       case None =>
         logger.warn("React index.html not found — run: npm run build")
         ServiceUnavailable("React app not built. Run: npm run build").as("text/plain")
@@ -120,6 +120,6 @@ class LegacySecuritySupport @Inject() (
   def noAccess(): Action[AnyContent] = Action {
     implicit request =>
       logger.info(s"User account for '${getLoggedInUser(request)}' is locked.")
-      serveReactApp("Account locked. Please contact your VinylDNS administrators.")
+      serveReactApp("Account locked. Please contact your VinylDNS administrators.", Unauthorized)
   }
 }
