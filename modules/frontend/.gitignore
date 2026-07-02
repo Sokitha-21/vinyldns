@@ -10,3 +10,6 @@ yarn.lock
 .vscode/
 *.log
 *.tmp
+public/
+!src/test/resources/public/**
+/project
