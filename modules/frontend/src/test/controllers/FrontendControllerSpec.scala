@@ -51,28 +51,31 @@ class FrontendControllerSpec extends Specification with Mockito with TestApplica
 
   val lockedUserAccessor: UserAccountAccessor = buildMockLockedkUserAccountAccessor
   val disabledOidcSec: SecuritySupport =
-    new LegacySecuritySupport(components, userAccessor, config, disabledOidcAuthenticator)
+    new LegacySecuritySupport(components, userAccessor, config, disabledOidcAuthenticator, Environment.simple())
   val enabledOidcSec: SecuritySupport =
-    new LegacySecuritySupport(components, userAccessor, config, enabledOidcAuthenticator)
+    new LegacySecuritySupport(components, userAccessor, config, enabledOidcAuthenticator, Environment.simple())
   val lockedSec: SecuritySupport =
-    new LegacySecuritySupport(components, lockedUserAccessor, config, disabledOidcAuthenticator)
+    new LegacySecuritySupport(components, lockedUserAccessor, config, disabledOidcAuthenticator, Environment.simple())
 
   val underTest = new FrontendController(
     components,
     config,
-    disabledOidcSec
+    disabledOidcSec,
+    Environment.simple()
   )
 
   val lockedUserUnderTest = new FrontendController(
     components,
     config,
-    lockedSec
+    lockedSec,
+    Environment.simple()
   )
 
   val oidcUnderTest = new FrontendController(
     components,
     oidcConfig,
-    enabledOidcSec
+    enabledOidcSec,
+    Environment.simple()
   )
 
   "FrontendController" should {

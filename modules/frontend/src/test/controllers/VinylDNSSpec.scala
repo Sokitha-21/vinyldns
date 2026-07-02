@@ -58,13 +58,13 @@ class VinylDNSSpec extends Specification with Mockito with TestApplicationData w
   val ws: WSClient = mock[WSClient]
 
   val secSupport: SecuritySupport =
-    new LegacySecuritySupport(components, mockUserAccessor, config, mockOidcAuth)
+    new LegacySecuritySupport(components, mockUserAccessor, config, mockOidcAuth, Environment.simple())
   val lockedSecSupport: SecuritySupport =
-    new LegacySecuritySupport(components, mockLockedUserAccessor, config, mockOidcAuth)
+    new LegacySecuritySupport(components, mockLockedUserAccessor, config, mockOidcAuth, Environment.simple())
   val multiSecSupport: SecuritySupport =
-    new LegacySecuritySupport(components, mockMultiUserAccessor, config, mockOidcAuth)
+    new LegacySecuritySupport(components, mockMultiUserAccessor, config, mockOidcAuth, Environment.simple())
   val lockedSec: SecuritySupport =
-    new LegacySecuritySupport(components, mockLockedUserAccessor, config, mockOidcAuth)
+    new LegacySecuritySupport(components, mockLockedUserAccessor, config, mockOidcAuth, Environment.simple())
 
   protected def before: Any = org.mockito.Mockito.reset(crypto, authenticator, userAccessor)
 
@@ -85,7 +85,7 @@ class VinylDNSSpec extends Specification with Mockito with TestApplicationData w
       components,
       crypto,
       oidcAuthenticator,
-      new LegacySecuritySupport(components, userAccountAccessor, config, oidcAuthenticator)
+      new LegacySecuritySupport(components, userAccountAccessor, config, oidcAuthenticator, Environment.simple())
     )
 
   val vinyldnsPortal: VinylDNS = TestVinylDNS()
