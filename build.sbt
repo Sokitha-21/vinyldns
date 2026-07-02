@@ -259,7 +259,12 @@ lazy val frontendSettings = Seq(
   libraryDependencies ++= portalDependencies,
   routesGenerator := InjectedRoutesGenerator,
   coverageExcludedPackages := "<empty>;views.html.*;router.*;controllers\\.javascript.*;.*Reverse.*",
-  javaOptions in Test += "-Dconfig.file=conf/application.conf",
+  // Source layout: app and test sources live under src/
+  scalaSource in Compile := baseDirectory.value / "src" / "app",
+  javaSource in Compile := baseDirectory.value / "src" / "app",
+  scalaSource in Test := baseDirectory.value / "src" / "test",
+  javaSource in Test := baseDirectory.value / "src" / "test",
+  javaOptions in Test += "-Dconfig.file=conf/application-test.conf",
   javaOptions in Test += "-Dlog4j.configurationFile=conf/log4j2.xml",
   PlayKeys.devSettings += "vinyldns.base-version" -> (version in ThisBuild).value,
   // Build React frontend (npm run build → public/) before Play starts
