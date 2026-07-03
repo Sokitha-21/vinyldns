@@ -267,6 +267,7 @@ lazy val frontendSettings = Seq(
   unmanagedResourceDirectories in Test += baseDirectory.value / "src" / "test" / "resources",
   javaOptions in Test += "-Dconfig.file=conf/application-test.conf",
   javaOptions in Test += "-Dlog4j.configurationFile=conf/log4j2.xml",
+  PlayKeys.playDefaultPort := 9002,
   PlayKeys.devSettings += "vinyldns.base-version" -> (version in ThisBuild).value,
   // Build React frontend (npm run build → public/) before Play starts
   PlayKeys.playRunHooks += PrepareFrontendHook(baseDirectory.value),

@@ -12,8 +12,34 @@ const versionSbt = readFileSync(
 const versionMatch = versionSbt.match(/:=\s*"([^"]+)"/);
 const appVersion = versionMatch ? versionMatch[1] : 'unknown';
 
-// Play backend URL (change if Play runs on a different port)
-const PLAY_BACKEND = 'http://localhost:9001';
+function readPlayPortFromConf(): number {
+  const parsePort = (content: string): number | undefined => {
+    for (const rawLine of content.split('\n')) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#')) continue;
+      const match = line.match(/^http\.port\s*=\s*(\d+)\s*$/);
+      if (match) return Number(match[1]);
+    }
+    return undefined;
+  };
+
+  const localConf = path.resolve(__dirname, 'conf/local.conf');
+  if (existsSync(localConf)) {
+    const localPort = parsePort(readFileSync(localConf, 'utf-8'));
+    if (localPort) return localPort;
+  }
+
+  const appConf = path.resolve(__dirname, 'conf/application.conf');
+  if (existsSync(appConf)) {
+    const appPort = parsePort(readFileSync(appConf, 'utf-8'));
+    if (appPort) return appPort;
+  }
+
+  return 9001;
+}
+
+const playPort = Number(process.env.PORTAL_PORT ?? readPlayPortFromConf());
+const PLAY_BACKEND = `http://localhost:${playPort}`;
 
 export default defineConfig({
   publicDir: false,
@@ -117,7 +143,7 @@ export default defineConfig({
           } catch {
             res.statusCode = 503;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ ok: false, error: 'Login service unavailable. Is Play running on port 9000?' }));
+            res.end(JSON.stringify({ ok: false, error: `Login service unavailable. Is Play running at ${PLAY_BACKEND}?` }));
           }
         });
       },
