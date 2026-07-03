@@ -32,6 +32,12 @@
   --vds-nav-icon-size: 1rem;
 }
 
+.vds-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .vds-sidebar {
   flex-shrink: 0;
   background: linear-gradient(175deg,

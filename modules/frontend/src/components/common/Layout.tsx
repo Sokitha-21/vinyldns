@@ -41,7 +41,9 @@ export function Layout({ children }: LayoutProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [regenModalOpen, setRegenModalOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [oldPortalSwitchOn, setOldPortalSwitchOn] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const oldPortalUrl = __OLD_PORTAL_URL__;
 
   useEffect(() => {
     document.documentElement.setAttribute(
@@ -49,6 +51,15 @@ export function Layout({ children }: LayoutProps) {
       darkMode ? "dark" : "light",
     );
   }, [darkMode]);
+
+  const handleOldPortalSwitch = (checked: boolean) => {
+    setOldPortalSwitchOn(checked);
+    if (checked) {
+      window.setTimeout(() => {
+        window.location.href = oldPortalUrl;
+      }, 120);
+    }
+  };
 
   // Derive breadcrumb trail — pages can override via BreadcrumbContext
   const { crumbs } = useBreadcrumbs();
@@ -88,11 +99,8 @@ export function Layout({ children }: LayoutProps) {
   };
 
   const handleLogout = async () => {
-    try {
-      await fetch("/logout", { method: "POST" });
-    } finally {
-      window.location.href = "/login";
-    }
+    setUserMenuOpen(false);
+    window.location.assign("/logout");
   };
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -222,32 +230,6 @@ export function Layout({ children }: LayoutProps) {
 
             {/* Divider */}
             <hr className="vds-divider mx-3 my-0" />
-
-            {/* ── ADMIN section ── */}
-            {/* {!collapsed && (
-              <div className="vds-section-label px-3 pt-3 pb-1">Admin</div>
-            )}
-            {collapsed && <div className="vds-spacer-help" />}
-
-            <ul className="nav flex-column px-2 mb-2 vds-nav-list">
-              <li className="nav-item">
-                <NavLink
-                  to="/admin"
-                  className={({ isActive }) =>
-                    `${navLinkClass({ isActive })}${collapsed ? " vds-tip" : ""}`
-                  }
-                  data-vds-tip="Control Panel"
-                >
-                  <i className="bi bi-shield-shaded vds-nav-icon" />
-                  {!collapsed && (
-                    <span className="vds-nav-text">Control Panel</span>
-                  )}
-                </NavLink>
-              </li>
-            </ul> */}
-
-            {/* Divider */}
-            <hr className="vds-divider mx-3 my-0" />
             {!collapsed && (
               <div className="vds-section-label px-3 pt-3 pb-1">Help</div>
             )}
@@ -265,20 +247,6 @@ export function Layout({ children }: LayoutProps) {
                   <i className="bi bi-book-half vds-nav-icon" />
                   {!collapsed && (
                     <span className="vds-nav-text">User Guide</span>
-                  )}
-                </a>
-              </li>
-              <li className="nav-item">
-                <a
-                  href="https://www.vinyldns.io/portal/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`nav-link vds-nav-link d-flex align-items-center px-3 py-2 rounded-2${collapsed ? " vds-tip" : ""}`}
-                  data-vds-tip="Portal Guide"
-                >
-                  <i className="bi bi-file-earmark-text vds-nav-icon" />
-                  {!collapsed && (
-                    <span className="vds-nav-text">Portal Guide</span>
                   )}
                 </a>
               </li>
@@ -403,25 +371,40 @@ export function Layout({ children }: LayoutProps) {
             </nav>
 
             {/* Right: theme toggle */}
-            <button
-              className="vds-theme-toggle"
-              onClick={() => setDarkMode((d) => !d)}
-              title={darkMode ? "Switch to Light mode" : "Switch to Dark mode"}
-              aria-label="Toggle theme"
-            >
-              <span
-                className={`vds-theme-toggle__track${darkMode ? " vds-theme-toggle__track--dark" : ""}`}
+            <div className="vds-topbar__actions" aria-label="Portal and theme controls">
+              <button
+                className="vds-theme-toggle"
+                onClick={() => setDarkMode((d) => !d)}
+                title={darkMode ? "Switch to Light mode" : "Switch to Dark mode"}
+                aria-label="Toggle theme"
               >
-                <span className="vds-theme-toggle__thumb">
-                  <i
-                    className={`bi ${darkMode ? "bi-moon-stars-fill" : "bi-sun-fill"}`}
-                  />
+                <span
+                  className={`vds-theme-toggle__track${darkMode ? " vds-theme-toggle__track--dark" : ""}`}
+                >
+                  <span className="vds-theme-toggle__thumb">
+                    <i
+                      className={`bi ${darkMode ? "bi-moon-stars-fill" : "bi-sun-fill"}`}
+                    />
+                  </span>
+                  </span>
+                  <span className="vds-theme-toggle__label">
+                  {darkMode ? "Dark" : "Light"}
                 </span>
-              </span>
-              <span className="vds-theme-toggle__label">
-                {darkMode ? "Dark" : "Light"}
-              </span>
-            </button>
+              </button>
+              <button
+                className="vds-theme-toggle"
+                onClick={() => handleOldPortalSwitch(!oldPortalSwitchOn)}
+                title="Switch to old portal"
+                aria-label="Switch to old portal"
+              >
+                <span
+                  className={`vds-theme-toggle__track${oldPortalSwitchOn ? " vds-theme-toggle__track--dark" : ""}`}
+                >
+                  <span className="vds-theme-toggle__thumb" />
+                </span>
+                <span className="vds-theme-toggle__label">Old Portal</span>
+              </button>
+            </div>
           </div>
 
           {children}

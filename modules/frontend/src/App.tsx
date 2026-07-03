@@ -69,6 +69,16 @@ export function App() {
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />
 
+            {/* Landing page */}
+            <Route
+              path="/"
+              element={
+                <AppLayout>
+                  <DnsChangesPage />
+                </AppLayout>
+              }
+            />
+            
             {/* Protected – wrapped in sidebar layout */}
             <Route
               path="/zones"
@@ -134,10 +144,10 @@ export function App() {
                 </AppLayout>
               }
             />
-            {/* Default redirect */}
-            <Route path="/" element={<Navigate to="/zones" replace />} />
-            <Route path="/index" element={<Navigate to="/zones" replace />} />
-            <Route path="*" element={<Navigate to="/zones" replace />} />
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/index" element={<Navigate to="/" replace />} />
+
           </Routes>
         </BrowserRouter>
       </AlertProvider>
