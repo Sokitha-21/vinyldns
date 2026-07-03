@@ -21,9 +21,6 @@
 
 /// <reference types="vite/client" />
 
-declare const __APP_VERSION__: string;
-declare const __OLD_PORTAL_URL__: string;
-
 export const portalConfig = {
   version: __APP_VERSION__,
 
