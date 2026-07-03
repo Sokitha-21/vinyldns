@@ -129,6 +129,35 @@ describe("<Layout />", () => {
     );
   });
 
+  it("renders old portal switch off by default", () => {
+    renderLayout();
+    const btn = screen.getByRole("button", { name: /Switch to old portal/i });
+    expect(btn).toBeInTheDocument();
+    expect(
+      btn.querySelector(".vds-theme-toggle__track"),
+    ).not.toHaveClass("vds-theme-toggle__track--dark");
+  });
+
+  it("navigates to old portal when switch is toggled on", async () => {
+    const originalLocation = window.location;
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...originalLocation, href: "" },
+    });
+
+    renderLayout();
+    await userEvent.click(
+      screen.getByRole("button", { name: /Switch to old portal/i }),
+    );
+
+    await waitFor(() => expect(window.location.href).toBe(__OLD_PORTAL_URL__));
+
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: originalLocation,
+    });
+  });
+
   it("renders the user menu button for an authenticated profile", () => {
     renderLayout();
     expect(

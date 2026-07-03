@@ -83,7 +83,7 @@ GET           /assets/*file                         controllers.Assets.versioned
 
 # Static images served from public/ for the React frontend
 GET    /images/*file    controllers.Assets.versioned(path="/public", file: Asset)
-GET    /img/*file       controllers.Assets.versioned(path="/public", file: Asset)
+GET    /img/*file       controllers.Assets.versioned(path="/public/img", file: Asset)
 
 # Catch-all: serve React SPA for any unmatched path (React Router handles client-side routing)
 GET           /*path                               @controllers.FrontendController.catchAll(path: String)
