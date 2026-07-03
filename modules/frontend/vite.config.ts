@@ -12,6 +12,12 @@ const versionSbt = readFileSync(
 const versionMatch = versionSbt.match(/:=\s*"([^"]+)"/);
 const appVersion = versionMatch ? versionMatch[1] : 'unknown';
 
+const appConf = readFileSync(path.resolve(__dirname, 'conf/application.conf'), 'utf-8');
+const oldPortalMatch =
+  appConf.match(/old-portal\s*\{[\s\S]*?url\s*=\s*"([^"]+)"/) ??
+  appConf.match(/old-portal\.url\s*=\s*"([^"]+)"/);
+const oldPortalUrl = process.env.OLD_PORTAL_URL ?? oldPortalMatch?.[1];
+
 function readPlayPortFromConf(): number {
   const parsePort = (content: string): number | undefined => {
     for (const rawLine of content.split('\n')) {
@@ -45,6 +51,7 @@ export default defineConfig({
   publicDir: false,
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
+    __OLD_PORTAL_URL__: JSON.stringify(oldPortalUrl),
   },
   plugins: [
     react(),
