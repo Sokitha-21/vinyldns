@@ -283,6 +283,16 @@ lazy val frontendSettings = Seq(
     import scala.sys.process._
     "./modules/frontend/deploy-to-frontend.sh" !
   },
+  mappings in Universal ++= {
+    val publicDir = baseDirectory.value / "public"
+    if (publicDir.exists)
+      (publicDir ** "*").get
+        .filter(_.isFile)
+        .flatMap { file =>
+          IO.relativize(publicDir, file).map(rel => file -> s"public/$rel")
+        }
+    else Seq.empty
+  },
   target in Universal := file("artifacts/"),
   packageName in Universal := "vinyldns-frontend"
 )
