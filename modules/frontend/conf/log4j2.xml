@@ -3,9 +3,9 @@
     <Appenders>
         <Console name="CONSOLE" target="SYSTEM_OUT">
             <EcsLayout
-                    serviceName="vinyldns-portal"
-                    serviceNodeName="vinyldns-portal"
-                    eventDataset="vinyldns-portal"
+                    serviceName="vinyldns-frontend"
+                    serviceNodeName="vinyldns-frontend"
+                    eventDataset="vinyldns-frontend"
                     includeOrigin="true"
             />
         </Console>
