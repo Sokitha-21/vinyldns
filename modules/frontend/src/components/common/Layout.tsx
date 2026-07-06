@@ -54,7 +54,7 @@ export function Layout({ children }: LayoutProps) {
 
   const handleOldPortalSwitch = (checked: boolean) => {
     setOldPortalSwitchOn(checked);
-    if (checked) {
+    if (checked && oldPortalUrl) { {
       window.setTimeout(() => {
         window.location.href = oldPortalUrl;
       }, 120);
