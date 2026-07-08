@@ -43,7 +43,6 @@ export function Layout({ children }: LayoutProps) {
   const [darkMode, setDarkMode] = useState(false);
   const [oldPortalSwitchOn, setOldPortalSwitchOn] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const oldPortalUrl = __OLD_PORTAL_URL__;
 
   useEffect(() => {
     document.documentElement.setAttribute(
@@ -54,10 +53,12 @@ export function Layout({ children }: LayoutProps) {
 
   const handleOldPortalSwitch = (checked: boolean) => {
     setOldPortalSwitchOn(checked);
-    if (checked && oldPortalUrl) {
-      window.setTimeout(() => {
-        window.location.href = oldPortalUrl;
-      }, 120);
+    if (checked) {
+      document.cookie = "ui_mode=old; Path=/";
+      setTimeout(() => { window.location.href = "/"; }, 120);
+    } else {
+      document.cookie = "ui_mode=new; Path=/";
+      setTimeout(() => { window.location.href = "/"; }, 120);
     }
   };
 

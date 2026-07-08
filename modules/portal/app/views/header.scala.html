@@ -18,7 +18,7 @@
                     type="checkbox"
                     autocomplete="off"
                     aria-label="Switch to new portal"
-                    onchange="if(this.checked){setTimeout(function(){window.location.href='@meta.newPortalUrl';},120);}"
+                    onchange="if(this.checked){document.cookie='ui_mode=new; Path=/';setTimeout(function(){window.location.href='@meta.newPortalUrl';},120);}"
             />
             <span class="portal-toggle-switch">
               <span class="portal-toggle-knob"></span>
