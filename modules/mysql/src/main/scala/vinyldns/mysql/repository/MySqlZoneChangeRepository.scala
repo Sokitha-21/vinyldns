@@ -192,20 +192,24 @@ class MySqlZoneChangeRepository
                .apply()
                .getOrElse(0)
 
-           sb.append(s" WHERE ")
+          // Bound parameters for the dynamic WHERE clause, in placeholder order
+          // (after the accessor join params).
+          val filterParams = scala.collection.mutable.ListBuffer[Any]()
+
+          sb.append(" WHERE ")
 
           if (zoneResults != 0) sb.append(s" zc.zone_name NOT IN ($BASE_ZONE_NAME_SEARCH_SQL) AND ")
 
-          sb.append(s" zc.zone_status = 'Deleted' ")
+          sb.append(" zc.zone_status = 'Deleted' ")
 
-          val filters = if (zoneNameFilter.isDefined && zoneNameFilter.get.contains("*"))
-              zoneNameFilter.map(flt => s"zc.zone_name LIKE '${flt.replace('*', '%')}'")
-          else zoneNameFilter.map(flt => s"zc.zone_name LIKE '${flt.concat("%")}'")
-
-          if(zoneNameFilter.isDefined)
-            sb.append(s" AND ")
-
-          sb.append(filters.mkString)
+          // '*' is the only user-facing wildcard; literal LIKE metacharacters are
+          // escaped and the pattern is bound, never interpolated into SQL.
+          zoneNameFilter.foreach { flt =>
+            // '\\\\' in this plain string literal is two backslashes at runtime,
+            // which MySQL parses to the single backslash escape char.
+            sb.append(" AND zc.zone_name LIKE ? ESCAPE '\\\\'")
+            filterParams += LikePattern.prefix(flt)
+          }
 
           val resultOrdering = s"""|    GROUP BY zc.zone_name
                                    |    ORDER BY zc.created_timestamp DESC
@@ -217,7 +221,7 @@ class MySqlZoneChangeRepository
 
           val deletedZoneResults: List[ZoneChange] =
             SQL(query)
-              .bind(accessors: _*)
+              .bind(accessors ++ filterParams.toList: _*)
               .map(extractZoneChange(1))
                 .list()
                 .apply()
