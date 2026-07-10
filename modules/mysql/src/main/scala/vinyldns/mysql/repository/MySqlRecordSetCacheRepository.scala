@@ -419,10 +419,6 @@ class MySqlRecordSetCacheRepository
               .map(_.int(1))
               .single()
               .apply()
-
-              println(s"final query: $finalQuery")
-              println(s"count query: $countQuery")
-            println(s"final query: $totalCount")
           
           ListRecordSetResults(
             recordSets = newResults,

@@ -45,7 +45,7 @@ case class ListGlobalRecordSetsResponse(
                                          recordTypeFilter: Option[Set[RecordType]] = None,
                                          recordOwnerGroupFilter: Option[String] = None,
                                          nameSort: NameSort,
-                                         totalCount: Option[Int]= None
+                                         totalCount: Option[Int] = None
                                        )
 
 case class ListRecordSetsByZoneResponse(
