@@ -164,6 +164,7 @@ class ZoneService(
   def getZoneByName(zoneName: String, auth: AuthPrincipal): Result[ZoneInfo] =
     for {
       zone <- getZoneByNameOrFail(ensureTrailingDot(zoneName))
+      _ <- canSeeZone(auth, zone).toResult
       aclInfo <- getZoneAclDisplay(zone.acl)
       groupName <- getGroupName(zone.adminGroupId)
       accessLevel = getZoneAccess(auth, zone)
@@ -317,7 +318,7 @@ class ZoneService(
       zoneChangesFailedResults <- zoneChangeRepository
         .listFailedZoneChanges(maxItems, startFrom)
         .toResult[ListFailedZoneChangesResults]
-      _ <- zoneAccess(zoneChangesFailedResults.items, authPrincipal).toResult
+      _ <- zoneAccess(zoneChangesFailedResults.items, authPrincipal)
     } yield
       ListFailedZoneChangesResponse(
         zoneChangesFailedResults.items,
@@ -327,12 +328,10 @@ class ZoneService(
       )
 
   def zoneAccess(
-                  zoneCh: List[ZoneChange],
-                  auth: AuthPrincipal
-                ): List[Result[Unit]] =
-    zoneCh.map { zn =>
-      canSeeZone(auth, zn.zone).toResult
-    }
+                   zoneCh: List[ZoneChange],
+                   auth: AuthPrincipal
+                 ): Result[Unit] =
+    zoneCh.traverse_(zn => canSeeZone(auth, zn.zone).toResult)
 
   def addACLRule(
       zoneId: String,
