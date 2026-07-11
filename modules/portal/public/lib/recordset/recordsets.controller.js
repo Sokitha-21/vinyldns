@@ -407,22 +407,13 @@
                             return;
                         }
 
-                        let filename;
-                        if (recordType) {
-                            const safeRecordName = (recordName || '')
-                                .replace(/\*/g, '')
-                                .replace(/[^a-zA-Z0-9.-]/g, '_');
-                            filename = safeRecordName
-                                ? `${safeRecordName} - recordset.csv`
-                                : `recordsets.csv`;
-                        } else {
-                            const safeRecordName = (recordName || '')
-                                .replace(/\*/g, '')
-                                .replace(/[^a-zA-Z0-9.-]/g, '_');
-                            filename = safeRecordName
-                                ? `${safeRecordName} - recordsets.csv`
-                                : `recordsets.csv`;
-                        }
+                        const safeRecordName = (recordName || '')
+                            .replace(/\*/g, '')
+                            .replace(/[^a-zA-Z0-9.-]/g, '_');
+                        const recordLabel = recordType ? 'recordset' : 'recordsets';
+                        const filename = safeRecordName
+                            ? `${safeRecordName} - ${recordLabel}.csv`
+                            : 'recordsets.csv';
 
                         const rows = [];
                         rows.push(buildHeaders());
@@ -430,7 +421,7 @@
                         allRecords.forEach(r => {
                             rows.push(buildRow(r));
                         });
-                        csvContent = rows.join('\n');
+                        csvContent = '\uFEFF' + rows.join('\n');
 
                         const blob = new Blob([csvContent], { type: 'text/csv' });
                         const link = document.createElement('a');
@@ -447,7 +438,7 @@
                         .then(loadPrivateZoneOwners)
                         .then(downloadCsv)
                         .catch(function (error) {
-                            if (error && Object.keys(error).length > 0) {
+                            if (error) {
                                 handleError(error, 'recordExport-failure');
                             }
                             hideLoader();
@@ -456,9 +447,13 @@
             };
             
             function toCSVCell(value) {
-                return '"' + String(value == null ? '' : value).replace(/"/g, '""') + '"';
+                let str = String(value == null ? '' : value);
+                if (/^[=+\-@\t\r]/.test(str)) {
+                    str = "'" + str;
+                }
+                return '"' + str.replace(/"/g, '""') + '"';
             }
-            
+
             function updateRecordDisplay(records) {
                 var newRecords = [];
                 angular.forEach(records, function(record) {
