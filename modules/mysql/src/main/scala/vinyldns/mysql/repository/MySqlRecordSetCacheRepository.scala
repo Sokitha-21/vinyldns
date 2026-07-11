@@ -392,33 +392,34 @@ class MySqlRecordSetCacheRepository
             .filter(_ == results.size)
             .flatMap(_ => newResults.lastOption.map(PagingKey.toNextId(_, searchByZone)))
 
-          val countQueryBase = sqls"""
+          val totalCount: Option[Int] =
+            if (maxItems.isDefined) {
+              val countQueryBase = sqls"""
               SELECT COUNT(*) FROM (
                 SELECT recordset_data.recordset_id, recordset_data.type
                 FROM recordset_data
                 RIGHT JOIN recordset
                   ON recordset.id = recordset_data.recordset_id
-            """
-          val countOpts = (zoneAndNameFilters ++ typeFilter ++ ownerGroupFilter).toList
-          
-          val countWhere =
-            if (countOpts.nonEmpty) {
-              val setDelimiter = SQLSyntax.join(countOpts, sqls"AND")
-              sqls"WHERE".append(setDelimiter)
-            } else sqls""
-          
-          val countGroupBy = sqls"""
-              GROUP BY recordset_data.recordset_id, recordset_data.type
-            ) AS grouped_count
-            """
+              """
+              val countOpts = (zoneAndNameFilters ++ typeFilter ++ ownerGroupFilter).toList
+              val countWhere =
+                if (countOpts.nonEmpty) {
+                  val setDelimiter = SQLSyntax.join(countOpts, sqls"AND")
+                  sqls"WHERE".append(setDelimiter)
+                } else sqls""
+              val countGroupBy = sqls"""
+                  GROUP BY recordset_data.recordset_id, recordset_data.type
+                ) AS grouped_count
+                """
+              val countQuery = countQueryBase.append(countWhere).append(countGroupBy)
 
-          val countQuery = countQueryBase.append(countWhere).append(countGroupBy)
-
-          val totalCount: Option[Int] =
               sql"$countQuery"
               .map(_.int(1))
               .single()
               .apply()
+            } else {
+              None
+            }
           
           ListRecordSetResults(
             recordSets = newResults,
