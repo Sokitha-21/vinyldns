@@ -689,14 +689,14 @@ class RecordSetService(
                             maxItems: Int = 100,
                             authPrincipal: AuthPrincipal
                           ): Result[ListRecordSetChangesResponse] =
-      for {
-        zone <- getZone(zoneId)
-        _ <- canSeeZone(authPrincipal, zone).toResult
-        recordSetChangesResults <- recordChangeRepository
-          .listRecordSetChanges(Some(zone.id), startFrom, maxItems, None, None)
-          .toResult[ListRecordSetChangesResults]
-        recordSetChangesInfo <- buildRecordSetChangeInfo(recordSetChangesResults.items)
-      } yield ListRecordSetChangesResponse(zoneId, recordSetChangesResults, recordSetChangesInfo)
+    for {
+      zone <- getZone(zoneId)
+      _ <- canSeeZone(authPrincipal, zone).toResult
+      recordSetChangesResults <- recordChangeRepository
+        .listRecordSetChanges(Some(zone.id), startFrom, maxItems, None, None)
+        .toResult[ListRecordSetChangesResults]
+      recordSetChangesInfo <- buildRecordSetChangeInfo(recordSetChangesResults.items)
+    } yield ListRecordSetChangesResponse(zoneId, recordSetChangesResults, recordSetChangesInfo)
 
   def listRecordSetChangeHistory(
                             zoneId: Option[String] = None,
