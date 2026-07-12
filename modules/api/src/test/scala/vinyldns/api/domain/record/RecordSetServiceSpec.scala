@@ -1851,7 +1851,7 @@ class RecordSetServiceSpec
         .getZones(Set(sharedZone.id))
 
       when(
-        mockRecordDataRepo.listRecordSetData(
+        mockRecordRepo.listRecordSets(
           None,
           None,
           None,
@@ -1907,7 +1907,7 @@ class RecordSetServiceSpec
         .getZones(Set(sharedZone.id))
 
       when(
-        mockRecordDataRepo.listRecordSetData(
+        mockRecordRepo.listRecordSets(
           None,
           None,
           None,
@@ -1956,7 +1956,7 @@ class RecordSetServiceSpec
         .getZones(any[Set[String]])
 
       when(
-        mockRecordDataRepo.listRecordSetData(
+        mockRecordRepo.listRecordSets(
           None,
           None,
           None,
@@ -2006,7 +2006,7 @@ class RecordSetServiceSpec
         .getZones(any[Set[String]])
 
       when(
-        mockRecordDataRepo.listRecordSetData(
+        mockRecordRepo.listRecordSets(
           None,
           None,
           Some(1),
