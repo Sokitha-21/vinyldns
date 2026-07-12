@@ -19,7 +19,7 @@ package vinyldns.api.domain.record
 import cats.effect._
 import cats.scalatest.EitherMatchers
 import org.mockito.Matchers.any
-import org.mockito.Mockito.doReturn
+import org.mockito.Mockito.{doReturn, when}
 import org.scalatestplus.mockito.MockitoSugar
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -1773,18 +1773,8 @@ class RecordSetServiceSpec
         .when(mockZoneRepo)
         .getZones(Set(sharedZone.id))
 
-      doReturn(
-        IO.pure(
-          ListRecordSetResults(
-            List(sharedZoneRecord),
-            recordNameFilter = Some("aaaa*"),
-            nameSort = NameSort.ASC,
-            recordOwnerGroupFilter = Some("owner group id") ,
-            recordTypeSort = RecordTypeSort.NONE
-          )
-        )
-      ).when(mockRecordRepo)
-        .listRecordSets(
+      when(
+        mockRecordRepo.listRecordSets(
           None,
           None,
           None,
@@ -1794,6 +1784,17 @@ class RecordSetServiceSpec
           NameSort.ASC,
           RecordTypeSort.ASC
         )
+      ).thenReturn(
+        IO.pure(
+          ListRecordSetResults(
+            List(sharedZoneRecord),
+            recordNameFilter = Some("aaaa*"),
+            nameSort = NameSort.ASC,
+            recordOwnerGroupFilter = Some("owner group id"),
+            recordTypeSort = RecordTypeSort.NONE
+          )
+        )
+      )
 
       val result: ListGlobalRecordSetsResponse =
         underTest
@@ -1849,7 +1850,17 @@ class RecordSetServiceSpec
         .when(mockZoneRepo)
         .getZones(Set(sharedZone.id))
 
-      doReturn(
+      when(
+        mockRecordDataRepo.listRecordSetData(
+          None,
+          None,
+          None,
+          Some("aaaa*."),
+          None,
+          Some("owner group id"),
+          NameSort.ASC
+        )
+      ).thenReturn(
         IO.pure(
           ListRecordSetResults(
             List(sharedZoneRecord),
@@ -1859,16 +1870,7 @@ class RecordSetServiceSpec
             recordTypeSort = RecordTypeSort.NONE
           )
         )
-      ).when(mockRecordDataRepo)
-        .listRecordSetData(
-          None,
-          None,
-          None,
-          Some("aaaa*."),
-          None,
-          Some("owner group id"),
-          NameSort.ASC
-        )
+      )
 
       val result =
         underTest
@@ -1904,7 +1906,17 @@ class RecordSetServiceSpec
         .when(mockZoneRepo)
         .getZones(Set(sharedZone.id))
 
-      doReturn(
+      when(
+        mockRecordDataRepo.listRecordSetData(
+          None,
+          None,
+          None,
+          Some("aaaa*."),
+          None,
+          Some("owner group id"),
+          NameSort.ASC
+        )
+      ).thenReturn(
         IO.pure(
           ListRecordSetResults(
             List(sharedZoneRecord),
@@ -1915,16 +1927,7 @@ class RecordSetServiceSpec
             totalCount = Some(5)
           )
         )
-      ).when(mockRecordDataRepo)
-        .listRecordSetData(
-          None,
-          None,
-          None,
-          Some("aaaa*."),
-          None,
-          Some("owner group id"),
-          NameSort.ASC
-        )
+      )
 
       val result =
         underTest
@@ -1952,7 +1955,17 @@ class RecordSetServiceSpec
         .when(mockZoneRepo)
         .getZones(any[Set[String]])
 
-      doReturn(
+      when(
+        mockRecordDataRepo.listRecordSetData(
+          None,
+          None,
+          None,
+          Some("aaaa*."),
+          None,
+          None,
+          NameSort.ASC
+        )
+      ).thenReturn(
         IO.pure(
           ListRecordSetResults(
             List.empty,
@@ -1963,16 +1976,7 @@ class RecordSetServiceSpec
             totalCount = Some(0)
           )
         )
-      ).when(mockRecordDataRepo)
-        .listRecordSetData(
-          None,
-          None,
-          None,
-          Some("aaaa*."),
-          None,
-          None,
-          NameSort.ASC
-        )
+      )
 
       val result =
         underTest
@@ -2001,19 +2005,8 @@ class RecordSetServiceSpec
         .when(mockZoneRepo)
         .getZones(any[Set[String]])
 
-      doReturn(
-        IO.pure(
-          ListRecordSetResults(
-            List(sharedZoneRecord), 
-            recordNameFilter = Some("aaaa*"),
-            nameSort = NameSort.ASC,
-            recordOwnerGroupFilter = None,  
-            recordTypeSort = RecordTypeSort.NONE,
-            totalCount = Some(10)
-          )
-        )
-      ).when(mockRecordDataRepo)
-        .listRecordSetData(
+      when(
+        mockRecordDataRepo.listRecordSetData(
           None,
           None,
           Some(1),
@@ -2022,6 +2015,18 @@ class RecordSetServiceSpec
           None,
           NameSort.ASC
         )
+      ).thenReturn(
+        IO.pure(
+          ListRecordSetResults(
+            List(sharedZoneRecord),
+            recordNameFilter = Some("aaaa*"),
+            nameSort = NameSort.ASC,
+            recordOwnerGroupFilter = None,
+            recordTypeSort = RecordTypeSort.NONE,
+            totalCount = Some(10)
+          )
+        )
+      )
 
       val result =
         underTest
