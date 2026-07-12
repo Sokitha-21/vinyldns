@@ -1785,14 +1785,14 @@ class RecordSetServiceSpec
         )
       ).when(mockRecordRepo)
         .listRecordSets(
-          any[Option[String]],
-          any[Option[String]],
-          any[Option[Int]],
-          any[Option[String]],
-          any[Option[Set[RecordType.RecordType]]],
-          any[Option[String]],
-          any[NameSort.NameSort],
-          any[RecordTypeSort.RecordTypeSort]
+          None,
+          None,
+          None,
+          Some("aaaa*."),
+          None,
+          Some("owner group id"),
+          NameSort.ASC,
+          RecordTypeSort.ASC
         )
 
       val result: ListGlobalRecordSetsResponse =
@@ -1861,13 +1861,13 @@ class RecordSetServiceSpec
         )
       ).when(mockRecordDataRepo)
         .listRecordSetData(
-          any[Option[String]],
-          any[Option[String]],
-          any[Option[Int]],
-          any[Option[String]],
-          any[Option[Set[RecordType.RecordType]]],
-          any[Option[String]],
-          any[NameSort.NameSort]
+          None,
+          None,
+          None,
+          Some("aaaa*."),
+          None,
+          Some("owner group id"),
+          NameSort.ASC
         )
 
       val result =
@@ -1917,13 +1917,13 @@ class RecordSetServiceSpec
         )
       ).when(mockRecordDataRepo)
         .listRecordSetData(
-          any[Option[String]],
-          any[Option[String]],
-          any[Option[Int]],
-          any[Option[String]],
-          any[Option[Set[RecordType.RecordType]]],
-          any[Option[String]],
-          any[NameSort.NameSort]
+          None,
+          None,
+          None,
+          Some("aaaa*."),
+          None,
+          Some("owner group id"),
+          NameSort.ASC
         )
 
       val result =
@@ -1965,13 +1965,13 @@ class RecordSetServiceSpec
         )
       ).when(mockRecordDataRepo)
         .listRecordSetData(
-          any[Option[String]],
-          any[Option[String]],
-          any[Option[Int]],
-          any[Option[String]],
-          any[Option[Set[RecordType.RecordType]]],
-          any[Option[String]],
-          any[NameSort.NameSort]
+          None,
+          None,
+          None,
+          Some("aaaa*."),
+          None,
+          None,
+          NameSort.ASC
         )
 
       val result =
@@ -2014,13 +2014,13 @@ class RecordSetServiceSpec
         )
       ).when(mockRecordDataRepo)
         .listRecordSetData(
-          any[Option[String]],
-          any[Option[String]],
-          any[Option[Int]],
-          any[Option[String]],
-          any[Option[Set[RecordType.RecordType]]],
-          any[Option[String]],
-          any[NameSort.NameSort]
+          None,
+          None,
+          Some(1),
+          Some("aaaa*."),
+          None,
+          None,
+          NameSort.ASC
         )
 
       val result =
