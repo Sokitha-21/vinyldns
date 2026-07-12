@@ -434,8 +434,7 @@ class MySqlRecordSetCacheRepository
         }
       }
     }
-    
-    
+  
   private val IPV4_ARPA = ".in-addr.arpa."
   private val IPV6_ARPA = ".ip6.arpa."
   private val innerRecordRegex = "(?i).*?\"((?:[0-9a-f]+[:.]+)+[0-9a-f]+)\".*".r
