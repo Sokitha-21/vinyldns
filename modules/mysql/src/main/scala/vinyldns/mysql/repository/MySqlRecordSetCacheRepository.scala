@@ -407,6 +407,7 @@ class MySqlRecordSetCacheRepository
                   val setDelimiter = SQLSyntax.join(countOpts, sqls"AND")
                   sqls"WHERE".append(setDelimiter)
                 } else sqls""
+                
               val countGroupBy = sqls"""
                   GROUP BY recordset_data.recordset_id, recordset_data.type
                 ) AS grouped_count
