@@ -1858,7 +1858,9 @@ class RecordSetServiceSpec
           Some("aaaa*."),
           None,
           Some("owner group id"),
-          NameSort.ASC
+          NameSort.ASC,
+          RecordTypeSort.ASC,
+          None
         )
       ).thenReturn(
         IO.pure(
@@ -1914,7 +1916,9 @@ class RecordSetServiceSpec
           Some("aaaa*."),
           None,
           Some("owner group id"),
-          NameSort.ASC
+          NameSort.ASC,
+          RecordTypeSort.ASC,
+          None
         )
       ).thenReturn(
         IO.pure(
@@ -1963,7 +1967,9 @@ class RecordSetServiceSpec
           Some("aaaa*."),
           None,
           None,
-          NameSort.ASC
+          NameSort.ASC,
+          RecordTypeSort.ASC,
+          None
         )
       ).thenReturn(
         IO.pure(
@@ -2013,7 +2019,9 @@ class RecordSetServiceSpec
           Some("aaaa*."),
           None,
           None,
-          NameSort.ASC
+          NameSort.ASC,
+          RecordTypeSort.ASC,
+          None
         )
       ).thenReturn(
         IO.pure(
