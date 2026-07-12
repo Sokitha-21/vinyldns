@@ -659,7 +659,6 @@ class RecordSetService(
                         ): Result[RecordSetChange] =
     for {
       zone <- getZone(zoneId)
-      _ <- getRecordSet(rsId)
       change <- recordChangeRepository
         .getRecordSetChange(zone.id, changeId)
         .orFail(
