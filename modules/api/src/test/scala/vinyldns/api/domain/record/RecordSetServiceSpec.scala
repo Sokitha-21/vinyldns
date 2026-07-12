@@ -2167,7 +2167,6 @@ class RecordSetServiceSpec
         .swap
         .toOption
         .get
-      
       error shouldBe a[RecordSetNotFoundError]
     }
 
