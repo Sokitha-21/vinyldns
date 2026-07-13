@@ -1773,8 +1773,7 @@ class RecordSetServiceSpec
         .when(mockZoneRepo)
         .getZones(Set(sharedZone.id))
 
-      when(
-        mockRecordRepo.listRecordSets(
+      when(mockRecordRepo.listRecordSets(
           None,
           None,
           None,
@@ -1870,7 +1869,7 @@ class RecordSetServiceSpec
           recordOwnerGroupFilter = any[Option[String]],
           nameSort = any[NameSort.NameSort]
         )
-        
+
       val result =
         underTest
           .searchRecordSets(
