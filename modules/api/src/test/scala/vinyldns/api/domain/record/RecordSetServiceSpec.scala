@@ -1773,27 +1773,27 @@ class RecordSetServiceSpec
         .when(mockZoneRepo)
         .getZones(Set(sharedZone.id))
 
-      when(mockRecordRepo.listRecordSets(
-          None,
-          None,
-          None,
-          Some("aaaa*."),
-          None,
-          Some("owner group id"),
-          NameSort.ASC,
-          RecordTypeSort.ASC
-        )
-      ).thenReturn(
+      doReturn(
         IO.pure(
           ListRecordSetResults(
             List(sharedZoneRecord),
             recordNameFilter = Some("aaaa*"),
             nameSort = NameSort.ASC,
-            recordOwnerGroupFilter = Some("owner group id"),
+            recordOwnerGroupFilter = Some("owner group id") ,
             recordTypeSort = RecordTypeSort.NONE
           )
         )
-      )
+      ).when(mockRecordRepo)
+        .listRecordSets(
+          zoneId = any[Option[String]],
+          startFrom = any[Option[String]],
+          maxItems = any[Option[Int]],
+          recordNameFilter = any[Option[String]],
+          recordTypeFilter = any[Option[Set[RecordType.RecordType]]],
+          recordOwnerGroupFilter = any[Option[String]],
+          nameSort = any[NameSort.NameSort],
+          recordTypeSort = any[RecordTypeSort.RecordTypeSort]
+        )
 
       val result: ListGlobalRecordSetsResponse =
         underTest
