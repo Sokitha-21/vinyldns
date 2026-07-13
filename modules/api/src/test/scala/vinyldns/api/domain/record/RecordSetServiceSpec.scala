@@ -1861,13 +1861,13 @@ class RecordSetServiceSpec
         )
       ).when(mockRecordDataRepo)
         .listRecordSetData(
-          zoneId = None,
-          startFrom = None,
-          maxItems = None,
-          recordNameFilter = Some("aaaa*."),
-          recordTypeFilter = None,
-          recordOwnerGroupFilter = Some("owner group id"),
-          nameSort = NameSort.ASC
+          None,
+          None,
+          None,
+          Some("aaaa*."),
+          None,
+          Some("owner group id"),
+          NameSort.ASC
         )
 
       val result =
@@ -1917,13 +1917,13 @@ class RecordSetServiceSpec
         )
       ).when(mockRecordDataRepo)
         .listRecordSetData(
-          zoneId = None,
-          startFrom = None,
-          maxItems = None,
-          recordNameFilter = Some("aaaa*."),
-          recordTypeFilter = None,
-          recordOwnerGroupFilter = Some("owner group id"),
-          nameSort = NameSort.ASC
+          None,
+          None,
+          None,
+          Some("aaaa*."),
+          None,
+          Some("owner group id"),
+          NameSort.ASC
         )
 
       val result =
