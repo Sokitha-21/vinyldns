@@ -19,7 +19,7 @@ package vinyldns.api.domain.record
 import cats.effect._
 import cats.scalatest.EitherMatchers
 import org.mockito.Matchers.any
-import org.mockito.Mockito.{doReturn, when}
+import org.mockito.Mockito.doReturn
 import org.scalatestplus.mockito.MockitoSugar
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
