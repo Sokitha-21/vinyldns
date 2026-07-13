@@ -275,7 +275,7 @@ class MySqlRecordSetRepository extends RecordSetRepository with Monitored {
             .flatMap(_ => newResults.lastOption.map(PagingKey.toNextId(_, searchByZone)))
 
           val totalCount: Option[Int] =
-            if (maxItems.isDefined) {
+            if (zoneId.isEmpty) {
               val countQueryBase = sqls"SELECT COUNT(*) FROM recordset"
               val countOpts = (zoneAndNameFilters ++ typeFilter ++ ownerGroupFilter).toList
 
