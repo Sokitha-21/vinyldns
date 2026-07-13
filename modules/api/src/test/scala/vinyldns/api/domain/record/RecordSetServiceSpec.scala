@@ -1850,8 +1850,18 @@ class RecordSetServiceSpec
         .when(mockZoneRepo)
         .getZones(Set(sharedZone.id))
 
-      when(mockRecordRepo)
-      .listRecordSets(
+      doReturn(
+        IO.pure(
+          ListRecordSetResults(
+            List(sharedZoneRecord),
+            recordNameFilter = Some("aaaa*"),
+            nameSort = NameSort.ASC,
+            recordOwnerGroupFilter = Some("owner group id"),
+            recordTypeSort = RecordTypeSort.NONE
+          )
+        )
+      ).when(mockRecordDataRepo)
+        .listRecordSetData(
           zoneId = any[Option[String]],
           startFrom = any[Option[String]],
           maxItems = any[Option[Int]],
@@ -1860,6 +1870,7 @@ class RecordSetServiceSpec
           recordOwnerGroupFilter = any[Option[String]],
           nameSort = any[NameSort.NameSort]
         )
+        
       val result =
         underTest
           .searchRecordSets(
