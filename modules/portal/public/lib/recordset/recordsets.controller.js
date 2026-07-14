@@ -218,12 +218,7 @@
               }
             });
 
-            $.ui.autocomplete.prototype._renderItem = function( ul, item ) {
-                    let recordSet = String(item.label).replace(new RegExp(this.term, "gi"),"<b>$&</b>");
-                    return $("<li></li>")
-                          .data("ui-autocomplete-item", item.value)
-                          .append("<div>" + recordSet + "</div>")
-                          .appendTo(ul); };
+            vinyldnsAutocomplete.applyRenderer(recordSearchAutocomplete);
 
             $scope.viewRecordHistory = function(recordFqdn, recordType, zoneId, recordId) {
                $scope.recordFqdn = recordFqdn;
