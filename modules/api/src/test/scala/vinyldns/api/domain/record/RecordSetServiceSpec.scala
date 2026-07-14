@@ -2113,9 +2113,6 @@ class RecordSetServiceSpec
   "getRecordSetChange" should {
     "return the record set change if it is found" in {
       doReturn(IO.pure(Some(zoneActive))).when(mockZoneRepo).getZone(zoneActive.id)
-      doReturn(IO.pure(Some(pendingCreateAAAA.recordSet)))
-        .when(mockRecordRepo)
-        .getRecordSet(pendingCreateAAAA.recordSet.id)
       doReturn(IO.pure(Some(pendingCreateAAAA)))
         .when(mockRecordChangeRepo)
         .getRecordSetChange(zoneActive.id, pendingCreateAAAA.id)
@@ -2126,9 +2123,6 @@ class RecordSetServiceSpec
     }
 
     "return the record set change if the user is in the record owner group in a shared zone" in {
-      doReturn(IO.pure(Some(sharedZoneRecord.copy(status = RecordSetStatus.Active))))
-        .when(mockRecordRepo)
-        .getRecordSet(pendingCreateSharedRecord.recordSet.id)
       doReturn(IO.pure(Some(pendingCreateSharedRecord)))
         .when(mockRecordChangeRepo)
         .getRecordSetChange(sharedZone.id, pendingCreateSharedRecord.id)
@@ -2150,9 +2144,6 @@ class RecordSetServiceSpec
 
     "return a RecordSetNotFoundError if the change belongs to a different record set" in {
       val differentRsId = "different-rs-id"
-      doReturn(IO.pure(Some(pendingCreateAAAA.recordSet.copy(id = differentRsId))))
-        .when(mockRecordRepo)
-        .getRecordSet(differentRsId)
       doReturn(IO.pure(Some(pendingCreateAAAA)))
         .when(mockRecordChangeRepo)
         .getRecordSetChange(okZone.id, pendingCreateAAAA.id)
@@ -2195,9 +2186,6 @@ class RecordSetServiceSpec
 
     "return a NotAuthorizedError if the user is not authorized to access the zone" in {
       doReturn(IO.pure(Some(zoneActive))).when(mockZoneRepo).getZone(zoneActive.id)
-      doReturn(IO.pure(Some(pendingCreateAAAA.recordSet)))
-        .when(mockRecordRepo)
-        .getRecordSet(pendingCreateAAAA.recordSet.id)
       doReturn(IO.pure(Some(pendingCreateAAAA)))
         .when(mockRecordChangeRepo)
         .getRecordSetChange(zoneActive.id, pendingCreateAAAA.id)
@@ -2210,9 +2198,6 @@ class RecordSetServiceSpec
 
     "return a NotAuthorizedError if the user is in the record owner group but the zone is not shared" in {
       doReturn(IO.pure(Some(zoneNotAuthorized))).when(mockZoneRepo).getZone(zoneNotAuthorized.id)
-      doReturn(IO.pure(Some(pendingCreateSharedRecordNotSharedZone.recordSet)))
-        .when(mockRecordRepo)
-        .getRecordSet(pendingCreateSharedRecordNotSharedZone.recordSet.id)
       doReturn(IO.pure(Some(pendingCreateSharedRecordNotSharedZone)))
         .when(mockRecordChangeRepo)
         .getRecordSetChange(zoneNotAuthorized.id, pendingCreateSharedRecordNotSharedZone.id)
