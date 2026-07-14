@@ -2170,7 +2170,6 @@ class RecordSetServiceSpec
 
       val result = underTest.getRecordSetCount(okZone.id,authPrincipal = okAuth).value.unsafeRunSync().toOption.get
       result shouldBe RecordSetCount(10)
-
     }
 
     "return a NotAuthorizedError for getRecordSetCount if the user is not authorized to access the zone" in {
