@@ -140,7 +140,6 @@
 
             function getRecordData(records, type) {
                 if (!records || !records.length) return '';
-
                 switch (type) {
                     case 'A':
                     case 'AAAA':
