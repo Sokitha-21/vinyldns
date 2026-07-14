@@ -1884,7 +1884,8 @@ class RecordSetServiceSpec
           Some("aaaa*."),
           None,
           Some("owner group id"),
-          NameSort.ASC
+          NameSort.ASC,
+          Some(sharedAuth)
         )
 
       val result =
@@ -1940,7 +1941,8 @@ class RecordSetServiceSpec
           Some("aaaa*."),
           None,
           Some("owner group id"),
-          NameSort.ASC
+          NameSort.ASC,
+          Some(sharedAuth)
         )
 
       val result =
@@ -1988,7 +1990,8 @@ class RecordSetServiceSpec
           Some("aaaa*."),
           None,
           None,
-          NameSort.ASC
+          NameSort.ASC,
+          Some(sharedAuth)
         )
 
       val result =
@@ -2037,7 +2040,8 @@ class RecordSetServiceSpec
           Some("aaaa*."),
           None,
           None,
-          NameSort.ASC
+          NameSort.ASC,
+          Some(sharedAuth)
         )
 
       val result =
