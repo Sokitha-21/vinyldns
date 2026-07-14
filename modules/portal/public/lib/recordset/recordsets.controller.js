@@ -365,18 +365,12 @@
                             $scope.ownerGroupFilter,
                             true 
                         ).then(function (response) {
-
                             const recordSets = response.data.recordSets || [];
                             const newNextId = response.data.nextId;
-
                             if (!recordSets.length) return;
-
                             allRecords.push(...recordSets);
-
                             if (!newNextId || visitedNextIds.has(newNextId)) return;
-
                             visitedNextIds.add(newNextId);
-
                             return fetchAllPages(newNextId);
                         });
                     }
