@@ -192,7 +192,7 @@
                 }
             };
             
-            $( "#record-search-text" ).autocomplete({
+            var recordSearchAutocomplete = $( "#record-search-text" ).autocomplete({
               source: function( request, response ) {
                 $.ajax({
                   url: "/api/recordsets?maxItems=100",
