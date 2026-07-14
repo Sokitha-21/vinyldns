@@ -790,7 +790,6 @@ class RecordSetRoutingSpec
         case _ => Right(listRecordSetChangeHistoryResponse)
       }
     }.toResult
-
   }
 
   val recordSetService: RecordSetServiceAlgebra = new TestService
