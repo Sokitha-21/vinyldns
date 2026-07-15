@@ -1150,7 +1150,7 @@ export function RecordsPage() {
         <LoadingSpinner />
       ) : (
         <>
-          {(prevPageEnabled || nextPageEnabled) && (
+          {records.length > 0 && (prevPageEnabled || nextPageEnabled) && (
             <div className="d-flex align-items-center justify-content-end px-3 pt-2">
               <Pagination
                 onPrev={prevPage}
@@ -1194,7 +1194,7 @@ export function RecordsPage() {
             onToggleSort={handleToggleSort}
             onViewHistory={(rec) => setHistoryRecord(rec)}
           />
-          {(prevPageEnabled || nextPageEnabled) && (
+          {records.length > 0 && (prevPageEnabled || nextPageEnabled) && (
             <div className="card-footer d-flex align-items-center justify-content-end py-2 px-3 mt-1">
               <Pagination
                 onPrev={prevPage}

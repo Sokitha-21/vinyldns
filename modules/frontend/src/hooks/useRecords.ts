@@ -75,6 +75,7 @@ export function useRecords() {
       );
       return res.data;
     },
+    enabled: nameFilter.trim().length >= 2,
   });
 
   // Wrap each mutation's error callback through `getErrorMessage` so user-
