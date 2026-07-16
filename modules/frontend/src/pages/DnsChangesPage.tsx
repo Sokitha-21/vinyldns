@@ -21,6 +21,8 @@ import { DnsChangesTable } from "../components/dnsChanges/DnsChangesTable";
 import { DnsChangeForm } from "../components/dnsChanges/DnsChangeForm";
 import { PaginatedSection } from "../components/common/Pagination";
 import { LoadingSpinner } from "../components/common/LoadingSpinner";
+import { TimeFilterDropdown } from "../components/common/TimeFilterDropdown";
+import type { TimeRange } from "../components/common/TimeFilterDropdown";
 import { useDnsChanges } from "../hooks/useDnsChanges";
 import { useProfile } from "../contexts/ProfileContext";
 import { useAlerts } from "../contexts/AlertContext";
@@ -58,8 +60,15 @@ export function DnsChangesPage() {
 
   const [submitterName, setSubmitterName] = useState("");
   const [approvalStatus, setApprovalStatus] = useState("");
-  const [dateStart, setDateStart] = useState("");
-  const [dateEnd, setDateEnd] = useState("");
+
+  // ── Toolbar visibility ───────────────────────────────────────────────────
+  const [showCards, setShowCards] = useState(true);
+  const [showFilters, setShowFilters] = useState(true);
+
+  // ── Time filter (client-side) ─────────────────────────────────────────────
+  const [changeTimeRange, setChangeTimeRange] = useState<TimeRange>("all");
+  const [changeDateFrom, setChangeDateFrom] = useState("");
+  const [changeDateTo, setChangeDateTo] = useState("");
 
   const {
     dnsChanges,
@@ -83,8 +92,8 @@ export function DnsChangesPage() {
     ignoreAccess,
     ignoreAccess ? submitterName || undefined : undefined,
     approvalStatus || undefined,
-    ignoreAccess ? dateStart || undefined : undefined,
-    ignoreAccess ? dateEnd || undefined : undefined,
+    undefined,
+    undefined,
     savedState?.paging,
   );
 
@@ -165,16 +174,16 @@ export function DnsChangesPage() {
         ignoreAccess,
         ignoreAccess ? submitterName : undefined,
         approvalStatus,
-        ignoreAccess ? dateStart : undefined,
-        ignoreAccess ? dateEnd : undefined,
+        undefined,
+        undefined,
       ],
       queryFn: async () => {
         const res = await dnsChangeService.getBatchChangeCount(
           ignoreAccess,
           approvalStatus || undefined,
           ignoreAccess ? submitterName || undefined : undefined,
-          ignoreAccess ? dateStart || undefined : undefined,
-          ignoreAccess ? dateEnd || undefined : undefined,
+          undefined,
+          undefined,
         );
         return res.data;
       },
@@ -206,6 +215,39 @@ export function DnsChangesPage() {
 
   const isCardsLoading = isCountLoading;
 
+  // ── Client-side time filter (same logic as ZonesPage) ───────────────────────
+  const isWithinRange = (
+    dateStr: string | undefined,
+    range: TimeRange,
+    from: string,
+    to: string,
+  ): boolean => {
+    if (range === "all") return true;
+    if (!dateStr) return true;
+    const ts = new Date(dateStr).getTime();
+    const now = Date.now();
+    if (range === "1d") return ts >= now - 86400000;
+    if (range === "7d") return ts >= now - 7 * 86400000;
+    if (range === "30d") return ts >= now - 30 * 86400000;
+    if (range === "90d") return ts >= now - 90 * 86400000;
+    if (range === "custom") {
+      if (from && ts < new Date(from + "T00:00:00").getTime()) return false;
+      if (to && ts > new Date(to + "T23:59:59").getTime()) return false;
+    }
+    return true;
+  };
+  const displayedChanges =
+    changeTimeRange !== "all"
+      ? dnsChanges.filter((c) =>
+          isWithinRange(
+            (c as unknown as Record<string, string>).createdTimestamp,
+            changeTimeRange,
+            changeDateFrom,
+            changeDateTo,
+          ),
+        )
+      : dnsChanges;
+
   const skeletonBlue = (
     <span className="vds-insight-skeleton vds-insight-skeleton--blue" />
   );
@@ -233,33 +275,23 @@ export function DnsChangesPage() {
             </small>
           </div>
         </div>
-        <div className="d-flex align-items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-sm d-flex align-items-center gap-2 vds-btn-flat"
-            onClick={() => void refetch()}
-            title="Refresh DNS Changes"
-          >
-            <i className="bi bi-arrow-clockwise" />
-            <span className="vds-btn-flat__label">Refresh</span>
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary d-flex align-items-center gap-2 vds-btn-primary-shadow vds-btn-nav"
-            onClick={() => {
-              setNewModalRowErrors([]);
-              setShowNewModal(true);
-            }}
-          >
-            <i className="bi bi-plus-circle-fill" />
-            New DNS Change
-          </button>
-        </div>
+        <button
+          type="button"
+          className="btn btn-primary d-flex align-items-center gap-2 vds-btn-primary-shadow vds-btn-nav"
+          onClick={() => {
+            setNewModalRowErrors([]);
+            setShowNewModal(true);
+          }}
+        >
+          <i className="bi bi-plus-circle-fill" />
+          New DNS Change
+        </button>
       </div>
 
       <div className="card mb-3 vds-toolbar-card">
         <div className="card-body py-2 px-3">
-          <div className="d-flex gap-3 flex-wrap align-items-center">
+          {/* ── Top row: tab pills left · cards/filters toggles + refresh right ── */}
+          <div className="d-flex align-items-center gap-2">
             {canReview && (
               <div className="vds-pill-toggle">
                 <button
@@ -281,63 +313,96 @@ export function DnsChangesPage() {
               </div>
             )}
 
-            <label
-              className="d-flex align-items-center gap-2 mb-0 vds-toggle-label"
-              htmlFor="pendingReviewSwitch"
-              style={{ cursor: "pointer", userSelect: "none" }}
-            >
-              <input
-                type="checkbox"
-                id="pendingReviewSwitch"
-                className="form-check-input"
-                checked={approvalStatus === "PendingReview"}
-                onChange={(e) =>
-                  setApprovalStatus(e.target.checked ? "PendingReview" : "")
-                }
-                style={{
-                  width: 36,
-                  height: 20,
-                  cursor: "pointer",
-                  accentColor: "#1e5fa8",
-                }}
-              />
-              <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                Open Requests Only
-              </span>
-              {approvalStatus === "PendingReview" && (
-                <span
-                  className="badge d-inline-flex align-items-center gap-1"
-                  style={{
-                    background: "linear-gradient(90deg, #b7770d, #9a6109)",
-                    color: "#fff",
-                    fontSize: "0.7rem",
-                    borderRadius: 20,
-                    padding: "0.25em 0.7em",
-                    fontWeight: 700,
-                  }}
-                >
+            <div className="ms-auto d-flex align-items-center gap-2">
+              <button
+                className="vds-cards-toggle-btn"
+                onClick={() => setShowCards((v) => !v)}
+              >
+                <span className="vds-cards-toggle-btn__icon">
                   <i
-                    className="bi bi-hourglass-split"
-                    style={{ fontSize: "0.62rem" }}
+                    className={`bi ${showCards ? "bi-grid-fill" : "bi-grid"}`}
                   />
-                  Pending Review
                 </span>
-              )}
-            </label>
+                <span>{showCards ? "Hide Cards" : "Show Cards"}</span>
+                <span
+                  className={`vds-cards-toggle-btn__dot${showCards ? "" : " vds-cards-toggle-btn__dot--off"}`}
+                />
+              </button>
+              <button
+                type="button"
+                className="vds-cards-toggle-btn"
+                onClick={() => setShowFilters((v) => !v)}
+              >
+                <span className="vds-cards-toggle-btn__icon">
+                  <i
+                    className={`bi ${showFilters ? "bi-x-lg" : "bi-sliders"}`}
+                  />
+                </span>
+                <span>{showFilters ? "Hide Filters" : "Show Filters"}</span>
+                <span
+                  className={`vds-cards-toggle-btn__dot${showFilters ? "" : " vds-cards-toggle-btn__dot--off"}`}
+                />
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm vds-btn-flat d-flex align-items-center justify-content-center"
+                style={{
+                  width: 32,
+                  height: 32,
+                  padding: 0,
+                  flexShrink: 0,
+                  borderRadius: "50%",
+                }}
+                title="Refresh"
+                onClick={() => void refetch()}
+              >
+                <i
+                  className="bi bi-arrow-clockwise"
+                  style={{ fontSize: "1rem" }}
+                />
+              </button>
+            </div>
           </div>
 
-          {ignoreAccess && (
-            <div className="mt-2 pt-2 border-top">
-              <div className="row g-2 align-items-end">
-                <div className="col-12 col-md-4">
-                  <label
-                    className="form-label mb-1 small fw-semibold text-muted text-uppercase"
-                    style={{ letterSpacing: "0.06em", fontSize: "0.7rem" }}
+          {/* ── Animated filters row ── */}
+          <div
+            className="d-flex align-items-center pt-2"
+            style={{ minHeight: 32 }}
+          >
+            <div
+              style={{
+                width: "100%",
+                maxHeight: showFilters ? "120px" : "0px",
+                opacity: showFilters ? 1 : 0,
+                overflow: showFilters ? "visible" : "hidden",
+                transition:
+                  "max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
+              }}
+            >
+              <div className="d-flex align-items-center justify-content-end gap-2">
+                {/* Open Requests Only — styled as a flat filter toggle (matches ZonesPage pattern) */}
+                <button
+                  type="button"
+                  className={`btn btn-sm d-flex align-items-center gap-1 vds-btn-flat${approvalStatus === "PendingReview" ? " vds-btn-flat--active" : ""}`}
+                  onClick={() =>
+                    setApprovalStatus(
+                      approvalStatus === "PendingReview" ? "" : "PendingReview",
+                    )
+                  }
+                >
+                  <i className="bi bi-hourglass-split" />
+                  <span className="vds-btn-flat__label">Open Only</span>
+                  {approvalStatus === "PendingReview" && (
+                    <span className="vds-filter-chip--accent">On</span>
+                  )}
+                </button>
+
+                {/* Submitter filter — All Requests only, grows to fill remaining space */}
+                {ignoreAccess && (
+                  <div
+                    className="vds-search-group input-group input-group-sm"
+                    style={{ flex: 1, minWidth: 120 }}
                   >
-                    <i className="bi bi-person-search me-1" />
-                    Submitter
-                  </label>
-                  <div className="input-group input-group-sm vds-search-group">
                     <span className="input-group-text border-0 bg-transparent pe-1">
                       <i className="bi bi-person text-muted" />
                     </span>
@@ -348,270 +413,245 @@ export function DnsChangesPage() {
                       value={submitterName}
                       onChange={(e) => setSubmitterName(e.target.value)}
                     />
+                    {submitterName && (
+                      <button
+                        type="button"
+                        className="input-group-text border-0 bg-transparent pe-1"
+                        style={{ cursor: "pointer" }}
+                        onClick={() => setSubmitterName("")}
+                      >
+                        <i className="bi bi-x text-muted" />
+                      </button>
+                    )}
                   </div>
-                </div>
+                )}
 
-                <div className="col-12 col-md-3">
-                  <label
-                    className="form-label mb-1 small fw-semibold text-muted text-uppercase"
-                    style={{ letterSpacing: "0.06em", fontSize: "0.7rem" }}
-                  >
-                    <i className="bi bi-calendar-event me-1" />
-                    From Date
-                  </label>
-                  <input
-                    type="datetime-local"
-                    className="form-control form-control-sm"
-                    value={dateStart}
-                    onChange={(e) => setDateStart(e.target.value)}
-                  />
-                </div>
-
-                <div className="col-12 col-md-3">
-                  <label
-                    className="form-label mb-1 small fw-semibold text-muted text-uppercase"
-                    style={{ letterSpacing: "0.06em", fontSize: "0.7rem" }}
-                  >
-                    <i className="bi bi-calendar-check me-1" />
-                    To Date
-                  </label>
-                  <input
-                    type="datetime-local"
-                    className="form-control form-control-sm"
-                    value={dateEnd}
-                    onChange={(e) => setDateEnd(e.target.value)}
-                  />
-                </div>
-
-                <div className="col-12 col-md-2">
-                  <button
-                    type="button"
-                    className="btn btn-sm w-100 d-flex align-items-center justify-content-center gap-1 vds-btn-flat"
-                    onClick={() => {
-                      setSubmitterName("");
-                      setDateStart("");
-                      setDateEnd("");
-                    }}
-                  >
-                    <i className="bi bi-arrow-counterclockwise" />
-                    <span className="vds-btn-flat__label">Reset</span>
-                  </button>
-                </div>
+                {/* Time filter */}
+                <TimeFilterDropdown
+                  value={changeTimeRange}
+                  dateFrom={changeDateFrom}
+                  dateTo={changeDateTo}
+                  onChange={setChangeTimeRange}
+                  onDateFromChange={setChangeDateFrom}
+                  onDateToChange={setChangeDateTo}
+                />
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
       {/* ── Insight cards ── */}
-      <div className="row g-2 mb-3 align-items-stretch">
-        {/* Card 1: Total Requests */}
-        <div className="col-6 col-sm-4 col-xl d-flex">
-          <div className="rounded-3 px-3 py-1 w-100 d-flex flex-column vds-insight-card vds-insight-card--blue">
-            <div className="d-flex align-items-center gap-2 mb-1">
-              <div className="rounded-2 vds-insight-icon vds-insight-icon--blue">
-                <i className="bi bi-list-ol" />
-              </div>
-              <span className="vds-insight-label vds-insight-label--blue">
-                Requests
-                <span className="vds-card-ctx-chip vds-card-ctx-chip--blue ms-1">
-                  {ignoreAccess ? "All" : "Mine"}
+      {showCards && (
+        <div className="row g-2 mb-3 align-items-stretch">
+          {/* Card 1: Total Requests */}
+          <div className="col-6 col-sm-4 col-xl d-flex">
+            <div className="rounded-3 px-3 py-1 w-100 d-flex flex-column vds-insight-card vds-insight-card--blue">
+              <div className="d-flex align-items-center gap-2 mb-1">
+                <div className="rounded-2 vds-insight-icon vds-insight-icon--blue">
+                  <i className="bi bi-list-ol" />
+                </div>
+                <span className="vds-insight-label vds-insight-label--blue">
+                  Requests
+                  <span className="vds-card-ctx-chip vds-card-ctx-chip--blue ms-1">
+                    {ignoreAccess ? "All" : "Mine"}
+                  </span>
                 </span>
-              </span>
-              <span className="vds-insight-value vds-insight-value--blue">
-                {isCardsLoading ? skeletonBlue : cardTotal}
-              </span>
-            </div>
-            <div
-              className="vds-insight-body vds-insight-body--blue"
-              style={{ rowGap: 6 }}
-            >
-              <div className="vds-insight-stat-label">Issues</div>
-              <div className="vds-insight-stat-label vds-insight-stat-label--right">
-                Pending
-              </div>
-              <div className="vds-insight-stat-value vds-insight-stat-value--blue">
-                {isCardsLoading ? "…" : cardIssuesTotal}
-              </div>
-              <div className="vds-insight-stat-value vds-insight-stat-value--blue vds-insight-stat-value--right">
-                {isCardsLoading ? "…" : cardPendingTotal}
+                <span className="vds-insight-value vds-insight-value--blue">
+                  {isCardsLoading ? skeletonBlue : cardTotal}
+                </span>
               </div>
               <div
-                className="vds-insight-footnote"
-                style={{ gridColumn: "1 / -1" }}
+                className="vds-insight-body vds-insight-body--blue"
+                style={{ rowGap: 6 }}
               >
-                <i className="bi bi-check2-circle me-1 vds-icon-blue-dim" />
-                {isCardsLoading
-                  ? "…"
-                  : `${cardSuccessRate}% success rate · ${cardComplete} complete`}
+                <div className="vds-insight-stat-label">Issues</div>
+                <div className="vds-insight-stat-label vds-insight-stat-label--right">
+                  Pending
+                </div>
+                <div className="vds-insight-stat-value vds-insight-stat-value--blue">
+                  {isCardsLoading ? "…" : cardIssuesTotal}
+                </div>
+                <div className="vds-insight-stat-value vds-insight-stat-value--blue vds-insight-stat-value--right">
+                  {isCardsLoading ? "…" : cardPendingTotal}
+                </div>
+                <div
+                  className="vds-insight-footnote"
+                  style={{ gridColumn: "1 / -1" }}
+                >
+                  <i className="bi bi-check2-circle me-1 vds-icon-blue-dim" />
+                  {isCardsLoading
+                    ? "…"
+                    : `${cardSuccessRate}% success rate · ${cardComplete} complete`}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Card 2: Complete */}
-        <div className="col-6 col-sm-4 col-xl d-flex">
-          <div className="rounded-3 px-3 py-1 w-100 d-flex flex-column vds-insight-card vds-insight-card--teal">
-            <div className="d-flex align-items-center gap-2 mb-1">
-              <div className="rounded-2 vds-insight-icon vds-insight-icon--teal">
-                <i className="bi bi-check-circle-fill" />
+          {/* Card 2: Complete */}
+          <div className="col-6 col-sm-4 col-xl d-flex">
+            <div className="rounded-3 px-3 py-1 w-100 d-flex flex-column vds-insight-card vds-insight-card--teal">
+              <div className="d-flex align-items-center gap-2 mb-1">
+                <div className="rounded-2 vds-insight-icon vds-insight-icon--teal">
+                  <i className="bi bi-check-circle-fill" />
+                </div>
+                <span className="vds-insight-label vds-insight-label--teal">
+                  Complete
+                </span>
+                <span className="vds-insight-value vds-insight-value--teal">
+                  {isCardsLoading ? skeletonTeal : cardComplete}
+                </span>
               </div>
-              <span className="vds-insight-label vds-insight-label--teal">
-                Complete
-              </span>
-              <span className="vds-insight-value vds-insight-value--teal">
-                {isCardsLoading ? skeletonTeal : cardComplete}
-              </span>
-            </div>
-            {!isCardsLoading && cardTotal > 0 ? (
-              <>
-                <div
-                  className="vds-insight-progress vds-insight-progress--teal"
-                  style={{ height: 6, marginBottom: 2 }}
-                >
+              {!isCardsLoading && cardTotal > 0 ? (
+                <>
                   <div
-                    className="vds-insight-progress__fill vds-insight-progress__fill--teal"
-                    style={{ width: `${cardSuccessRate}%` }}
-                  />
+                    className="vds-insight-progress vds-insight-progress--teal"
+                    style={{ height: 6, marginBottom: 2 }}
+                  >
+                    <div
+                      className="vds-insight-progress__fill vds-insight-progress__fill--teal"
+                      style={{ width: `${cardSuccessRate}%` }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.67rem",
+                      color: "#0ca678",
+                      fontWeight: 700,
+                      marginBottom: 3,
+                    }}
+                  >
+                    {cardSuccessRate}%{" "}
+                    <span style={{ fontWeight: 400, color: "#8099b8" }}>
+                      of all requests
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ height: 4 }} />
+              )}
+              <div className="vds-insight-body vds-insight-body--teal">
+                <div className="vds-insight-stat-label">Cancelled</div>
+                <div className="vds-insight-stat-label vds-insight-stat-label--right">
+                  Rate
                 </div>
-                <div
-                  style={{
-                    fontSize: "0.67rem",
-                    color: "#0ca678",
-                    fontWeight: 700,
-                    marginBottom: 3,
-                  }}
-                >
-                  {cardSuccessRate}%{" "}
-                  <span style={{ fontWeight: 400, color: "#8099b8" }}>
-                    of all requests
-                  </span>
+                <div className="vds-insight-stat-value vds-insight-stat-value--teal">
+                  {isCardsLoading ? "…" : cardCancelled}
                 </div>
-              </>
-            ) : (
-              <div style={{ height: 4 }} />
-            )}
-            <div className="vds-insight-body vds-insight-body--teal">
-              <div className="vds-insight-stat-label">Cancelled</div>
-              <div className="vds-insight-stat-label vds-insight-stat-label--right">
-                Rate
-              </div>
-              <div className="vds-insight-stat-value vds-insight-stat-value--teal">
-                {isCardsLoading ? "…" : cardCancelled}
-              </div>
-              <div className="vds-insight-stat-value vds-insight-stat-value--teal vds-insight-stat-value--right">
-                {isCardsLoading ? "…" : `${cardSuccessRate}%`}
+                <div className="vds-insight-stat-value vds-insight-stat-value--teal vds-insight-stat-value--right">
+                  {isCardsLoading ? "…" : `${cardSuccessRate}%`}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Card 3: Pending */}
-        <div className="col-6 col-sm-4 col-xl d-flex">
-          <div className="rounded-3 px-3 py-1 w-100 d-flex flex-column vds-insight-card vds-insight-card--amber">
-            <div className="d-flex align-items-center gap-2 mb-1">
-              <div className="rounded-2 vds-insight-icon vds-insight-icon--amber">
-                <i className="bi bi-hourglass-split" />
+          {/* Card 3: Pending */}
+          <div className="col-6 col-sm-4 col-xl d-flex">
+            <div className="rounded-3 px-3 py-1 w-100 d-flex flex-column vds-insight-card vds-insight-card--amber">
+              <div className="d-flex align-items-center gap-2 mb-1">
+                <div className="rounded-2 vds-insight-icon vds-insight-icon--amber">
+                  <i className="bi bi-hourglass-split" />
+                </div>
+                <span className="vds-insight-label vds-insight-label--amber">
+                  Pending
+                </span>
+                <span className="vds-insight-value vds-insight-value--amber">
+                  {isCardsLoading ? skeletonAmber : cardPendingTotal}
+                </span>
               </div>
-              <span className="vds-insight-label vds-insight-label--amber">
-                Pending
-              </span>
-              <span className="vds-insight-value vds-insight-value--amber">
-                {isCardsLoading ? skeletonAmber : cardPendingTotal}
-              </span>
-            </div>
-            <div
-              className="vds-insight-body vds-insight-body--amber"
-              style={{ display: "flex", flexDirection: "column", gap: 4 }}
-            >
-              <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <div className="vds-insight-stat-label">Review</div>
-                  <div className="vds-insight-stat-value vds-insight-stat-value--amber">
-                    {isCardsLoading ? "…" : cardPendingReview}
+              <div
+                className="vds-insight-body vds-insight-body--amber"
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div className="vds-insight-stat-label">Review</div>
+                    <div className="vds-insight-stat-value vds-insight-stat-value--amber">
+                      {isCardsLoading ? "…" : cardPendingReview}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="vds-insight-stat-label">Scheduled</div>
+                    <div className="vds-insight-stat-value vds-insight-stat-value--amber">
+                      {isCardsLoading ? "…" : cardScheduled}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="vds-insight-stat-label">Processing</div>
+                    <div className="vds-insight-stat-value vds-insight-stat-value--amber">
+                      {isCardsLoading ? "…" : cardPendingProcessing}
+                    </div>
                   </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div className="vds-insight-stat-label">Scheduled</div>
-                  <div className="vds-insight-stat-value vds-insight-stat-value--amber">
-                    {isCardsLoading ? "…" : cardScheduled}
-                  </div>
+                <div className="vds-insight-footnote">
+                  <i className="bi bi-hourglass-split me-1 vds-icon-amber" />
+                  {isCardsLoading
+                    ? "…"
+                    : cardPendingTotal > 0
+                      ? `${cardPendingTotal} request${cardPendingTotal === 1 ? "" : "s"} awaiting action`
+                      : "No pending requests"}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div className="vds-insight-stat-label">Processing</div>
-                  <div className="vds-insight-stat-value vds-insight-stat-value--amber">
-                    {isCardsLoading ? "…" : cardPendingProcessing}
-                  </div>
-                </div>
-              </div>
-              <div className="vds-insight-footnote">
-                <i className="bi bi-hourglass-split me-1 vds-icon-amber" />
-                {isCardsLoading
-                  ? "…"
-                  : cardPendingTotal > 0
-                    ? `${cardPendingTotal} request${cardPendingTotal === 1 ? "" : "s"} awaiting action`
-                    : "No pending requests"}
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Card 4: Issues */}
-        <div className="col-6 col-sm-4 col-xl d-flex">
-          <div className="rounded-3 px-3 py-1 w-100 d-flex flex-column vds-insight-card vds-insight-card--purple">
-            <div className="d-flex align-items-center gap-2 mb-1">
-              <div className="rounded-2 vds-insight-icon vds-insight-icon--purple">
-                <i className="bi bi-exclamation-triangle-fill" />
+          {/* Card 4: Issues */}
+          <div className="col-6 col-sm-4 col-xl d-flex">
+            <div className="rounded-3 px-3 py-1 w-100 d-flex flex-column vds-insight-card vds-insight-card--purple">
+              <div className="d-flex align-items-center gap-2 mb-1">
+                <div className="rounded-2 vds-insight-icon vds-insight-icon--purple">
+                  <i className="bi bi-exclamation-triangle-fill" />
+                </div>
+                <span className="vds-insight-label vds-insight-label--purple">
+                  Issues
+                </span>
+                <span className="vds-insight-value vds-insight-value--purple">
+                  {isCardsLoading ? skeletonPurple : cardIssuesTotal}
+                </span>
               </div>
-              <span className="vds-insight-label vds-insight-label--purple">
-                Issues
-              </span>
-              <span className="vds-insight-value vds-insight-value--purple">
-                {isCardsLoading ? skeletonPurple : cardIssuesTotal}
-              </span>
-            </div>
-            <div
-              className="vds-insight-body vds-insight-body--purple"
-              style={{ display: "flex", flexDirection: "column", gap: 4 }}
-            >
-              <div style={{ display: "flex", gap: 8 }}>
-                <div style={{ flex: 1 }}>
-                  <div className="vds-insight-stat-label">Failed</div>
-                  <div className="vds-insight-stat-value vds-insight-stat-value--purple">
-                    {isCardsLoading ? "…" : cardFailed}
+              <div
+                className="vds-insight-body vds-insight-body--purple"
+                style={{ display: "flex", flexDirection: "column", gap: 4 }}
+              >
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div className="vds-insight-stat-label">Failed</div>
+                    <div className="vds-insight-stat-value vds-insight-stat-value--purple">
+                      {isCardsLoading ? "…" : cardFailed}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="vds-insight-stat-label">Partial</div>
+                    <div className="vds-insight-stat-value vds-insight-stat-value--purple">
+                      {isCardsLoading ? "…" : cardPartialFailure}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="vds-insight-stat-label">Rejected</div>
+                    <div className="vds-insight-stat-value vds-insight-stat-value--purple">
+                      {isCardsLoading ? "…" : cardRejected}
+                    </div>
                   </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div className="vds-insight-stat-label">Partial</div>
-                  <div className="vds-insight-stat-value vds-insight-stat-value--purple">
-                    {isCardsLoading ? "…" : cardPartialFailure}
-                  </div>
+                <div className="vds-insight-footnote">
+                  <i className="bi bi-exclamation-circle me-1 vds-icon-purple-dim" />
+                  {isCardsLoading
+                    ? "…"
+                    : cardIssuesTotal > 0
+                      ? `${cardIssuesTotal} request${cardIssuesTotal === 1 ? "" : "s"} need attention`
+                      : "No issues"}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div className="vds-insight-stat-label">Rejected</div>
-                  <div className="vds-insight-stat-value vds-insight-stat-value--purple">
-                    {isCardsLoading ? "…" : cardRejected}
-                  </div>
-                </div>
-              </div>
-              <div className="vds-insight-footnote">
-                <i className="bi bi-exclamation-circle me-1 vds-icon-purple-dim" />
-                {isCardsLoading
-                  ? "…"
-                  : cardIssuesTotal > 0
-                    ? `${cardIssuesTotal} request${cardIssuesTotal === 1 ? "" : "s"} need attention`
-                    : "No issues"}
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {isLoading || isFetching ? (
         <LoadingSpinner message="Loading changes…" />
       ) : (
         <PaginatedSection
-          show={prevPageEnabled || nextPageEnabled}
+          show={(prevPageEnabled || nextPageEnabled) && dnsChanges.length > 0}
           onPrev={prevPage}
           onNext={nextPage}
           prevEnabled={prevPageEnabled}
@@ -624,7 +664,7 @@ export function DnsChangesPage() {
           totalCount={cardTotal > 0 ? cardTotal : undefined}
         >
           <DnsChangesTable
-            changes={dnsChanges}
+            changes={displayedChanges}
             onCancel={handleCancel}
             ignoreAccess={ignoreAccess}
             currentUserId={currentUserId}

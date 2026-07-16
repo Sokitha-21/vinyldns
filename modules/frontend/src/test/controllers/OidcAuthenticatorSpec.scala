@@ -264,6 +264,49 @@ class OidcAuthenticatorSpec extends Specification with Mockito {
           ErrorResponse(400, "Sign in token error: some error description")
         )
       }
+      "return error when response content cannot be parsed" in {
+        val testResponse = new HTTPResponse(200)
+        testResponse.setHeader("Content-Type", "application/json", "charset=utf-8")
+        testResponse.setContent("not-valid-json{{{")
+        testOidcAuthenticator.handleCallbackResponse(testResponse) must beLeft
+      }
+      "return error when JWT claims fail isValidIdToken check" in {
+        // Claims with no aud field → isValidAppId = false → getClaimSet returns Left
+        val noAudClaims = JWTClaimsSet.parse(
+          s"""{"username":"un","tid":"test-tenant-id","exp":$futureTime,"iat":$pastTime,"nbf":$pastTime}"""
+        )
+        val badClaimsAuth = new OidcAuthenticator(ws, oidcConfig) {
+          val proc = mock[JWTProcessor[SimpleSecurityContext]]
+          proc.process(any[JWT], any[SimpleSecurityContext]).returns(noAudClaims)
+          override lazy val jwtProcessor = proc
+        }
+        val unsignedKey = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9." +
+          "eyJ0aWQiOiJ0ZXN0LXRlbmFudC1pZCIsImF1ZCI6InRlc3QtY2xpZW50LWlkIiwidXNlcm5hbWUiOiJ1biJ9."
+        val testResponse = new HTTPResponse(200)
+        testResponse.setHeader("Content-Type", "application/json", "charset=utf-8")
+        testResponse.setContent(
+          s"""{"access_token":"$unsignedKey","token_type":"Bearer","id_token":"$unsignedKey"}"""
+        )
+        badClaimsAuth.handleCallbackResponse(testResponse) must beLeft
+      }
+    }
+
+    "getValidUsernameFromToken" should {
+      "return None when the token string is not valid JSON" in {
+        testOidcAuthenticator.getValidUsernameFromToken("not-a-json-string!!!") must beNone
+      }
+      "return None when token is valid but username field is missing" in {
+        val tokenWithoutUsername =
+          s"""{"tid":"test-tenant-id",
+             |"aud":"test-client-id",
+             |"firstname":"First",
+             |"lastname":"Last",
+             |"exp": $futureTime,
+             |"iat": $pastTime,
+             |"nbf": $pastTime,
+             |"email":"test@test.com"}""".stripMargin
+        testOidcAuthenticator.getValidUsernameFromToken(tokenWithoutUsername) must beNone
+      }
     }
   }
 }

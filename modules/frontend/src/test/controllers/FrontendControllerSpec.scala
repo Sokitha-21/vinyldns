@@ -437,6 +437,31 @@ class FrontendControllerSpec extends Specification with Mockito with TestApplica
       }
     }
 
+    "Get for '/*path' (catchAll)" should {
+      "redirect to the login page when a user is not logged in" in new WithApplication(app) {
+        val result = underTest.catchAll("some/unknown/path")(FakeRequest(GET, "/some/unknown/path"))
+        status(result) must equalTo(SEE_OTHER)
+        headers(result) must contain("Location" -> "/login?target=/some/unknown/path")
+      }
+      "render the React app when the user is logged in" in new WithApplication(app) {
+        val result =
+          underTest.catchAll("some/unknown/path")(
+            FakeRequest(GET, "/some/unknown/path").withSession("username" -> "frodo").withCSRFToken
+          )
+        status(result) must beEqualTo(OK)
+        contentType(result) must beSome.which(_ == "text/html")
+      }
+      "redirect to the no access page when a user is locked out" in new WithApplication(app) {
+        val result =
+          lockedUserUnderTest.catchAll("some/unknown/path")(
+            FakeRequest(GET, "/some/unknown/path")
+              .withSession("username" -> "lockedFbaggins")
+              .withCSRFToken
+          )
+        headers(result) must contain("Location" -> "/noaccess")
+      }
+    }
+
     "CustomLinks" should {
       "be displayed on login screen if login screen flag is true" in new WithApplication(app) {
         val result = underTest.loginPage()(FakeRequest(GET, "/login").withCSRFToken)
