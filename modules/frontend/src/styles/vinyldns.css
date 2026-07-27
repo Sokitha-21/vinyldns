@@ -40,14 +40,17 @@
 
 .vds-sidebar {
   flex-shrink: 0;
-  background: linear-gradient(175deg,
+  background: linear-gradient(
+    175deg,
     var(--vds-sidebar-bg-top) 0%,
     var(--vds-sidebar-bg-mid) 50%,
-    var(--vds-sidebar-bg-bot) 100%);
+    var(--vds-sidebar-bg-bot) 100%
+  );
   box-shadow: 2px 0 16px rgba(0, 0, 0, 0.55);
   height: 100vh;
-  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-              min-width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    min-width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
 
@@ -425,7 +428,9 @@ h1.h3 {
   overflow-y: auto;
   background-color: var(--vds-page-bg, #fdfeff);
   color: var(--vds-page-text, #1a1a2e);
-  transition: background-color 0.22s, color 0.22s;
+  transition:
+    background-color 0.22s,
+    color 0.22s;
 }
 
 .vds-topbar {
@@ -2063,7 +2068,7 @@ h1.h3 {
   overflow-x: hidden;
   overflow-y: auto;
   max-height: 55vh;
-  box-shadow: 0 2px 12px rgba(13, 110, 253, .07);
+  box-shadow: 0 2px 12px rgba(13, 110, 253, 0.07);
   border: 1px solid #dce8fb;
   max-width: 100%;
 }
@@ -3043,9 +3048,12 @@ h1.h3 {
   z-index: 1050;
   top: 100%;
   list-style: none;
-  padding: 0;
+  padding: 4px;
   margin: 0;
   border-radius: 0 0 0.5rem 0.5rem;
+  background-color: #ffffff;
+  border: 1px solid #d4dbe8;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 .vds-suggestion-item {
   cursor: pointer;
@@ -3562,7 +3570,7 @@ h1.h3 {
   overflow-x: hidden;
   overflow-y: auto;
   max-height: 55vh;
-  box-shadow: 0 2px 12px rgba(13, 110, 253, .07);
+  box-shadow: 0 2px 12px rgba(13, 110, 253, 0.07);
   border: 1px solid #dce8fb;
   max-width: 100%;
 }
@@ -6580,6 +6588,65 @@ h1.h3 {
   color: #fff !important;
   background: transparent !important;
   border-color: transparent !important;
+}
+
+/* ============================================================
+   New Batch Change modal — scoped, non-conflicting classes
+   ============================================================ */
+.vds-nbatch-modal__card {
+  background: #ffffff;
+  border-radius: 0.85rem;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+  width: min(1100px, 100%);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.vds-nbatch-modal__header {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1rem 1.4rem;
+  border-bottom: 1px solid #e8ecf0;
+  background: linear-gradient(90deg, #f0f4fa, #ffffff);
+  flex-shrink: 0;
+}
+.vds-nbatch-modal__title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #0d1b3e;
+}
+.vds-nbatch-modal__subtitle {
+  color: #64748b;
+}
+.vds-nbatch-modal__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem 1.4rem;
+  background: #ffffff;
+  color: #1e2d42;
+}
+
+/* Dark mode overrides */
+[data-vds-theme="dark"] .vds-nbatch-modal__card {
+  background: #151f30;
+  border: 1px solid rgba(127, 168, 216, 0.12);
+}
+[data-vds-theme="dark"] .vds-nbatch-modal__header {
+  background: linear-gradient(90deg, #152235, #1a2d4a);
+  border-bottom-color: rgba(127, 168, 216, 0.1);
+}
+[data-vds-theme="dark"] .vds-nbatch-modal__title {
+  color: var(--vds-page-text, #cdd9ed);
+}
+[data-vds-theme="dark"] .vds-nbatch-modal__subtitle {
+  color: rgba(180, 200, 230, 0.55);
+}
+[data-vds-theme="dark"] .vds-nbatch-modal__body {
+  background: #151f30;
+  color: var(--vds-page-text, #cdd9ed);
 }
 [data-vds-theme="dark"] .btn-close {
   filter: invert(1) grayscale(100%) brightness(200%) !important;

@@ -33,9 +33,7 @@ import { TimeFilterDropdown } from "../components/common/TimeFilterDropdown";
 import type { TimeRange } from "../components/common/TimeFilterDropdown";
 import { RecordHistoryModal } from "../components/records/RecordHistoryModal";
 
-// Readable display labels for VinylDNS record status values.
-// Kept module-level so both the filter dropdown and active-chip row share the
-// same source of truth without needing a utility import.
+// Status display labels shared by the filter dropdown and active-chip row.
 const STATUS_LABELS: Record<string, string> = {
   Active: "Active",
   Inactive: "Inactive",
@@ -45,19 +43,15 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 /**
- * Global RecordSet Search page.
- *
- * Provides a read-only, cross-zone view of all records in VinylDNS.
- * Search is driven by the API (FQDN, type, owner group, sort order), while
- * Status / Access / Zone / Time filters are applied client-side on the
- * already-fetched page of results — keeping the API surface minimal while
- * still giving power users fine-grained filtering without extra round-trips.
+ * Global RecordSet Search page — read-only cross-zone view of all records.
+ * API filters: FQDN, type, owner group, sort. Client-side filters: status, access, zone, time.
  */
 export function RecordsPage() {
   const queryClient = useQueryClient();
 
   const [nameInput, setNameInput] = useState("");
   const [typeFilters, setTypeFilters] = useState<string[]>([]);
+  const [frozenTypes, setFrozenTypes] = useState<string[]>([]);
   const [nameSort, setNameSort] = useState("ASC");
   const [ownerGroupFilter, setOwnerGroupFilter] = useState("");
 
@@ -88,16 +82,17 @@ export function RecordsPage() {
 
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const typeDropdownRef = useRef<HTMLDivElement>(null);
-  // Each dropdown owns its own ref so the global mousedown handler can
-  // distinguish between clicks inside vs. outside a specific popover.
+  // Each dropdown has its own ref so the global mousedown handler can
+  // distinguish clicks inside vs. outside a specific popover.
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const accessDropdownRef = useRef<HTMLDivElement>(null);
   const zoneDropdownRef = useRef<HTMLDivElement>(null);
   const ownerGroupDropdownRef = useRef<HTMLDivElement>(null);
   const justSelectedRef = useRef(false);
+  // Tracks the last submitted FQDN to detect context changes and reset stale type filters.
+  const lastSearchedNameRef = useRef<string>("");
 
-  // Fetch the user's groups so the owner group filter can show a named dropdown
-  // rather than requiring the user to type a raw group ID.
+  // Fetch user groups for the owner group filter dropdown.
   const { data: groupsData } = useQuery({
     queryKey: ["groups-for-records-filter"],
     queryFn: async () => {
@@ -121,15 +116,11 @@ export function RecordsPage() {
     currentPage,
   } = useRecords();
 
-  // Type and Owner Group filters require a prior FQDN search with results —
-  // disabling them before any search or when results are empty prevents
-  // unnecessary API calls for filters that would return nothing.
+  // Type and Owner Group filters require an active FQDN search with results.
   const apiFiltersDisabled = !nameFilter || records.length === 0;
 
-  // Collect unique zone IDs from non-shared-zone records so we can
-  // back-fill ownerGroupName via GET /zones/:id/details — mirroring the
-  // AngularJS portal behavior where each non-shared record's ownerGroup
-  // is resolved from the zone's adminGroup.
+  // Collect unique zone IDs from non-shared records to back-fill ownerGroupName
+  // via GET /zones/:id/details, mirroring the AngularJS portal behaviour.
   const nonSharedZoneIds = useMemo(
     () =>
       [
@@ -143,10 +134,8 @@ export function RecordsPage() {
     [records],
   );
 
-  // Fetch zone details for all non-shared zones in the current result page.
-  // Results are keyed by zoneId so the record mapping below can look them up
-  // in O(1). Failures for individual zones are swallowed so a single
-  // inaccessible zone does not break the whole table.
+  // Fetch zone details for non-shared zones; keyed by zoneId for O(1) lookup.
+  // Individual failures are swallowed so one inaccessible zone doesn't break the table.
   const { data: zoneDetailsMap } = useQuery({
     queryKey: ["zoneDetails", nonSharedZoneIds],
     queryFn: async () => {
@@ -173,10 +162,8 @@ export function RecordsPage() {
     gcTime: 10 * 60 * 1000,
   });
 
-  // A single document-level mousedown listener closes any open popover when
-  // the user clicks outside it. Using `mousedown` instead of `click` ensures
-  // the list closes before onMouseDown handlers on list items fire, preventing
-  // a race where the suggestion/dropdown unmounts before the click registers.
+  // Close any open popover when the user clicks outside it.
+  // Uses mousedown so the list closes before onMouseDown handlers on list items fire.
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       const t = e.target as Node;
@@ -200,10 +187,8 @@ export function RecordsPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Debounced typeahead: waits 250 ms after the user stops typing before
-  // hitting the API. The " | type" suffix appended when a
-  // suggestion was previously selected is stripped, so the search is by FQDN fragment only.
-  // The 2-character minimum mirrors the server's validation rule.
+  // Debounced typeahead (250 ms). Strips the " | type" suffix before querying.
+  // Requires at least 2 characters, matching the server validation rule.
   useEffect(() => {
     if (justSelectedRef.current) {
       justSelectedRef.current = false;
@@ -218,10 +203,8 @@ export function RecordsPage() {
     const timer = setTimeout(async () => {
       try {
         const res = await recordsService.getRecordSuggestions(rawTerm);
-        // Encode both FQDN and type into a single `value` string so that
-        // picking a suggestion can auto-populate the type filter without any
-        // extra parsing state.
         const items = (res.data.recordSets ?? []).map((rs) => ({
+          // Encode FQDN and type together so a suggestion click can populate both fields.
           value: `${rs.fqdn ?? rs.name} | ${rs.type}`,
           label: `name: ${rs.fqdn ?? rs.name} | type: ${rs.type}`,
         }));
@@ -235,9 +218,7 @@ export function RecordsPage() {
     return () => clearTimeout(timer);
   }, [nameInput]);
 
-  // Filter option lists are derived from the current page of results rather
-  // than fetched separately. This keeps the filter dropdowns scoped to what's
-  // actually on screen and avoids an extra API call for enumeration.
+  // Type list derived from the current result page.
   const availableTypes = useMemo(
     () =>
       Array.from(new Set(records.map((r: any) => r.type as string)))
@@ -245,6 +226,24 @@ export function RecordsPage() {
         .sort() as string[],
     [records],
   );
+
+  // Preserve the full type list from the last unfiltered search so the dropdown
+  // doesn't collapse to only the selected type when a type filter is active.
+  useEffect(() => {
+    if (!nameFilter) {
+      setFrozenTypes([]);
+      return;
+    }
+    if (typeFilters.length === 0 && records.length > 0) {
+      const types = Array.from(
+        new Set(records.map((r: any) => r.type as string)),
+      )
+        .filter(Boolean)
+        .sort() as string[];
+      if (types.length > 0) setFrozenTypes(types);
+    }
+  }, [nameFilter, typeFilters, records]);
+
   const availableStatuses = useMemo(
     () =>
       Array.from(new Set(records.map((r: any) => r.status as string))).filter(
@@ -294,10 +293,8 @@ export function RecordsPage() {
     [],
   );
 
-  // Client-side filters are layered on top of the already-fetched page from
-  // the API. The filter pass only runs when at least one filter is active;
-  // otherwise it short-circuits and returns the raw `records` array to avoid
-  // allocating a new array on every render.
+  // Client-side filters run only when at least one is active to avoid
+  // re-allocating the records array on every render.
   const anyClientFilterActive = !!(
     statusFilter ||
     accessFilter ||
@@ -314,8 +311,7 @@ export function RecordsPage() {
             : r.zoneShared === false);
         const matchesZone = !zoneFilter || r.zoneName === zoneFilter;
         const matchesTime = isWithinRange(
-          // prefer `updated`; fall back to `created` for records that have never been modified
-          (r.updated ?? r.created) as string | undefined,
+          (r.updated ?? r.created) as string | undefined, // prefer updated, fall back to created
           timeRange,
           dateFrom,
           dateTo,
@@ -324,23 +320,30 @@ export function RecordsPage() {
       })
     : records;
 
-  // When the user types "fqdn | TYPE" manually (or accepts a suggestion and
-  // then presses Enter), the embedded type is parsed out so both the name and
-  // type parameters reach the API correctly. typeFilters is joined to a comma-
-  // separated string to match the VinylDNS API's multi-type filter format.
+  // Parses "fqdn | TYPE" input and resets stale type filters when the FQDN changes.
   const handleSearch = useCallback(() => {
     setShowSuggestions(false);
     let name = nameInput;
-    let types = typeFilters;
+    let embeddedType: string | undefined;
     if (nameInput.includes(" | ")) {
       const parts = nameInput.split(" | ");
       name = parts[0].trim();
-      const parsedType = parts[1]?.trim();
-      if (parsedType) {
-        types = [parsedType];
-        setTypeFilters(types);
-      }
+      embeddedType = parts[1]?.trim() || undefined;
     }
+    const nameChanged = name !== lastSearchedNameRef.current;
+    if (nameChanged) {
+      lastSearchedNameRef.current = name;
+      setFrozenTypes([]);
+    }
+    // New FQDN: use only embedded type or nothing. Same FQDN: keep existing filters.
+    const types = nameChanged
+      ? embeddedType
+        ? [embeddedType]
+        : []
+      : embeddedType
+        ? [embeddedType]
+        : typeFilters;
+    setTypeFilters(types);
     search({
       name,
       type: types.join(","),
@@ -349,8 +352,8 @@ export function RecordsPage() {
     });
   }, [nameInput, typeFilters, nameSort, ownerGroupFilter, search]);
 
-  // Setting justSelectedRef prevents the nameInput change from immediately
-  // triggering another suggestions fetch for the value just selected.
+  // Prevents the nameInput change from re-triggering the suggestion fetch for the selected value.
+  // Clears stale type filters when the suggestion targets a different FQDN.
   const handleSuggestionClick = (value: string) => {
     justSelectedRef.current = true;
     setNameInput(value);
@@ -358,8 +361,13 @@ export function RecordsPage() {
     const parts = value.split(" | ");
     const name = parts[0].trim();
     const type = parts[1]?.trim();
-    const newTypes = type ? [type] : typeFilters;
-    if (type) setTypeFilters(newTypes);
+    const nameChanged = name !== lastSearchedNameRef.current;
+    if (nameChanged) {
+      lastSearchedNameRef.current = name;
+      setFrozenTypes([]);
+    }
+    const newTypes = type ? [type] : nameChanged ? [] : typeFilters;
+    setTypeFilters(newTypes);
     search({
       name,
       type: newTypes.join(","),
@@ -368,9 +376,7 @@ export function RecordsPage() {
     });
   };
 
-  // Keyboard navigation for the suggestion list.
-  // Enter commits the highlighted suggestion (or falls through to a plain
-  // search if no item is active); arrows move the cursor; Escape dismisses.
+  // Keyboard navigation: Enter commits suggestion or searches; arrows move cursor; Escape dismisses.
   const handleNameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       if (showSuggestions && activeSuggestion >= 0)
@@ -399,12 +405,11 @@ export function RecordsPage() {
     });
   };
 
-  // Full reset: clears every API param and every client-side filter, then
-  // fires a fresh search and invalidates the React Query cache so stale data
-  // from a previous session doesn't linger in the background.
+  // Full reset: clears all filters and invalidates the React Query cache.
   const handleRefresh = () => {
     setNameInput("");
     setTypeFilters([]);
+    setFrozenTypes([]);
     setNameSort("ASC");
     setOwnerGroupFilter("");
     setStatusFilter(null);
@@ -413,13 +418,12 @@ export function RecordsPage() {
     setTimeRange("all");
     setDateFrom("");
     setDateTo("");
+    lastSearchedNameRef.current = "";
     search({ name: "", type: "", sort: "ASC", ownerGroup: "" });
     void queryClient.invalidateQueries({ queryKey: ["recordsets"] });
   };
 
   // Wraps matched substrings in <strong> for the suggestion dropdown.
-  // The regex special characters in `term` are escaped before constructing the
-  // pattern so that FQDN fragments containing dots don't widen the match.
   const highlightMatch = (text: string, term: string) => {
     if (!term) return <>{text}</>;
     const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -435,9 +439,7 @@ export function RecordsPage() {
     );
   };
 
-  // Drives the aggregate filter indicator in the toolbar. Counts each active
-  // API filter (type selections, owner group) and all client-side filters so
-  // the user knows at a glance how many constraints are in effect.
+  // Count active filters for the toolbar indicator.
   const activeFilterCount =
     [
       typeFilters.length > 0,
@@ -643,8 +645,8 @@ export function RecordsPage() {
                     border: "1px solid #d4dbe8",
                   }}
                 >
-                  {(availableTypes.length > 0
-                    ? availableTypes
+                  {(frozenTypes.length > 0
+                    ? frozenTypes
                     : [
                         "A",
                         "AAAA",
