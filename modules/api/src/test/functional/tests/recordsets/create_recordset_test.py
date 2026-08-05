@@ -60,7 +60,7 @@ def test_create_recordset_with_dns_verify(shared_zone_test_context):
 
 def test_create_recordset_zoneid_mismatch(shared_zone_test_context):
     """
-    Test creating a record set where the zoneId in the body does not match the URI zoneId returns 422
+    Test creating a record set where the zoneId in the body does not match the URI zoneId returns 400
     """
 
     client = shared_zone_test_context.ok_vinyldns_client
@@ -81,10 +81,38 @@ def test_create_recordset_zoneid_mismatch(shared_zone_test_context):
         "POST",
         client.headers,
         json.dumps(new_rs),
-        status=422
+        status=400
     )
 
     assert_that(error, is_("zoneId in URI and body must match"))
+
+def test_create_recordset_omitted_zoneid(shared_zone_test_context):
+    """
+    Test creating a record set where zoneId is omitted from the body uses the URI zoneId
+    """
+
+    client = shared_zone_test_context.ok_vinyldns_client
+    zone = shared_zone_test_context.shared_zone
+
+    new_rs = {
+        "name": "test-create-recordset-omitted-zoneid",
+        "type": "A",
+        "ttl": 100,
+        "records": [
+            {"address": "10.1.1.2"}
+        ]
+    }
+    url = urljoin(client.index_url, "/zones/{0}/recordsets".format(zone["id"]))
+    response, rs = client.make_request(
+        url,
+        "POST",
+        client.headers,
+        json.dumps(new_rs),
+        status=202
+    )
+
+    assert_that(rs["recordSet"]["zoneId"], is_(zone["id"]))
+    assert_that(rs["recordSet"]["name"], is_("test-create-recordset-omitted-zoneid"))
 
 def test_create_naptr_origin_record(shared_zone_test_context):
     """

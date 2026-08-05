@@ -27,10 +27,13 @@ import vinyldns.api.domain.zone._
 import vinyldns.core.domain.record.NameSort.NameSort
 import vinyldns.core.domain.record.RecordType.RecordType
 import vinyldns.core.domain.record.RecordTypeSort.RecordTypeSort
-import vinyldns.core.domain.record.{NameSort, OwnershipTransferStatus, RecordSet, RecordType, RecordTypeSort}
+import vinyldns.core.domain.record.RecordSetStatus.RecordSetStatus
+import vinyldns.core.domain.record.{NameSort, OwnershipTransferStatus, RecordSet, RecordType, RecordTypeSort, RecordData, RecordSetStatus, OwnershipTransfer}
 import vinyldns.core.domain.zone.ZoneCommandResult
 import akka.http.scaladsl.model.HttpEntity
 import spray.json._
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 
 
 import scala.concurrent.duration._
@@ -59,6 +62,22 @@ case class ListRecordSetsByZoneResponse(
                                          nameSort: NameSort,
                                          recordTypeSort: RecordTypeSort
                                        )
+
+case class CreateRecordSetInput(
+                                 zoneId: Option[String] = None,
+                                 name: String,
+                                 typ: RecordType,
+                                 ttl: Long,
+                                 status: RecordSetStatus = RecordSetStatus.Pending,
+                                 created: Instant = Instant.now.truncatedTo(ChronoUnit.MILLIS),
+                                 updated: Option[Instant] = None,
+                                 records: List[RecordData] = List.empty,
+                                 id: String,
+                                 account: String = "system",
+                                 ownerGroupId: Option[String] = None,
+                                 recordSetGroupChange: Option[OwnershipTransfer] = None,
+                                 fqdn: Option[String] = None
+                               )
 
 class RecordSetRoute(
                       recordSetService: RecordSetServiceAlgebra,
@@ -92,14 +111,28 @@ class RecordSetRoute(
 
   val recordSetRoute: Route = path("zones" / Segment / "recordsets") { zoneId =>
     (post & monitor("Endpoint.addRecordSet")) {
-      authenticateAndExecuteWithEntity[ZoneCommandResult, RecordSet](
-        (authPrincipal, recordSet) =>   
-          recordSet match {
-            case badRs if badRs.zoneId.nonEmpty && badRs.zoneId != zoneId =>
-              Left(InvalidRequest("zoneId in URI and body must match")).toResult
-            case goodRs =>
-              val updatedRecordSet = goodRs.copy(zoneId = zoneId)
-              recordSetService.addRecordSet(updatedRecordSet, authPrincipal)
+      authenticateAndExecuteWithEntity[ZoneCommandResult, CreateRecordSetInput](
+        (authPrincipal, createInput) =>
+          createInput.zoneId match {
+            case Some(bodyZoneId) if bodyZoneId != zoneId =>
+              Left(RecordSetValidation("zoneId in URI and body must match")).toResult
+            case _ =>
+              val recordSet = RecordSet(
+                zoneId = zoneId,
+                name = createInput.name,
+                typ = createInput.typ,
+                ttl = createInput.ttl,
+                status = createInput.status,
+                created = createInput.created,
+                updated = createInput.updated,
+                records = createInput.records,
+                id = createInput.id,
+                account = createInput.account,
+                ownerGroupId = createInput.ownerGroupId,
+                recordSetGroupChange = createInput.recordSetGroupChange,
+                fqdn = createInput.fqdn
+              )
+              recordSetService.addRecordSet(recordSet, authPrincipal)
           }
       ) { rc =>
         complete(StatusCodes.Accepted, rc)

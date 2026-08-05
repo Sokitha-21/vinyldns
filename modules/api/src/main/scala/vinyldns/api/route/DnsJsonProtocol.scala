@@ -40,6 +40,7 @@ trait DnsJsonProtocol extends JsonValidation {
   val dnsSerializers = Seq(
     CreateZoneInputSerializer,
     UpdateZoneInputSerializer,
+    CreateRecordSetInputSerializer,
     ZoneConnectionSerializer,
     AlgorithmSerializer,
     EncryptedSerializer,
@@ -140,6 +141,61 @@ trait DnsJsonProtocol extends JsonValidation {
         (js \ "scheduleRequestor").optional[String],
         (js \ "backendId").optional[String],
         ).mapN(UpdateZoneInput.apply)
+  }
+
+  case object CreateRecordSetInputSerializer extends ValidationSerializer[vinyldns.api.route.CreateRecordSetInput] {
+    import RecordType._
+    override def fromJson(js: JValue): ValidatedNel[String, vinyldns.api.route.CreateRecordSetInput] = {
+      val recordType = (js \ "type").required(RecordType, "Missing RecordSet.type")
+      val recordTypeGet: RecordType = recordType.getOrElse(A)
+      val createInputResult = (
+        (js \ "zoneId").optional[String],
+        (js \ "name")
+          .required[String]("Missing RecordSet.name")
+          .check(
+            "Record name must not exceed 255 characters" -> checkDomainNameLen,
+            "Record name cannot contain spaces" -> nameDoesNotContainSpaces
+          ),
+        recordType,
+        (js \ "ttl")
+          .required[Long]("Missing RecordSet.ttl")
+          .check(
+            "RecordSet.ttl must be a positive signed 32 bit number" -> (_ <= 2147483647),
+            "RecordSet.ttl must be a positive signed 32 bit number greater than or equal to 30" -> (_ >= 30)
+          ),
+        (js \ "status").default(RecordSetStatus, RecordSetStatus.Pending),
+        (js \ "created").default[Instant](Instant.now.truncatedTo(ChronoUnit.MILLIS)),
+        (js \ "updated").optional[Instant],
+        recordType.andThen(extractRecords(_, js \ "records")),
+        (js \ "id").default[String](UUID.randomUUID().toString),
+        (js \ "account").default[String]("system"),
+        (js \ "ownerGroupId").optional[String],
+        (js \ "recordSetGroupChange").optional[OwnershipTransfer],
+        (js \ "fqdn").optional[String]
+        ).mapN(vinyldns.api.route.CreateRecordSetInput.apply)
+
+      // Put additional record set level checks below
+      createInputResult.checkIf(recordTypeGet == RecordType.CNAME)(
+        "CNAME record sets cannot contain multiple records" -> { crs =>
+          crs.records.length <= 1
+        }
+      )
+    }
+
+    override def toJson(crs: vinyldns.api.route.CreateRecordSetInput): JValue =
+      ("type" -> Extraction.decompose(crs.typ)) ~
+        ("zoneId" -> crs.zoneId) ~
+        ("name" -> crs.name) ~
+        ("ttl" -> crs.ttl) ~
+        ("status" -> Extraction.decompose(crs.status)) ~
+        ("created" -> Extraction.decompose(crs.created)) ~
+        ("updated" -> Extraction.decompose(crs.updated)) ~
+        ("records" -> Extraction.decompose(crs.records)) ~
+        ("id" -> crs.id) ~
+        ("account" -> crs.account) ~
+        ("ownerGroupId" -> crs.ownerGroupId) ~
+        ("recordSetGroupChange" -> Extraction.decompose(crs.recordSetGroupChange)) ~
+        ("fqdn" -> crs.fqdn)
   }
 
   case object AlgorithmSerializer extends ValidationSerializer[Algorithm] {
