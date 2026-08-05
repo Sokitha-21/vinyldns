@@ -872,30 +872,9 @@ export function DnsChangesPage() {
               setShowNewModal(false);
           }}
         >
-          <div
-            style={{
-              background: "#ffffff",
-              borderRadius: "0.85rem",
-              boxShadow: "0 25px 60px rgba(0,0,0,0.4)",
-              width: "min(1100px, 100%)",
-              maxHeight: "92vh",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
-          >
+          <div className="vds-nbatch-modal__card">
             {/* Modal header */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.85rem",
-                padding: "1rem 1.4rem",
-                borderBottom: "1px solid #e8ecf0",
-                background: "linear-gradient(90deg, #f0f4fa, #ffffff)",
-                flexShrink: 0,
-              }}
-            >
+            <div className="vds-nbatch-modal__header">
               <div
                 style={{
                   width: 40,
@@ -914,16 +893,11 @@ export function DnsChangesPage() {
               <div style={{ flex: 1 }}>
                 <h5
                   id="new-change-modal-title"
-                  style={{
-                    margin: 0,
-                    fontWeight: 700,
-                    fontSize: "1rem",
-                    color: "#0d1b3e",
-                  }}
+                  className="vds-nbatch-modal__title"
                 >
                   New Batch Change
                 </h5>
-                <small style={{ color: "#64748b" }}>
+                <small className="vds-nbatch-modal__subtitle">
                   Submit a new DNS batch change request for review and
                   processing
                 </small>
@@ -949,13 +923,7 @@ export function DnsChangesPage() {
             </div>
 
             {/* Modal body — scrollable */}
-            <div
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                padding: "1.25rem 1.4rem",
-              }}
-            >
+            <div className="vds-nbatch-modal__body">
               <DnsChangeForm
                 onSubmit={handleNewChangeSubmit}
                 onCancel={() => setShowNewModal(false)}

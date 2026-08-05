@@ -18,7 +18,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { recordsService } from "../../services/recordsService";
 import { copyToClipboard } from "../../utils/dateUtils";
-import { PaginatedSection } from "../common/Pagination";
+import { Pagination } from "../common/Pagination";
 import { LoadingSpinner } from "../common/LoadingSpinner";
 
 interface RecordHistoryModalProps {
@@ -549,14 +549,18 @@ export function RecordHistoryModal({
                   </small>
                 </div>
               ) : (
-                <PaginatedSection
-                  show={hasPrev || hasMore}
-                  onPrev={handlePrev}
-                  onNext={handleNext}
-                  prevEnabled={hasPrev}
-                  nextEnabled={hasMore}
-                  rangeLabel={`${pageIdx * 100 + 1}–${pageIdx * 100 + changes.length}`}
-                >
+                <>
+                  {(hasPrev || hasMore) && (
+                    <div className="px-3">
+                      <Pagination
+                        onPrev={handlePrev}
+                        onNext={handleNext}
+                        prevEnabled={hasPrev}
+                        nextEnabled={hasMore}
+                        rangeLabel={`${pageIdx * 100 + 1}–${pageIdx * 100 + changes.length}`}
+                      />
+                    </div>
+                  )}
                   <div
                     className="vds-zones-table-wrap"
                     style={{
@@ -660,7 +664,18 @@ export function RecordHistoryModal({
                       </tbody>
                     </table>
                   </div>
-                </PaginatedSection>
+                  {(hasPrev || hasMore) && (
+                    <div className="px-3">
+                      <Pagination
+                        onPrev={handlePrev}
+                        onNext={handleNext}
+                        prevEnabled={hasPrev}
+                        nextEnabled={hasMore}
+                        rangeLabel={`${pageIdx * 100 + 1}–${pageIdx * 100 + changes.length}`}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
