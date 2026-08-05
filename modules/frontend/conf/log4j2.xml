@@ -16,8 +16,6 @@
         <logger name="com.zaxxer.hikari" level="ERROR">
             <AppenderRef ref="CONSOLE"/>
         </logger>
-
-
         <Root level="INFO">
             <AppenderRef ref="CONSOLE"/>
         </Root>
