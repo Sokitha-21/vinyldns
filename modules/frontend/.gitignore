@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+*.local
+.DS_Store
+coverage/
+package-lock.json
+yarn.lock
+.idea/
+.vscode/
+*.log
+*.tmp
+public/
+!src/test/resources/public/**
+/project

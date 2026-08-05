@@ -94,10 +94,19 @@
                     </div>
                 </div>
 
-                @header(rootAccountName)(request)
+                @header(rootAccountName)
                 @pageContent
 
-                <footer><p class="main-footer-text text-right">VinylDNS (version @{meta.version})</p></footer>
+                <footer>
+                    <p class="main-footer-text text-right">VinylDNS (version @{meta.version})</p>
+                    <div class="text-center" style="padding-bottom:10px;">
+                        <button class="btn btn-sm btn-default"
+                                onclick="document.cookie='ui_mode=new; Path=/'; window.location.reload();"
+                                title="Switch to the new React UI">
+                            &#8635; Try New UI
+                        </button>
+                    </div>
+                </footer>
             </div>
             <!-- END PAGE CONTAINER -->
 
