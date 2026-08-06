@@ -65,26 +65,29 @@ def test_create_recordset_zoneid_mismatch(shared_zone_test_context):
 
     client = shared_zone_test_context.ok_vinyldns_client
     zone = shared_zone_test_context.shared_zone
+    result_rs = None
 
-    new_rs = {
-        "zoneId": shared_zone_test_context.dummy_zone["id"],
-        "name": "test-create-recordset-zoneid-mismatch",
-        "type": "A",
-        "ttl": 100,
-        "records": [
-            {"address": "10.1.1.1"}
-        ]
-    }
-    url = urljoin(client.index_url, "/zones/{0}/recordsets".format(zone["id"]))
-    response, error = client.make_request(
-        url,
-        "POST",
-        client.headers,
-        json.dumps(new_rs),
-        status=400
-    )
+    try:
+        new_rs = {
+            "zoneId": shared_zone_test_context.dummy_zone["id"],
+            "name": "test-create-recordset-zoneid-mismatch",
+            "type": "A",
+            "ttl": 100,
+            "records": [
+                {"address": "10.1.1.1"}
+            ]
+        }
+        error = client.create_recordset(new_rs, uri_zone_id=zone["id"], status=400)
 
-    assert_that(error, is_("zoneId in URI and body must match"))
+        assert_that(error, is_("zoneId in URI and body must match"))
+    finally:
+        if result_rs:
+            try:
+                delete_result = client.delete_recordset(result_rs["zoneId"], result_rs["id"], status=202)
+                client.wait_until_recordset_change_status(delete_result, "Complete")
+            except Exception:
+                traceback.print_exc()
+                pass
 
 def test_create_recordset_omitted_zoneid(shared_zone_test_context):
     """
@@ -93,26 +96,31 @@ def test_create_recordset_omitted_zoneid(shared_zone_test_context):
 
     client = shared_zone_test_context.ok_vinyldns_client
     zone = shared_zone_test_context.shared_zone
+    result_rs = None
 
-    new_rs = {
-        "name": "test-create-recordset-omitted-zoneid",
-        "type": "A",
-        "ttl": 100,
-        "records": [
-            {"address": "10.1.1.2"}
-        ]
-    }
-    url = urljoin(client.index_url, "/zones/{0}/recordsets".format(zone["id"]))
-    response, rs = client.make_request(
-        url,
-        "POST",
-        client.headers,
-        json.dumps(new_rs),
-        status=202
-    )
+    try:
+        new_rs = {
+            "name": "test-create-recordset-omitted-zoneid",
+            "type": "A",
+            "ttl": 100,
+            "records": [
+                {"address": "10.1.1.2"}
+            ]
+        }
+        rs = client.create_recordset(new_rs, uri_zone_id=zone["id"], status=202)
 
-    assert_that(rs["recordSet"]["zoneId"], is_(zone["id"]))
-    assert_that(rs["recordSet"]["name"], is_("test-create-recordset-omitted-zoneid"))
+        result_rs = client.wait_until_recordset_change_status(rs, "Complete")["recordSet"]
+
+        assert_that(result_rs["zoneId"], is_(zone["id"]))
+        assert_that(result_rs["name"], is_("test-create-recordset-omitted-zoneid"))
+    finally:
+        if result_rs:
+            try:
+                delete_result = client.delete_recordset(result_rs["zoneId"], result_rs["id"], status=202)
+                client.wait_until_recordset_change_status(delete_result, "Complete")
+            except Exception:
+                traceback.print_exc()
+                pass
 
 def test_create_naptr_origin_record(shared_zone_test_context):
     """
