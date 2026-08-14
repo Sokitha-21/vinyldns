@@ -108,21 +108,18 @@ export function ZonesTable({ zones, showAllZones, emptyMessage, emptySubtitle }:
           {sortedZones.map((zone) => (
             <tr key={zone.id}>
               <td>
-                <div className="d-flex align-items-center gap-2">
-                  <span className="vds-zone-avatar">{initials(zone.name)}</span>
-                  {zone.accessLevel && zone.accessLevel !== 'NoAccess' ? (
-                    <Link
-                      to={`/zones/${zone.id}`}
-                      className="fw-semibold text-decoration-none vds-table-primary"
-                    >
-                      {zone.name}
-                    </Link>
-                  ) : (
-                    <span className="fw-semibold vds-table-secondary" title="You do not have access to this zone">
-                      {zone.name}
-                    </span>
-                  )}
-                </div>
+                {zone.accessLevel && zone.accessLevel !== 'NoAccess' ? (
+                  <Link
+                    to={`/zones/${zone.id}`}
+                    className="fw-semibold text-decoration-none vds-table-primary"
+                  >
+                    {zone.name}
+                  </Link>
+                ) : (
+                  <span className="fw-semibold vds-table-secondary" title="You do not have access to this zone">
+                    {zone.name}
+                  </span>
+                )}
               </td>
               <td className="vds-table-secondary">{zone.email}</td>
               <td>

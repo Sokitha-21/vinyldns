@@ -17,35 +17,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { RecordSet, RecordData } from '../../types/record';
 
-// ── NS / PTR expand-collapse chip list ───────────────────────────────────────
-const SHOW_LIMIT = 3;
-function MultiValueChips({ values }: { values: string[] }) {
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? values : values.slice(0, SHOW_LIMIT);
-  const extra = values.length - SHOW_LIMIT;
-  return (
-    <div className="d-flex flex-column gap-1">
-      {visible.map((val, i) => (
-        <span key={i} className="vds-record-data-chip vds-record-data-chip--wrap">
-          <i className="bi bi-dot" style={{ fontSize: '0.65rem', marginRight: 2, opacity: 0.5 }} />
-          {val}
-        </span>
-      ))}
-      {values.length > SHOW_LIMIT && (
-        <button
-          type="button"
-          className="vds-record-data-more"
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded
-            ? <><i className="bi bi-chevron-up" style={{ fontSize: '0.65rem', marginRight: 3 }} />Show fewer</>
-            : <><i className="bi bi-chevron-down" style={{ fontSize: '0.65rem', marginRight: 3 }} />+{extra} more</>}
-        </button>
-      )}
-    </div>
-  );
-}
-
 export interface RecordsTableProps {
   records: RecordSet[];
   onEdit?: (record: RecordSet) => void;
@@ -79,65 +50,70 @@ const statusClass = (status: string) => {
 
 function formatRecordData(r: RecordSet): React.ReactNode {
   if (!r.records?.length) return <span className="text-muted">—</span>;
-  
-  // NS / PTR: stacked chips with expand/collapse after 3
-  if (r.type === 'NS' || r.type === 'PTR') {
-    const key = r.type === 'NS' ? 'nsdname' : 'ptrdname';
-    const all = r.records.map((d: RecordData) => (d as Record<string, string>)[key] ?? '');
-    return <MultiValueChips values={all} />;
-  }
 
-  // SOA: all 7 fields in 4 chips
-  if (r.type === 'SOA' && r.records[0]) {
-    const d = r.records[0];
+  if (r.type === 'SOA') {
+    const soaLines = r.records.flatMap((d: RecordData) => [
+      { label: 'Mname', value: d.mname ?? '' },
+      { label: 'Rname', value: d.rname ?? '' },
+      { label: 'Serial', value: d.serial != null ? String(d.serial) : '' },
+      { label: 'Refresh', value: d.refresh != null ? String(d.refresh) : '' },
+      { label: 'Retry', value: d.retry != null ? String(d.retry) : '' },
+      { label: 'Expire', value: d.expire != null ? String(d.expire) : '' },
+      { label: 'Minimum', value: d.minimum != null ? String(d.minimum) : '' },
+    ]).filter((line) => line.value);
+
     return (
-      <div className="d-flex flex-column gap-1">
-        <span className="vds-record-data-chip vds-record-data-chip--wrap">
-          <i className="bi bi-server" style={{ fontSize: '0.65rem', marginRight: 3, opacity: 0.6 }} />
-          {d.mname}
-        </span>
-        <span className="vds-record-data-chip vds-record-data-chip--wrap">
-          <i className="bi bi-envelope" style={{ fontSize: '0.65rem', marginRight: 3, opacity: 0.6 }} />
-          {d.rname}
-        </span>
-        <span className="vds-record-data-chip vds-record-data-chip--dim">
-          serial {d.serial} · refresh {d.refresh} · retry {d.retry}
-        </span>
-        <span className="vds-record-data-chip vds-record-data-chip--dim">
-          expire {d.expire} · minimum {d.minimum}
-        </span>
-      </div>
+      <span className="vds-record-data-text">
+        {soaLines.map((line, index) => (
+          <React.Fragment key={`${r.id}-soa-${index}`}>
+            {index > 0 && <br />}
+            <span className="vds-record-data-label">{line.label}:</span> {line.value}
+          </React.Fragment>
+        ))}
+      </span>
     );
   }
 
-  const items = r.records.slice(0, 3).map((d: RecordData, i: number) => {
-    let text = '';
+  const lines = r.records.flatMap((d: RecordData) => {
     switch (r.type) {
       case 'A':
-      case 'AAAA':   text = d.address ?? ''; break;
-      case 'CNAME':  text = d.cname ?? ''; break;
-      case 'MX':     text = `${d.preference ?? 10} ${d.exchange ?? ''}`; break;
+      case 'AAAA':
+        return [d.address ?? ''];
+      case 'NS':
+        return [d.nsdname ?? ''];
+      case 'PTR':
+        return [d.ptrdname ?? ''];
+      case 'CNAME':
+        return [d.cname ?? ''];
+      case 'MX':
+        return [`${d.preference ?? 10} ${d.exchange ?? ''}`.trim()];
       case 'TXT':
-      case 'SPF':    text = `"${d.text ?? ''}"`; break;
-      case 'SRV':    text = `${d.priority} ${d.weight} ${d.port} ${d.target}`; break;
-      case 'CAA':    text = `${d.flags} ${d.tag} "${d.value}"`; break;
-      case 'SSHFP':  text = `alg ${d.algorithm} fp ${String(d.fingerprint ?? '').slice(0, 12)}…`; break;
-      case 'DS':     text = `tag ${d.keytag} alg ${d.algorithm} digest ${d.digesttype}`; break;
-      case 'NAPTR':  text = `${d.order} ${d.preference} ${d.flags} ${d.service}`; break;
-      default:       text = JSON.stringify(d).slice(0, 40);
+      case 'SPF':
+        return [`"${d.text ?? ''}"`];
+      case 'SRV':
+        return [`${d.priority} ${d.weight} ${d.port} ${d.target}`.trim()];
+      case 'CAA':
+        return [`${d.flags} ${d.tag} "${d.value}"`.trim()];
+      case 'SSHFP':
+        return [`alg ${d.algorithm} fp ${d.fingerprint ?? ''}`.trim()];
+      case 'DS':
+        return [`tag ${d.keytag} alg ${d.algorithm} digest ${d.digesttype}`.trim()];
+      case 'NAPTR':
+        return [`${d.order} ${d.preference} ${d.flags} ${d.service}`.trim()];
+      default:
+        return [JSON.stringify(d)];
     }
-    return <span key={i} className="vds-record-data-chip vds-record-data-chip--wrap">{text}</span>;
-  });
+  }).filter(Boolean);
 
   return (
-    <div className="d-flex flex-wrap gap-1 align-items-center">
-      {items}
-      {r.records.length > 3 && (
-        <span className="vds-record-data-more"
-          title={r.records.slice(3).map((d: RecordData) => JSON.stringify(d)).join('\n')}
-        >+{r.records.length - 3} more</span>
-      )}
-    </div>
+    <span className="vds-record-data-text">
+      {lines.map((line, index) => (
+        <React.Fragment key={`${r.id}-${index}`}>
+          {index > 0 && <br />}
+          {line}
+        </React.Fragment>
+      ))}
+    </span>
   );
 }
 
@@ -385,7 +361,7 @@ export function RecordsTable({
             return (
               <tr key={rec.id}>
                 <td className="fw-semibold vds-table-primary">{rec.name}</td>
-                <td><span className="vds-record-type-badge">{rec.type}</span></td>
+                <td className="vds-record-type-text">{rec.type}</td>
                 <td className="vds-table-secondary">{rec.ttl}s</td>
                 <td>{formatRecordData(rec)}</td>
 

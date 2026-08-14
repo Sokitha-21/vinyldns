@@ -204,7 +204,7 @@ export function ZoneForm({
         </div>
       </div>
 
-      <div className="row g-3 mb-4" style={{gap: '6.5rem'}}>
+      <div className="row g-3 mb-4" style={{gap: '1.5rem'}}>
         {/* Admin Group */}
         <div className="col-md-5">
           <label className="vds-zone-form__label">

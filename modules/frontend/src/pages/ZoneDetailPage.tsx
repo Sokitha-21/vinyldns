@@ -642,7 +642,7 @@ export function ZoneDetailPage() {
   return (
     <div>
       {/* ── Page header ── */}
-      <div className="rounded-3 mb-3 d-flex justify-content-between align-items-center vds-page-header vds-page-header--lg">
+      <div className="rounded-3 mb-2 d-flex justify-content-between align-items-center vds-page-header vds-page-header--lg">
         <div className="d-flex align-items-center gap-3">
           <div className="vds-zone-detail-avatar">{initials(zoneData.name)}</div>
           <div>
@@ -663,7 +663,7 @@ export function ZoneDetailPage() {
         </button>
       </div>
 
-      <div className="vds-zone-meta-strip mb-3">
+      <div className="vds-zone-meta-strip mb-2">
         <div
           className="vds-zone-meta-item"
           style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -727,7 +727,7 @@ export function ZoneDetailPage() {
       </div>
 
       {/* ── Tab toolbar ── */}
-      <div className="card mb-3 vds-toolbar-card">
+      <div className="card mb-2 vds-toolbar-card">
         <div className="card-body py-2 px-3">
           <div className="vds-pill-toggle">
             <button type="button"
@@ -807,7 +807,7 @@ export function ZoneDetailPage() {
             <>
               {/* ── Recent Record Changes ── */}
               {recentRcData?.recordSetChanges?.length ? (
-                <div className="vds-recent-changes-panel mb-3">
+                <div className="vds-recent-changes-panel mb-2">
                   <div className="vds-recent-changes-panel__header">
                     <i className="bi bi-clock-history me-2" />
                     Recent Record Changes
@@ -1384,7 +1384,7 @@ export function ZoneDetailPage() {
                     <tr key={c.id}>
                       <td className="vds-table-secondary vds-table-nowrap small">{formatDateTime(c.created)}</td>
                       <td className="fw-semibold vds-table-primary">{c.recordSet.name}</td>
-                      <td><span className="vds-record-type-badge">{c.recordSet.type}</span></td>
+                      <td><span className="vds-record-type-text">{c.recordSet.type}</span></td>
                       <td>
                         <div className="d-flex align-items-center gap-1 flex-wrap">
                           <span className={`vds-change-badge vds-change-badge--${c.changeType.toLowerCase()}`}>{c.changeType}</span>
@@ -1611,7 +1611,7 @@ export function ZoneDetailPage() {
             </div>
 
             {zoneInfoOpen && (
-            <div className="p-4">
+            <div className="p-2">
               {!isZoneAdmin && zoneData && (
                 <div className="row g-4">
                   {[
@@ -1659,7 +1659,7 @@ export function ZoneDetailPage() {
                     {/* ── Left column ── */}
                     <div className="col-lg-6">
                       {/* Zone ID (read-only, copyable) */}
-                      <div className="mb-3">
+                      <div className="mb-2">
                         <label className="vds-zone-form__label">Zone ID</label>
                         <div
                           className="form-control vds-zone-form__input d-flex align-items-center justify-content-between"
@@ -1776,7 +1776,7 @@ export function ZoneDetailPage() {
                       <span className="text-muted fw-normal">(optional)</span>
                     </button>
                     {zoneConnOpen && (
-                      <div className="p-3 rounded-3 border" style={{ background: '#f8fafc' }}>
+                      <div className="p-2 rounded-3 border" style={{ background: '#f8fafc' }}>
                         <div className="row g-3">
                           <div className="col-md-6">
                             <label className="vds-zone-form__label">Key Name</label>
@@ -1822,7 +1822,7 @@ export function ZoneDetailPage() {
                         </div>
                         <button
                           type="button"
-                          className="btn btn-sm btn-outline-danger mt-3"
+                          className="btn btn-sm btn-outline-danger mt-2"
                           onClick={() => setZoneFormData(prev => prev ? { ...prev, connection: undefined } : prev)}
                         >
                           <i className="bi bi-x-circle me-1" />Clear Connection
@@ -1843,7 +1843,7 @@ export function ZoneDetailPage() {
                       <span className="text-muted fw-normal">(optional)</span>
                     </button>
                     {zoneTransferOpen && (
-                      <div className="p-3 rounded-3 border" style={{ background: '#f8fafc' }}>
+                      <div className="p-2 rounded-3 border" style={{ background: '#f8fafc' }}>
                         <div className="row g-3">
                           <div className="col-md-6">
                             <label className="vds-zone-form__label">Key Name</label>
@@ -1889,7 +1889,7 @@ export function ZoneDetailPage() {
                         </div>
                         <button
                           type="button"
-                          className="btn btn-sm btn-outline-danger mt-3"
+                          className="btn btn-sm btn-outline-danger mt-2"
                           onClick={() => setZoneFormData(prev => prev ? { ...prev, transferConnection: undefined } : prev)}
                         >
                           <i className="bi bi-x-circle me-1" />Clear Transfer Connection
@@ -2039,7 +2039,12 @@ export function ZoneDetailPage() {
                       <td className="vds-table-secondary small">
                         {!rule.recordTypes?.length
                           ? <span className="text-muted fst-italic">All Types</span>
-                          : rule.recordTypes.map(t => <span key={t} className="vds-record-type-badge me-1">{t}</span>)}
+                          : rule.recordTypes.map((t, idx) => (
+                              <React.Fragment key={t}>
+                                {idx > 0 && ', '}
+                                <span className="vds-record-type-text">{t}</span>
+                              </React.Fragment>
+                            ))}
                       </td>
                       <td className="vds-table-secondary small vds-table-mono">{rule.recordMask ?? '—'}</td>
                       <td className="vds-table-secondary small">{rule.description ?? '—'}</td>
@@ -2061,13 +2066,13 @@ export function ZoneDetailPage() {
                               }
                             })}
                           >
-                            <i className="bi bi-pencil" />Update
+                            Update
                           </button>
                           <button
                             className="btn btn-sm px-2 py-0 d-flex align-items-center gap-1 vds-acl-delete-btn"
                             onClick={() => setAclDeleteModal({ index: i })}
                           >
-                            <i className="bi bi-trash" />Delete
+                            Delete
                           </button>
                         </div>
                       </td>
@@ -2097,8 +2102,8 @@ export function ZoneDetailPage() {
                 </div>
               </div>
               {zoneSyncOpen && (              <>
-              <div className="p-4">
-                <div className="mb-4">
+              <div className="p-3">
+                <div className="mb-2">
                   <label className="vds-zone-form__label d-flex align-items-center gap-2">
                     <i className="bi bi-calendar-week" />Run on Days
                   </label>
@@ -2153,7 +2158,7 @@ export function ZoneDetailPage() {
                   </div>
                 </div>
 
-                <div className="row g-3 mb-4">
+                <div className="row g-3 mb-2">
                   <div className="col-sm-4">
                     <label className="vds-zone-form__label d-flex align-items-center gap-2">
                       <i className="bi bi-clock" />Hour (UTC)
@@ -2215,7 +2220,7 @@ export function ZoneDetailPage() {
                     <i className="bi bi-globe2" />Convert to UTC time
                   </button>
                   {showUtcConverter && (
-                    <div className="p-3 rounded-3 border d-flex align-items-center gap-3 flex-wrap vds-utc-converter-box" style={{ background: '#f8fafc' }}>
+                    <div className="p-2 rounded-3 border d-flex align-items-center gap-3 flex-wrap vds-utc-converter-box" style={{ background: '#f8fafc' }}>
                       <div>
                         <label className="vds-zone-form__label">Your local time</label>
                         <input

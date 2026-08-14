@@ -236,9 +236,9 @@ export function GroupDetailPage() {
   })();
 
   return (
-    <div>
+    <div className="vds-portal-legacy-font">
       {/* ── Page header ── */}
-      <div className="rounded-3 mb-4 d-flex justify-content-between align-items-center vds-page-header vds-page-header--lg">
+      <div className="rounded-3 mb-2 d-flex justify-content-between align-items-center vds-page-header vds-page-header--lg">
         <div className="d-flex align-items-center gap-3">
           <div className="rounded-3 d-flex align-items-center justify-content-center fw-bold text-white vds-page-header__icon"
             style={{ fontSize: '1rem', letterSpacing: '0.04em' }}
@@ -348,7 +348,7 @@ export function GroupDetailPage() {
 
           {/* ── Add Member card ── */}
           {isGroupAdmin && showAddForm && (
-            <div className="mx-4 my-3 rounded-3 p-3 vds-add-member-form">
+            <div className="mx-3 my-2 rounded-3 p-2 vds-add-member-form">
               <div className="d-flex align-items-center gap-2 mb-3">
                 <div className="rounded-circle d-flex align-items-center justify-content-center vds-add-member-icon">
                   <i className="bi bi-person-plus-fill text-white" style={{ fontSize: '0.75rem' }} />
@@ -405,7 +405,7 @@ export function GroupDetailPage() {
               </div>
             </div>
           )}
-          <div className="p-3">
+          <div className="p-2">
             {membersLoading ? (
               <LoadingSpinner message="Loading members…" />
             ) : (
@@ -480,7 +480,7 @@ export function GroupDetailPage() {
               </button>
             </div>
           )}
-          <div className="p-3">
+          <div className="p-2">
             {changesLoading ? (
               <LoadingSpinner />
             ) : !changesData?.changes || changesData.changes.length === 0 ? (

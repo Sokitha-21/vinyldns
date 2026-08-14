@@ -53,9 +53,6 @@ export function GroupsTable({ groups, onDelete, onEdit, isDeleting, isGroupAdmin
     );
   }
 
-  const initials = (name: string) =>
-    name.split(/[-_ ]+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
-
   return (
     <div className="vds-groups-table-wrap">
       <table className="vds-groups-table">
@@ -75,15 +72,12 @@ export function GroupsTable({ groups, onDelete, onEdit, isDeleting, isGroupAdmin
           {sortedGroups.map((group) => (
             <tr key={group.id}>
               <td>
-                <div className="d-flex align-items-center gap-2">
-                  <span className="vds-group-avatar">{initials(group.name)}</span>
-                  <Link
-                    to={`/groups/${group.id}`}
-                    className="fw-semibold text-decoration-none vds-table-primary"
-                  >
-                    {group.name}
-                  </Link>
-                </div>
+                <Link
+                  to={`/groups/${group.id}`}
+                  className="fw-semibold text-decoration-none vds-table-primary"
+                >
+                  {group.name}
+                </Link>
               </td>
               <td className="vds-table-secondary">{group.email}</td>
               <td className={group.description?.trim() ? 'vds-table-secondary' : 'vds-table-placeholder'}>

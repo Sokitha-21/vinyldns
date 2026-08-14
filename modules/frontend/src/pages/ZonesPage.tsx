@@ -709,15 +709,22 @@ export function ZonesPage() {
     else setAbandonedInput(abandonedQuery);
   }, [mainTab]); 
 
+  const confirmCancel = () =>
+    window.confirm('Are you sure you want to cancel? Unsaved changes will be lost.');
+
+  const closeConnectForm = () => {
+    if (confirmCancel()) setShowConnectForm(false);
+  };
+
   const isLoadingCurrent =
     mainTab === 'myZones'   ? myZones.isLoading :
     mainTab === 'allZones'  ? allZones.isLoading :
     activeAbandonedHook.isLoading;
 
   return (
-    <div>
+    <div className="vds-portal-legacy-font">
       {/* ── Page header ── */}
-      <div className="rounded-3 mb-4 d-flex justify-content-between align-items-center vds-page-header">
+      <div className="rounded-3 mb-2 d-flex justify-content-between align-items-center vds-page-header">
         <div className="d-flex align-items-center gap-3">
           <div className="rounded-3 d-flex align-items-center justify-content-center vds-page-header__icon">
             <i className="bi bi-diagram-3-fill text-white fs-5" />
@@ -728,13 +735,30 @@ export function ZonesPage() {
           </div>
         </div>
         {mainTab === 'myZones' && isSuper && (
-          <button
-            className="btn btn-primary d-flex align-items-center gap-2 vds-btn-primary-shadow vds-btn-nav"
-            onClick={() => setShowConnectForm((p) => !p)}
-          >
-            <i className="bi bi-plug-fill" />
-            Connect Zone
-          </button>
+          <div className="d-flex align-items-center gap-2">
+            <button
+              className="btn btn-primary d-flex align-items-center gap-2 vds-btn-primary-shadow vds-btn-nav"
+              onClick={() => {
+                if (showConnectForm) {
+                  closeConnectForm();
+                } else {
+                  setShowConnectForm(true);
+                }
+              }}
+            >
+              <i className="bi bi-plug-fill" />
+              Connect Zone
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm d-flex align-items-center justify-content-center vds-btn-flat"
+              style={{ width: 32, height: 32, padding: 0, flexShrink: 0, borderRadius: '50%' }}
+              title="Refresh"
+              onClick={handleRefresh}
+            >
+              <i className="bi bi-arrow-clockwise" style={{ fontSize: '1rem' }} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -745,23 +769,23 @@ export function ZonesPage() {
             className="modal fade show d-block"
             tabIndex={-1}
             role="dialog"
-            onClick={(e) => { if (e.target === e.currentTarget) setShowConnectForm(false); }}
+            onClick={(e) => { if (e.target === e.currentTarget) closeConnectForm(); }}
           >
             <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
-              <div className="modal-content">
+              <div className="modal-content vds-zone-connect-modal">
                 <div className="modal-header" style={{ background: 'linear-gradient(90deg, #1e5fa8, #0d1b3e)', color: '#fff' }}>
                   <h5 className="modal-title d-flex align-items-center gap-2">
                     <i className="bi bi-plug-fill" />
                     Connect to Zone
                   </h5>
-                  <button type="button" className="btn-close btn-close-white" onClick={() => setShowConnectForm(false)} />
+                  <button type="button" className="btn-close btn-close-white" onClick={closeConnectForm} />
                 </div>
                 <div className="modal-body">
                   <ZoneForm
                     groups={groupsData ?? []}
                     backendIds={backendIds ?? []}
                     onSubmit={handleCreate}
-                    onCancel={() => setShowConnectForm(false)}
+                    onCancel={closeConnectForm}
                     isSubmitting={myZones.isCreating}
                     mode="create"
                   />
@@ -825,19 +849,17 @@ export function ZonesPage() {
                 <span>{showFilters ? 'Hide Filters' : 'Show Filters'}</span>
                 <span className={`vds-cards-toggle-btn__dot${showFilters ? '' : ' vds-cards-toggle-btn__dot--off'}`} />
               </button>
-              <button
-                type="button"
-                className="btn btn-sm vds-btn-flat d-flex align-items-center justify-content-center"
-                style={{ width: 32, height: 32, padding: 0, flexShrink: 0, borderRadius: '50%' }}
-                title="Refresh"
-                onClick={handleRefresh}
-              >
-                <i className="bi bi-arrow-clockwise" style={{ fontSize: '1rem' }} />
-              </button>
             </div>
           </div>
           {/* ── Filters row (animated) + abandoned subtab always-visible ── */}
-          <div className="d-flex align-items-center pt-2" style={{ minHeight: 32 }}>
+          <div
+            className="d-flex align-items-center"
+            style={{
+              minHeight: mainTab === 'abandonedZones' || showFilters ? 32 : 0,
+              paddingTop: mainTab === 'abandonedZones' || showFilters ? 8 : 0,
+              transition: 'min-height 0.25s ease, padding-top 0.25s ease',
+            }}
+          >
             {/* Abandoned subtab: always visible on the left */}
             {mainTab === 'abandonedZones' && (
               <div className="vds-pill-toggle me-2" style={{ flexShrink: 0 }}>

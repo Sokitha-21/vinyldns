@@ -438,8 +438,8 @@ h1.h3 {
   align-items: center;
   justify-content: space-between;
   /* bleed past vds-main's left+right padding so it merges flush with the sidebar */
-  margin: 0 -1.5rem 1rem -1.5rem;
-  padding: 1rem 1.5rem;
+  margin: 0 -1.5rem 0.5rem -1.5rem;
+  padding: 1rem 1rem;
   background: linear-gradient(
     175deg,
     var(--vds-sidebar-bg-top) 0%,
@@ -2171,7 +2171,7 @@ h1.h3 {
   padding: 0.5rem 1.5rem;
 }
 .vds-page-header--lg {
-  padding: 0.75rem 1.5rem;
+  padding: 0.5rem 1.5rem;
 }
 
 .vds-page-header__icon {
@@ -3061,6 +3061,87 @@ h1.h3 {
 }
 
 /* ============================================================
+   Legacy Portal Typography (Groups + Zones tabs)
+   ============================================================ */
+.vds-portal-legacy-font {
+  font-size: 0.82rem;
+}
+
+.vds-portal-legacy-font h1,
+.vds-portal-legacy-font h2,
+.vds-portal-legacy-font h3,
+.vds-portal-legacy-font h4,
+.vds-portal-legacy-font h5,
+.vds-portal-legacy-font h6 {
+  line-height: 1.25;
+}
+
+.vds-portal-legacy-font .vds-page-header__title {
+  font-size: 1.12rem;
+}
+
+.vds-portal-legacy-font .vds-page-header small,
+.vds-portal-legacy-font .text-muted {
+  font-size: 0.74rem;
+}
+
+.vds-portal-legacy-font .btn,
+.vds-portal-legacy-font .form-control,
+.vds-portal-legacy-font .form-select,
+.vds-portal-legacy-font .input-group-text,
+.vds-portal-legacy-font .badge,
+.vds-portal-legacy-font .dropdown-item,
+.vds-portal-legacy-font .list-group-item,
+.vds-portal-legacy-font .nav-link,
+.vds-portal-legacy-font .alert {
+  font-size: 0.78rem;
+}
+
+.vds-portal-legacy-font .vds-groups-table thead th,
+.vds-portal-legacy-font .vds-zones-table thead th,
+.vds-portal-legacy-font .vds-groups-table tbody td,
+.vds-portal-legacy-font .vds-zones-table tbody td,
+.vds-portal-legacy-font .vds-zones-table tbody td.small,
+.vds-portal-legacy-font .vds-zones-table tbody td .small {
+  font-size: 0.79rem;
+}
+
+.vds-portal-legacy-font .vds-zone-status-badge,
+.vds-portal-legacy-font .vds-access-badge,
+.vds-portal-legacy-font .vds-record-type-badge,
+.vds-portal-legacy-font .vds-change-badge,
+.vds-portal-legacy-font .vds-role-badge,
+.vds-portal-legacy-font .vds-active-filter-tag,
+.vds-portal-legacy-font .vds-filter-chip--accent,
+.vds-portal-legacy-font .vds-member-badge,
+.vds-portal-legacy-font .vds-owner-group-chip,
+.vds-portal-legacy-font .vds-ownership-badge {
+  font-size: 0.72rem;
+}
+
+.vds-portal-legacy-font .vds-pill-toggle__btn,
+.vds-portal-legacy-font .vds-btn-flat__label,
+.vds-portal-legacy-font .vds-zone-meta-label,
+.vds-portal-legacy-font .vds-zone-meta-value,
+.vds-portal-legacy-font .vds-zone-meta-mono,
+.vds-portal-legacy-font .vds-insight-label,
+.vds-portal-legacy-font .vds-insight-stat-label,
+.vds-portal-legacy-font .vds-insight-footnote,
+.vds-portal-legacy-font .vds-insight-stat-value,
+.vds-portal-legacy-font .vds-record-count-badge__label,
+.vds-portal-legacy-font .vds-table-primary,
+.vds-portal-legacy-font .vds-table-secondary,
+.vds-portal-legacy-font .vds-table-muted,
+.vds-portal-legacy-font .vds-table-placeholder {
+  font-size: 0.78rem;
+}
+
+.vds-portal-legacy-font .vds-record-count-badge__num,
+.vds-portal-legacy-font .vds-insight-value {
+  font-size: 0.88rem;
+}
+
+/* ============================================================
    Accent buttons — #06090f → steel-blue two-colour gradient
    ============================================================ */
 .vds-btn-nav {
@@ -3216,8 +3297,8 @@ h1.h3 {
   border: 1px solid #dce8fb;
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.05);
   border-radius: 0.5rem;
-  margin-bottom: 1.5rem;
-  padding: 0.75rem 1.5rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 1.5rem;
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
@@ -3664,9 +3745,9 @@ h1.h3 {
   background: #f5f9ff;
 }
 .vds-zones-table tbody td {
-  padding: 11px 16px;
+  padding: 8px 10px;
   vertical-align: middle;
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   color: #2c3e50;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -3828,10 +3909,10 @@ h1.h3 {
   border: 1px solid #c7deff;
   border-left: 4px solid #1e5fa8;
   border-radius: 0.5rem;
-  padding: 0.65rem 1rem;
+  padding: 0.5rem 0.5rem;
   font-size: 0.84rem;
   color: #2c4a70;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.5rem;
   line-height: 1.55;
 }
 .vds-zone-form__intro-icon {
@@ -4248,6 +4329,46 @@ h1.h3 {
   color: #c0d8f8;
 }
 
+.vds-zone-connect-modal .modal-header {
+  padding: 0.85rem 1rem 0.75rem;
+}
+.vds-zone-connect-modal .modal-body {
+  padding: 0.85rem 1rem 1rem;
+}
+.vds-zone-connect-modal .vds-zone-form {
+  gap: 0.75rem;
+}
+.vds-zone-connect-modal .vds-zone-form__intro {
+  margin-bottom: 0.9rem;
+  padding: 0.7rem 0.85rem;
+}
+.vds-zone-connect-modal .vds-zone-section-header {
+  margin: 0.25rem 0 0.75rem;
+}
+.vds-zone-connect-modal .vds-zone-field-help {
+  margin-top: 0.28rem;
+}
+.vds-zone-connect-modal .row.g-3 {
+  --bs-gutter-x: 1rem;
+  --bs-gutter-y: 0.6rem;
+}
+.vds-zone-connect-modal .mb-4 {
+  margin-bottom: 1rem !important;
+}
+.vds-zone-connect-modal .mb-3 {
+  margin-bottom: 0.85rem !important;
+}
+.vds-zone-connect-modal .vds-zone-collapsible__trigger {
+  padding: 0.8rem 0.95rem;
+}
+.vds-zone-connect-modal .vds-zone-collapsible__body {
+  padding: 0.9rem 0.95rem 0.75rem;
+}
+.vds-zone-connect-modal .vds-zone-form__actions {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    Zone Detail Page
 ═══════════════════════════════════════════════════════════════ */
@@ -4272,7 +4393,7 @@ h1.h3 {
 /* Zone meta strip — horizontal row of info tiles */
 .vds-zone-meta-strip {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .vds-zone-meta-item {
@@ -4282,7 +4403,7 @@ h1.h3 {
   background: var(--vds-card-bg, #fff);
   border: 1px solid var(--vds-card-border, #e3e8f0);
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 5px 14px;
   flex: 1;
   min-width: 160px;
 }
@@ -4351,6 +4472,13 @@ h1.h3 {
   color: #1e40af;
   border: 1px solid #93c5fd;
 }
+.vds-record-type-text {
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #4a647f;
+  text-transform: uppercase;
+}
 
 /* Change type badge */
 .vds-change-badge {
@@ -4392,7 +4520,7 @@ h1.h3 {
 .vds-recent-changes-panel__header {
   display: flex;
   align-items: center;
-  padding: 10px 16px;
+  padding: 5px 16px;
   font-size: 0.82rem;
   font-weight: 700;
   color: #3c5a80;
@@ -4447,6 +4575,9 @@ h1.h3 {
   background: rgba(30, 64, 175, 0.25);
   color: #93c5fd;
   border-color: rgba(30, 64, 175, 0.4);
+}
+[data-vds-theme="dark"] .vds-record-type-text {
+  color: #9cb9d8;
 }
 [data-vds-theme="dark"] .vds-change-badge--create {
   background: rgba(6, 95, 70, 0.2);
@@ -4552,6 +4683,9 @@ h1.h3 {
   box-shadow: 0 1px 6px rgba(30, 58, 95, 0.3);
   border: 1px solid rgba(91, 143, 232, 0.2);
 }
+
+@media (max-width: 991.98px) {
+}
 .vds-record-count-badge__icon {
   font-size: 0.72rem;
   opacity: 0.8;
@@ -4651,7 +4785,7 @@ h1.h3 {
 .vds-manage-zone-footer {
   display: flex;
   align-items: center;
-  padding: 14px 20px;
+  padding: 7px 20px;
   border-top: 1px solid rgba(91, 143, 232, 0.16);
   background: #f4f7fb;
   border-radius: 0 0 12px 12px;
@@ -6502,6 +6636,21 @@ h1.h3 {
   overflow: visible;
   max-width: 480px;
 }
+.vds-record-data-text {
+  display: inline-block;
+  font-size: 0.79rem;
+  line-height: 1.5;
+  color: #31465f;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.vds-record-data-label {
+  display: inline-block;
+  min-width: 4.9rem;
+  font-weight: 600;
+  color: #556b84;
+}
 .vds-record-data-more {
   display: inline-flex;
   align-items: center;
@@ -6523,6 +6672,12 @@ h1.h3 {
 [data-vds-theme="dark"] .vds-record-data-chip--dim {
   background: #151f30;
   color: #5a7898;
+}
+[data-vds-theme="dark"] .vds-record-data-text {
+  color: #bfd0e2;
+}
+[data-vds-theme="dark"] .vds-record-data-label {
+  color: #9cb9d8;
 }
 [data-vds-theme="dark"] .vds-record-data-more {
   background: rgba(90, 130, 190, 0.15);

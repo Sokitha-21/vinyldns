@@ -56,7 +56,7 @@ export function GroupsPage() {
   >(null);
   const [searchFilter, setSearchFilter] = useState("");
   const [tabFading, setTabFading] = useState(false);
-  const [showCards, setShowCards] = useState(true);
+  const [showCards, setShowCards] = useState(Boolean(profile?.isSuper));
   const [roleDropdownOpen, setRoleDropdownOpen] = useState(false);
   const [filterPage, setFilterPage] = useState(0);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -64,6 +64,10 @@ export function GroupsPage() {
   const justSelectedRef = useRef(false);
   const FILTER_PAGE_SIZE = 100;
   const activeQuery = ignoreAccess ? allGroupsQuery : myGroupsQuery;
+
+  useEffect(() => {
+    setShowCards(Boolean(profile?.isSuper));
+  }, [profile?.isSuper]);
 
   const {
     groups,
@@ -299,6 +303,17 @@ export function GroupsPage() {
 
   const handleDelete = (group: Group) => setGroupToDelete(group);
 
+  const confirmCancel = () =>
+    window.confirm("Are you sure you want to cancel? Unsaved changes will be lost.");
+
+  const closeCreateForm = () => {
+    if (confirmCancel()) setShowForm(false);
+  };
+
+  const closeEditForm = () => {
+    if (confirmCancel()) setEditGroup(null);
+  };
+
   const handleDeleteConfirm = () => {
     if (groupToDelete) {
       deleteGroup(groupToDelete.id);
@@ -366,9 +381,9 @@ export function GroupsPage() {
     : (insightMyCount ?? 0);
 
   return (
-    <div>
+    <div className="vds-portal-legacy-font">
       {/* ── Page header ── */}
-      <div className="rounded-3 mb-4 d-flex justify-content-between align-items-center vds-page-header">
+      <div className="rounded-3 mb-2 d-flex justify-content-between align-items-center vds-page-header">
         <div className="d-flex align-items-center gap-3">
           <div className="rounded-3 d-flex align-items-center justify-content-center vds-page-header__icon">
             <i className="bi bi-people-fill text-white fs-5" />
@@ -384,10 +399,12 @@ export function GroupsPage() {
           <button
             className="btn btn-primary d-flex align-items-center gap-2 vds-btn-primary-shadow vds-btn-nav"
             onClick={() => {
-              setShowForm((prev) => {
-                if (!prev) setEditGroup(null);
-                return !prev;
-              });
+              if (showForm) {
+                closeCreateForm();
+              } else {
+                setEditGroup(null);
+                setShowForm(true);
+              }
             }}
           >
             <i className="bi bi-plus-circle-fill" />
@@ -411,7 +428,7 @@ export function GroupsPage() {
             tabIndex={-1}
             role="dialog"
             onClick={(e) => {
-              if (e.target === e.currentTarget) setShowForm(false);
+              if (e.target === e.currentTarget) closeCreateForm();
             }}
           >
             <div className="modal-dialog modal-dialog-centered" role="document">
@@ -430,13 +447,13 @@ export function GroupsPage() {
                   <button
                     type="button"
                     className="btn-close btn-close-white"
-                    onClick={() => setShowForm(false)}
+                    onClick={closeCreateForm}
                   />
                 </div>
                 <div className="modal-body">
                   <GroupForm
                     onSubmit={handleCreate}
-                    onCancel={() => setShowForm(false)}
+                    onCancel={closeCreateForm}
                     isSubmitting={isCreating}
                     mode="create"
                   />
@@ -463,7 +480,7 @@ export function GroupsPage() {
             tabIndex={-1}
             role="dialog"
             onClick={(e) => {
-              if (e.target === e.currentTarget) setEditGroup(null);
+              if (e.target === e.currentTarget) closeEditForm();
             }}
           >
             <div className="modal-dialog modal-dialog-centered" role="document">
@@ -482,14 +499,14 @@ export function GroupsPage() {
                   <button
                     type="button"
                     className="btn-close btn-close-white"
-                    onClick={() => setEditGroup(null)}
+                    onClick={closeEditForm}
                   />
                 </div>
                 <div className="modal-body">
                   <GroupForm
                     initialData={editGroup}
                     onSubmit={handleUpdate}
-                    onCancel={() => setEditGroup(null)}
+                    onCancel={closeEditForm}
                     isSubmitting={isUpdating}
                     mode="edit"
                   />
@@ -666,23 +683,25 @@ export function GroupsPage() {
                 )}
               </div>
               {/* ── Refresh ── */}
-              <button
-                type="button"
-                className="vds-cards-toggle-btn"
-                onClick={() => setShowCards((v) => !v)}
-              >
-                <span className="vds-cards-toggle-btn__icon">
-                  <i
-                    className={`bi ${showCards ? "bi-grid-fill" : "bi-grid"}`}
+              {profile?.isSuper && (
+                <button
+                  type="button"
+                  className="vds-cards-toggle-btn"
+                  onClick={() => setShowCards((v) => !v)}
+                >
+                  <span className="vds-cards-toggle-btn__icon">
+                    <i
+                      className={`bi ${showCards ? "bi-grid-fill" : "bi-grid"}`}
+                    />
+                  </span>
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    {showCards ? "Hide Cards" : "Show Cards"}
+                  </span>
+                  <span
+                    className={`vds-cards-toggle-btn__dot${showCards ? "" : " vds-cards-toggle-btn__dot--off"}`}
                   />
-                </span>
-                <span style={{ whiteSpace: "nowrap" }}>
-                  {showCards ? "Hide Cards" : "Show Cards"}
-                </span>
-                <span
-                  className={`vds-cards-toggle-btn__dot${showCards ? "" : " vds-cards-toggle-btn__dot--off"}`}
-                />
-              </button>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -758,7 +777,7 @@ export function GroupsPage() {
         className={`vds-tab-content${tabFading ? " vds-tab-content--fading" : ""}`}
       >
         {/* ── Insight cards ── */}
-        {showCards && (
+        {profile?.isSuper && showCards && (
           <div className="row mb-2 g-2 align-items-stretch justify-content-evenly vds-groups-insight-row">
             {/* Total Groups */}
             <div
