@@ -62,6 +62,12 @@ class MySqlGroupRepository extends GroupRepository with GroupProtobufConversions
          |  FROM `groups`
        """.stripMargin
 
+  private final val COUNT_GROUPS =
+    sql"""
+         |SELECT COUNT(*)
+         |  FROM `groups`
+       """.stripMargin
+
   private val BASE_GET_GROUPS_BY_IDS =
     """
       |SELECT data
@@ -210,6 +216,16 @@ class MySqlGroupRepository extends GroupRepository with GroupProtobufConversions
             .list()
             .apply()
         }.toSet
+      }
+    }
+
+  def countGroups(): IO[Int] =
+    monitor("repo.Group.countGroups") {
+      IO {
+        logger.debug(s"Counting all groups")
+        DB.readOnly { implicit s =>
+          COUNT_GROUPS.map(rs => rs.int(1)).single().apply().getOrElse(0)
+        }
       }
     }
 

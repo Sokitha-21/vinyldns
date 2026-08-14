@@ -270,7 +270,8 @@ class MySqlZoneRepository extends ZoneRepository with ProtobufConversions with M
        maxItems: Int = 100,
        adminGroupIds: Set[String],
        ignoreAccess: Boolean = false,
-       includeReverse: Boolean = true
+       includeReverse: Boolean = true,
+       accessFilter: Option[Int] = None
   ): IO[ListZonesResults] =
     monitor("repo.ZoneJDBC.listZonesByAdminGroupIds") {
       IO {
@@ -301,6 +302,7 @@ class MySqlZoneRepository extends ZoneRepository with ProtobufConversions with M
           if (startFrom.isDefined) {
             sb.append(" AND z.name > ?")
             filterParams += startFrom.get
+
           }
 
           sb.append(s" GROUP BY z.name ")
@@ -350,7 +352,8 @@ class MySqlZoneRepository extends ZoneRepository with ProtobufConversions with M
       startFrom: Option[String] = None,
       maxItems: Int = 100,
       ignoreAccess: Boolean = false,
-      includeReverse: Boolean = true
+      includeReverse: Boolean = true,
+      accessFilter: Option[Int] = None
   ): IO[ListZonesResults] =
     monitor("repo.ZoneJDBC.listZones") {
       IO {
@@ -391,6 +394,16 @@ class MySqlZoneRepository extends ZoneRepository with ProtobufConversions with M
             sb.append(if (filters.nonEmpty) " AND " else " WHERE ")
             sb.append("z.name NOT RLIKE ?")
             filterParams += """(in-addr\.arpa\.)|(ip6\.arpa\.)$"""
+          }
+
+          accessFilter match {
+            case Some(0) =>
+              if (filters.nonEmpty || !includeReverse) sb.append(" AND INSTR(z.data, X'4801') > 0")
+              else sb.append(" WHERE INSTR(z.data, X'4801') > 0")
+            case Some(1) =>
+              if (filters.nonEmpty || !includeReverse) sb.append(" AND INSTR(z.data, X'4801') = 0")
+              else sb.append(" WHERE INSTR(z.data, X'4801') = 0")
+            case _ =>
           }
 
           sb.append(s" GROUP BY z.name ")
@@ -442,6 +455,68 @@ class MySqlZoneRepository extends ZoneRepository with ProtobufConversions with M
             .map(_.string(1))
             .single
             .apply()
+        }
+      }
+    }
+
+  
+  def countZones(): IO[Int] =
+    monitor("repo.ZoneJDBC.countZones") {
+      IO {
+        DB.readOnly { implicit s =>
+          SQL("SELECT COUNT(*) FROM zone").map(rs => rs.int(1)).single().apply().getOrElse(0)
+        }
+      }
+    }
+
+  def countAllGlobalZoneStats(): IO[(Int, Int, Int, Int, Int, Int)] =
+    monitor("repo.ZoneJDBC.countAllGlobalZoneStats") {
+      IO {
+        DB.readOnly { implicit s =>
+          val (total, shared, ptr, sharedPtr, privatePtr) =
+            SQL("""
+              |SELECT
+              |  COUNT(*),
+              |  COALESCE(SUM(CASE WHEN INSTR(data, X'4801') > 0 THEN 1 ELSE 0 END), 0),
+              |  COALESCE(SUM(CASE WHEN name LIKE '%in-addr.arpa.' OR name LIKE '%ip6.arpa.' THEN 1 ELSE 0 END), 0),
+              |  COALESCE(SUM(CASE WHEN (name LIKE '%in-addr.arpa.' OR name LIKE '%ip6.arpa.') AND INSTR(data, X'4801') > 0 THEN 1 ELSE 0 END), 0),
+              |  COALESCE(SUM(CASE WHEN (name LIKE '%in-addr.arpa.' OR name LIKE '%ip6.arpa.') AND INSTR(data, X'4801') = 0 THEN 1 ELSE 0 END), 0)
+              |FROM zone
+            """.stripMargin)
+              .map(rs => (rs.int(1), rs.int(2), rs.int(3), rs.int(4), rs.int(5)))
+              .single()
+              .apply()
+              .getOrElse((0, 0, 0, 0, 0))
+          val syncing =
+            SQL("SELECT COUNT(DISTINCT zone_id) FROM zone_access WHERE zone_status = 'Syncing'")
+              .map(rs => rs.int(1)).single().apply().getOrElse(0)
+          (total, shared, ptr, sharedPtr, privatePtr, syncing)
+        }
+      }
+    }
+
+  def countAllUserZoneStats(authPrincipal: AuthPrincipal): IO[(Int, Int, Int, Int)] =
+    monitor("repo.ZoneJDBC.countAllUserZoneStats") {
+      IO {
+        DB.readOnly { implicit s =>
+          val user = authPrincipal.signedInUser
+          val accessors = buildZoneSearchAccessorList(user, authPrincipal.memberGroupIds)
+          val questionMarks = List.fill(accessors.size)("?").mkString(",")
+          SQL(
+            s"""
+              |SELECT
+              |  COUNT(DISTINCT z.id),
+              |  COUNT(DISTINCT CASE WHEN INSTR(z.data, X'4801') > 0 THEN z.id END),
+              |  COUNT(DISTINCT CASE WHEN z.name LIKE '%in-addr.arpa.' OR z.name LIKE '%ip6.arpa.' THEN z.id END),
+              |  COUNT(DISTINCT CASE WHEN za.zone_status = 'Syncing' THEN z.id END)
+              |FROM zone z
+              |JOIN zone_access za ON z.id = za.zone_id AND za.accessor_id IN ($questionMarks)
+            """.stripMargin)
+            .bind(accessors: _*)
+            .map(rs => (rs.int(1), rs.int(2), rs.int(3), rs.int(4)))
+            .single()
+            .apply()
+            .getOrElse((0, 0, 0, 0))
         }
       }
     }
