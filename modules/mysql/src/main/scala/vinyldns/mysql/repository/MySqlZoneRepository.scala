@@ -500,7 +500,7 @@ class MySqlZoneRepository extends ZoneRepository with ProtobufConversions with M
       IO {
         DB.readOnly { implicit s =>
           val user = authPrincipal.signedInUser
-          val accessors = buildZoneSearchAccessorList(user, authPrincipal.memberGroupIds)
+          val accessors = MySqlAccessors.buildZoneSearchAccessorList(user, authPrincipal.memberGroupIds, logger)
           val questionMarks = List.fill(accessors.size)("?").mkString(",")
           SQL(
             s"""

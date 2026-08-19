@@ -141,7 +141,7 @@ export function ZonesTable({ zones, showAllZones, emptyMessage, emptySubtitle }:
                   {zone.status}
                 </span>
               </td>
-              <td className="vds-table-secondary vds-table-nowrap">
+              <td className="vds-table-secondary vds-table-nowrap vds-date-wrap">
                 {zone.latestSync ? formatDateTime(zone.latestSync) : '—'}
               </td>
               <td>

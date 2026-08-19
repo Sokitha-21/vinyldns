@@ -744,7 +744,7 @@ export function DnsChangeDetailPage() {
         <div className="vds-info-tile">
           <i className="bi bi-clock-history vds-info-tile__icon" />
           <div className="vds-info-tile__label">Submitted</div>
-          <div className="vds-info-tile__value">
+          <div className="vds-info-tile__value vds-date-wrap">
             {formatDateTime(change.createdTimestamp)}
           </div>
         </div>
@@ -773,7 +773,7 @@ export function DnsChangeDetailPage() {
           <div className="vds-info-tile">
             <i className="bi bi-calendar-event vds-info-tile__icon" />
             <div className="vds-info-tile__label">Scheduled</div>
-            <div className="vds-info-tile__value">
+            <div className="vds-info-tile__value vds-date-wrap">
               {formatDateTime(change.scheduledTime)}
             </div>
           </div>
@@ -904,7 +904,7 @@ export function DnsChangeDetailPage() {
                 </span>
               )}
               {change.reviewTimestamp && (
-                <span className="text-muted fw-normal">
+                <span className="text-muted fw-normal vds-date-wrap">
                   {" "}
                   · {formatDateTime(change.reviewTimestamp)}
                 </span>
@@ -997,7 +997,7 @@ export function DnsChangeDetailPage() {
             maxHeight: "60vh",
           }}
         >
-          {(prevPageEnabled || nextPageEnabled) && (
+          {false && (prevPageEnabled || nextPageEnabled) && (
             <div className="d-flex align-items-center justify-content-end px-3 pt-2">
               <Pagination
                 onPrev={() => setPageNum((p) => p - 1)}

@@ -566,7 +566,7 @@ export function GroupDetailPage() {
                 </table>
               </div>
             )}
-            {(chNextEnabled || chPrevEnabled) && (
+            {false && (chNextEnabled || chPrevEnabled) && (
               <Pagination
                 onPrev={chPrevPage}
                 onNext={chNextPage}

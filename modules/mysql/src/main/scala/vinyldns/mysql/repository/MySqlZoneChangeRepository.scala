@@ -161,23 +161,9 @@ class MySqlZoneChangeRepository
           sb.append(" WHERE z.name IS NULL")
           sb.append(" AND zc.zone_status = 'Deleted'")
 
-
-          val zoneResults: Int =
-             SQL(BASE_ZONE_NAME_COUNT_SQL)
-               .map(_.int(1))
-               .single()
-               .apply()
-               .getOrElse(0)
-
           // Bound parameters for the dynamic WHERE clause, in placeholder order
           // (after the accessor join params).
           val filterParams = scala.collection.mutable.ListBuffer[Any]()
-
-          sb.append(" WHERE ")
-
-          if (zoneResults != 0) sb.append(s" zc.zone_name NOT IN ($BASE_ZONE_NAME_SEARCH_SQL) AND ")
-
-          sb.append(" zc.zone_status = 'Deleted' ")
 
           // '*' is the only user-facing wildcard; literal LIKE metacharacters are
           // escaped and the pattern is bound, never interpolated into SQL.
@@ -188,14 +174,13 @@ class MySqlZoneChangeRepository
             filterParams += LikePattern.prefix(flt)
           }
 
-
           accessFilter.foreach { af =>
             sb.append(s" AND INSTR(zc.data, X'4801') ${if (af == 0) "> 0" else "= 0"}")
           }
 
           startFrom.foreach { cursorName =>
             sb.append(" AND zc.zone_name >= ?")
-            extraBindParams += cursorName
+            filterParams += cursorName
           }
 
           sb.append(
@@ -206,17 +191,13 @@ class MySqlZoneChangeRepository
              """.stripMargin)
 
           val query = sb.toString
-          val allBindParams = accessors ++ extraBindParams.toSeq
-
 
           val deletedZoneResults: List[ZoneChange] =
             SQL(query)
-
               .bind(accessors ++ filterParams.toList: _*)
-
               .map(extractZoneChange(1))
-                .list()
-                .apply()
+              .list()
+              .apply()
 
           val (newResults, nextId) =
             if (deletedZoneResults.size > maxItems)
@@ -277,7 +258,7 @@ class MySqlZoneChangeRepository
       IO {
         DB.readOnly { implicit s =>
           val user = authPrincipal.signedInUser
-          val accessors = buildZoneSearchAccessorList(user, authPrincipal.memberGroupIds)
+          val accessors = MySqlAccessors.buildZoneSearchAccessorList(user, authPrincipal.memberGroupIds, logger)
           val questionMarks = List.fill(accessors.size)("?").mkString(",")
           SQL(
             s"""

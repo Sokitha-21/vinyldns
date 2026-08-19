@@ -29,17 +29,9 @@ import type { Group } from "../types/group";
 export function GroupsPage() {
   const { profile } = useProfile();
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
-  // Restore tab + paging cursor from URL on mount (set by sync effect below)
-  const initTab = searchParams.get("tab") === "all";
-  const initPaging = (() => {
-    const next = searchParams.get("next") ?? undefined;
-    const pn = parseInt(searchParams.get("pn") ?? "0", 10);
-    const sk = (searchParams.get("sk") ?? "").split(",").filter(Boolean);
-    return next || pn > 0
-      ? { next, pageNum: pn, startKeys: sk, maxItems: 100 }
-      : undefined;
-  })();
+  const [, setSearchParams] = useSearchParams();
+  const initTab = false;
+  const initPaging = undefined;
   const [ignoreAccess, setIgnoreAccess] = useState(initTab);
   const [showForm, setShowForm] = useState(false);
   const [editGroup, setEditGroup] = useState<Group | null>(null);
@@ -88,15 +80,10 @@ export function GroupsPage() {
     setRoleFilter: setHookRoleFilter,
   } = useGroups(ignoreAccess, activeQuery, initPaging);
 
-  const startKeysStr = paging.startKeys.filter(Boolean).map(String).join(",");
   useEffect(() => {
-    const params: Record<string, string> = {};
-    if (ignoreAccess) params.tab = "all";
-    if (paging.next != null) params.next = String(paging.next);
-    if (paging.pageNum > 0) params.pn = String(paging.pageNum);
-    if (startKeysStr) params.sk = startKeysStr;
-    setSearchParams(params, { replace: true });
-  }, [ignoreAccess, paging.next, paging.pageNum, startKeysStr]);
+    // Keep URL clean (old portal behavior): no tab query params.
+    setSearchParams({}, { replace: true });
+  }, [ignoreAccess]);
 
   const { data: groupCountData } = useQuery({
     queryKey: ["groups-count"],
@@ -1006,6 +993,7 @@ export function GroupsPage() {
                   return (
                     <PaginatedSection
                       show={totalFilterPages > 1}
+                      showBottom={false}
                       onPrev={() => setFilterPage((p) => Math.max(0, p - 1))}
                       onNext={() =>
                         setFilterPage((p) =>
@@ -1065,6 +1053,7 @@ export function GroupsPage() {
                   return (
                     <PaginatedSection
                       show={showPagination}
+                      showBottom={false}
                       onPrev={prevPage}
                       onNext={nextPage}
                       prevEnabled={prevPageEnabled}
