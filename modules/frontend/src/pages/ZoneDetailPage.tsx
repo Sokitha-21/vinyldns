@@ -41,7 +41,7 @@ type DetailTab = 'records' | 'recordChanges' | 'zoneChanges' | 'zone';
 
 const inRange = (dateStr: string | undefined, range: TimeRange, from: string, to: string): boolean => {
   if (range === 'all') return true;
-  if (!dateStr) return true;
+  if (!dateStr) return false;  
   const ts = new Date(dateStr).getTime();
   const now = Date.now();
   if (range === '1d') return ts >= now - 86400000;
@@ -701,7 +701,7 @@ export function ZoneDetailPage() {
           </div>
           <div>
             <div className="vds-zone-meta-label">Created</div>
-            <div className="vds-zone-meta-value">{zoneData.created ? formatDateTime(zoneData.created) : '—'}</div>
+            <div className="vds-zone-meta-value vds-date-wrap">{zoneData.created ? formatDateTime(zoneData.created) : '—'}</div>
           </div>
         </div>
         <div className="vds-zone-meta-item">
@@ -710,7 +710,7 @@ export function ZoneDetailPage() {
           </div>
           <div>
             <div className="vds-zone-meta-label">Last Sync</div>
-            <div className="vds-zone-meta-value">{zoneData.latestSync ? formatDateTime(zoneData.latestSync) : '—'}</div>
+            <div className="vds-zone-meta-value vds-date-wrap">{zoneData.latestSync ? formatDateTime(zoneData.latestSync) : '—'}</div>
           </div>
         </div>
         {zoneData.backendId && (
@@ -876,7 +876,7 @@ export function ZoneDetailPage() {
                               <td><span className={`vds-change-badge vds-change-badge--${c.changeType.toLowerCase()}`}>{c.changeType}</span></td>
                               <td><span className={`vds-zone-status-badge ${changeStatusClass(c.status)}`}>{c.status}</span></td>
                               <td className="vds-table-secondary vds-table-nowrap small">{c.userName ?? c.userId}</td>
-                              <td className="vds-table-secondary vds-table-nowrap small">{formatDateTime(c.created)}</td>
+                              <td className="vds-table-secondary vds-table-nowrap small vds-date-wrap">{formatDateTime(c.created)}</td>
                               <td className="small">
                                 {c.changeType === 'Create' && (
                                   <button
@@ -914,7 +914,7 @@ export function ZoneDetailPage() {
                         </tbody>
                       </table>
                     </div>
-                    {(recentRcNextEnabled || recentRcPrevEnabled) && (
+                    {false && (recentRcNextEnabled || recentRcPrevEnabled) && (
                       <Pagination onPrev={recentRcPrevPage} onNext={recentRcNextPage}
                         prevEnabled={recentRcPrevEnabled} nextEnabled={recentRcNextEnabled}
                         panelTitle={recentRcPanelTitle()} />
@@ -1148,7 +1148,7 @@ export function ZoneDetailPage() {
                 onApproveOwnership={(rec) => approveOwnershipMutation.mutate(rec)}
                 onRejectOwnership={(rec) => rejectOwnershipMutation.mutate(rec)}
               />
-              {(recNextEnabled || recPrevEnabled) && (
+              {false && (recNextEnabled || recPrevEnabled) && (
                 <Pagination onPrev={recordsPrev} onNext={recordsNext}
                   prevEnabled={recPrevEnabled} nextEnabled={recNextEnabled}
                   panelTitle={recPanelTitle()} />
@@ -1362,7 +1362,11 @@ export function ZoneDetailPage() {
                       style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                     >Time <SortArrow dir={rcTimeSort} /></th>
                     <th>Recordset Name</th>
-                    <th>Recordset Type</th>
+                    <th>
+                      RECORDSET
+                      <br />
+                      TYPE
+                    </th>
                     <th>Change Type</th>
                     <th>User</th>
                     <th>Status</th>
@@ -1382,7 +1386,7 @@ export function ZoneDetailPage() {
                         : 0)
                       .map((c) => (
                     <tr key={c.id}>
-                      <td className="vds-table-secondary vds-table-nowrap small">{formatDateTime(c.created)}</td>
+                      <td className="vds-table-secondary vds-table-nowrap small vds-date-wrap">{formatDateTime(c.created)}</td>
                       <td className="fw-semibold vds-table-primary">{c.recordSet.name}</td>
                       <td><span className="vds-record-type-badge">{c.recordSet.type}</span></td>
                       <td>
@@ -1440,7 +1444,7 @@ export function ZoneDetailPage() {
                 </tbody>
               </table>
             </div>
-            {(rcNextEnabled || rcPrevEnabled) && (
+            {false && (rcNextEnabled || rcPrevEnabled) && (
               <Pagination onPrev={rcPrevPage} onNext={rcNextPage}
                 prevEnabled={rcPrevEnabled} nextEnabled={rcNextEnabled} panelTitle={rcPanelTitle()} />
             )}
@@ -1520,8 +1524,8 @@ export function ZoneDetailPage() {
                           {c.zone.shared ? 'Shared' : 'Private'}
                         </span>
                       </td>
-                      <td className="vds-table-secondary vds-table-nowrap small">{c.zone.created ? formatDateTime(c.zone.created) : '—'}</td>
-                      <td className="vds-table-secondary vds-table-nowrap small">{c.zone.updated ? formatDateTime(c.zone.updated) : '—'}</td>
+                      <td className="vds-table-secondary vds-table-nowrap small vds-date-wrap">{c.zone.created ? formatDateTime(c.zone.created) : '—'}</td>
+                      <td className="vds-table-secondary vds-table-nowrap small vds-date-wrap">{c.zone.updated ? formatDateTime(c.zone.updated) : '—'}</td>
                       <td>
                         <div className="d-flex align-items-center gap-1 flex-wrap">
                           <span className={`vds-change-badge vds-change-badge--${c.changeType === 'AutomatedSync' ? 'sync' : c.changeType.toLowerCase()}`}>
@@ -1563,7 +1567,7 @@ export function ZoneDetailPage() {
                 </tbody>
               </table>
             </div>
-            {(zcNextEnabled || zcPrevEnabled) && (
+            {false && (zcNextEnabled || zcPrevEnabled) && (
               <Pagination onPrev={zcPrevPage} onNext={zcNextPage}
                 prevEnabled={zcPrevEnabled} nextEnabled={zcNextEnabled} panelTitle={zcPanelTitle()} />
             )}
@@ -1644,7 +1648,7 @@ export function ZoneDetailPage() {
                             <i className={`bi ${copiedZoneId ? 'bi-check-lg text-success' : 'bi-clipboard'} ms-1`} style={{ fontSize: '0.7rem', opacity: 0.6 }} />
                           </div>
                         ) : (
-                          <div className={`vds-zone-info-card__value${field.mono ? ' vds-table-mono' : ''}`}>{field.value}</div>
+                          <div className={`vds-zone-info-card__value${field.mono ? ' vds-table-mono' : ''}${field.label === 'Created' || field.label === 'Latest Update' || field.label === 'Latest Sync' ? ' vds-date-wrap' : ''}`}>{field.value}</div>
                         )}
                       </div>
                     </div>
@@ -1743,21 +1747,21 @@ export function ZoneDetailPage() {
                       {/* Created */}
                       <div className="mb-3">
                         <label className="vds-zone-form__label">Created</label>
-                        <div className="form-control vds-zone-form__input" style={{ background: '#f4f7fb', color: '#64748b' }}>
+                        <div className="form-control vds-zone-form__input vds-date-wrap" style={{ background: '#f4f7fb', color: '#64748b' }}>
                           {zoneFormData.created ? formatDateTime(zoneFormData.created) : '—'}
                         </div>
                       </div>
                       {/* Latest Update */}
                       <div className="mb-3">
                         <label className="vds-zone-form__label">Latest Update</label>
-                        <div className="form-control vds-zone-form__input" style={{ background: '#f4f7fb', color: '#64748b' }}>
+                        <div className="form-control vds-zone-form__input vds-date-wrap" style={{ background: '#f4f7fb', color: '#64748b' }}>
                           {zoneFormData.updated ? formatDateTime(zoneFormData.updated) : '—'}
                         </div>
                       </div>
                       {/* Latest Sync */}
                       <div className="mb-3">
                         <label className="vds-zone-form__label">Latest Sync</label>
-                        <div className="form-control vds-zone-form__input" style={{ background: '#f4f7fb', color: '#64748b' }}>
+                        <div className="form-control vds-zone-form__input vds-date-wrap" style={{ background: '#f4f7fb', color: '#64748b' }}>
                           {zoneFormData.latestSync ? formatDateTime(zoneFormData.latestSync) : '—'}
                         </div>
                       </div>

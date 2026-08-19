@@ -40,18 +40,10 @@ export function ZonesPage() {
   const { profile } = useProfile();
   const isSuper = profile?.isSuper ?? false;
   const isSupport = profile?.isSupport ?? false;
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useSearchParams();
 
-  // Restore tab + paging cursor from URL on mount
-  const initMainTab = (['myZones', 'allZones', 'abandonedZones'].includes(searchParams.get('tab') ?? '')
-    ? searchParams.get('tab') as MainTab
-    : 'myZones');
-  const initPaging = (() => {
-    const next = searchParams.get('next') ?? undefined;
-    const pn = parseInt(searchParams.get('pn') ?? '0', 10);
-    const sk = (searchParams.get('sk') ?? '').split(',').filter(Boolean);
-    return (next || pn > 0) ? { next, pageNum: pn, startKeys: sk } : undefined;
-  })();
+  const initMainTab: MainTab = 'myZones';
+  const initPaging = undefined;
 
   // ── Tab state ────────────────────────────────────────────────────────────────
   const [mainTab, setMainTab] = useState<MainTab>(initMainTab);
@@ -112,27 +104,18 @@ export function ZonesPage() {
   const [abanDateTo, setAbanDateTo] = useState('');
 
   // ── Zones hooks ───────────────────────────────────────────────────────────────
-  const myZones  = useZones(false, !myZonesHidePtr, initMainTab === 'myZones'  ? initPaging : undefined);
-  const allZones = useZones(true,  !allZonesHidePtr, initMainTab === 'allZones' ? initPaging : undefined);
+  const myZones  = useZones(false, !myZonesHidePtr, initPaging);
+  const allZones = useZones(true,  !allZonesHidePtr, initPaging);
 
   
   const myAbandoned  = useDeletedZones(false, true);  // always enabled so deletedZones.length is available as fallback
   const allAbandoned = useDeletedZones(true,  mainTab === 'abandonedZones');
   const activeAbandonedHook = abandonedSubTab === 'myAbandoned' ? myAbandoned : allAbandoned;
 
-  // Sync mainTab + active tab paging cursor to URL so back-navigation restores state
-  const activePaging = mainTab === 'allZones' ? allZones.paging : myZones.paging;
-  const zonesStartKeysStr = activePaging.startKeys.filter(Boolean).map(String).join(',');
+  // Keep URL clean (old portal behavior): no tab query params.
   useEffect(() => {
-    const params: Record<string, string> = {};
-    if (mainTab !== 'myZones') params.tab = mainTab;
-    if (mainTab !== 'abandonedZones') {
-      if (activePaging.next != null) params.next = String(activePaging.next);
-      if (activePaging.pageNum > 0) params.pn = String(activePaging.pageNum);
-      if (zonesStartKeysStr) params.sk = zonesStartKeysStr;
-    }
-    setSearchParams(params, { replace: true });
-  }, [mainTab, activePaging.next, activePaging.pageNum, zonesStartKeysStr]); 
+    setSearchParams({}, { replace: true });
+  }, [mainTab]); 
 
   // ── Backend IDs & groups (for ZoneForm) ──────────────────────────────────────
   // Super users see all groups (ignoreAccess=true); support and regular users
@@ -234,7 +217,7 @@ export function ZonesPage() {
 
   const isWithinRange = (dateStr: string | undefined, range: TimeRange, from: string, to: string): boolean => {
     if (range === 'all') return true;
-    if (!dateStr) return true;
+    if (!dateStr) return false;  // Exclude zones with no date when filtering by date range
     const ts = new Date(dateStr).getTime();
     const now = Date.now();
     if (range === '1d') return ts >= now - 86400000;
@@ -804,16 +787,18 @@ export function ZonesPage() {
             </div>
 
             <div className="ms-auto d-flex align-items-center gap-2">
-              <button
-                className="vds-cards-toggle-btn"
-                onClick={() => setShowCards((v) => !v)}
-              >
-                <span className="vds-cards-toggle-btn__icon">
-                    <i className={`bi ${showCards ? 'bi-grid-fill' : 'bi-grid'}`} />
-                </span>
-                <span>{showCards ? 'Hide Cards' : 'Show Cards'}</span>
-                <span className={`vds-cards-toggle-btn__dot${showCards ? '' : ' vds-cards-toggle-btn__dot--off'}`} />
-              </button>
+              {isSuper && (
+                <button
+                  className="vds-cards-toggle-btn"
+                  onClick={() => setShowCards((v) => !v)}
+                >
+                  <span className="vds-cards-toggle-btn__icon">
+                      <i className={`bi ${showCards ? 'bi-grid-fill' : 'bi-grid'}`} />
+                  </span>
+                  <span>{showCards ? 'Hide Cards' : 'Show Cards'}</span>
+                  <span className={`vds-cards-toggle-btn__dot${showCards ? '' : ' vds-cards-toggle-btn__dot--off'}`} />
+                </button>
+              )}
               <button
                 type="button"
                 className="vds-cards-toggle-btn"
@@ -1379,7 +1364,7 @@ export function ZonesPage() {
       <div className={`vds-tab-content${tabFading ? ' vds-tab-content--fading' : ''}`}>
 
         {/* ── Insight cards ── */}
-        {showCards && <div className="row g-2 mb-3 align-items-stretch">
+        {showCards && isSuper && <div className="row g-2 mb-3 align-items-stretch">
 
           {/* ── Card 1: Total Zones ── */}
           <div className={`${isAbandonedTab ? 'col-6 col-md-4' : 'col-6 col-md-3'} d-flex`}>
@@ -1626,6 +1611,7 @@ export function ZonesPage() {
             <>
               <PaginatedSection
                 show={(anyServerCompatibleFilter || !anyFilterActive || byGroupSearchActive) && (myZones.nextPageEnabled || myZones.prevPageEnabled)}
+                showBottom={false}
                 onPrev={myZones.prevPage}
                 onNext={myZones.nextPage}
                 prevEnabled={myZones.prevPageEnabled}
@@ -1649,6 +1635,7 @@ export function ZonesPage() {
             <>
               <PaginatedSection
                 show={(anyServerCompatibleFilter || !anyFilterActive || byGroupSearchActive) && (allZones.nextPageEnabled || allZones.prevPageEnabled)}
+                showBottom={false}
                 onPrev={allZones.prevPage}
                 onNext={allZones.nextPage}
                 prevEnabled={allZones.prevPageEnabled}
@@ -1673,6 +1660,7 @@ export function ZonesPage() {
               <>
                 <PaginatedSection
                   show={(abanAccessFilterOnly || !anyAbandonedFilterActive) && (activeAbandonedHook.nextPageEnabled || activeAbandonedHook.prevPageEnabled)}
+                  showBottom={false}
                   onPrev={activeAbandonedHook.prevPage}
                   onNext={activeAbandonedHook.nextPage}
                   prevEnabled={activeAbandonedHook.prevPageEnabled}

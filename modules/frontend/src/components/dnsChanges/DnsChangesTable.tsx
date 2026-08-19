@@ -222,7 +222,7 @@ export function DnsChangesTable({
                     <span className="vds-table-placeholder">{"\u2014"}</span>
                   )}
                 </td>
-                <td className="vds-table-secondary small">
+                <td className="vds-table-secondary small vds-date-wrap">
                   {formatDateTime(change.createdTimestamp)}
                 </td>
                 <td>

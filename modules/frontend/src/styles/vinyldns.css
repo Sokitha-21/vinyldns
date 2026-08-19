@@ -69,7 +69,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 14px 12px 8px;
+  padding: 14px 5px 8px;
 }
 
 /* Full-width logo link (expanded) */
@@ -1099,8 +1099,8 @@ h1.h3 {
    ============================================================ */
 
 .vds-sidebar {
-  width: 220px;
-  min-width: 220px;
+  width: 202px;
+  min-width: 3rem;
 }
 
 .vds-sidebar--collapsed {
@@ -2227,6 +2227,7 @@ h1.h3 {
   transition:
     transform 0.15s,
     box-shadow 0.15s;
+  max-height: 12rem;
 }
 .vds-insight-card:hover {
   transform: translateY(-2px);
@@ -3446,6 +3447,9 @@ h1.h3 {
 .vds-table-nowrap {
   white-space: nowrap;
 }
+.vds-date-wrap {
+  white-space: pre-line;
+}
 .vds-table-mono {
   font-family: monospace;
   font-size: 0.75rem;
@@ -3783,6 +3787,33 @@ h1.h3 {
 [data-vds-theme="dark"] .vds-zone-avatar--deleted {
   background: linear-gradient(135deg, #374151, #1f2937);
 }
+
+@media (max-width: 900px) {
+  .vds-zones-table-wrap {
+    max-height: 58vh;
+  }
+
+  .vds-zones-table {
+    min-width: 0;
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .vds-zones-table thead th,
+  .vds-zones-table tbody td,
+  .vds-zones-table .vds-zone-status-badge,
+  .vds-zones-table .vds-access-badge,
+  .vds-zones-table .vds-change-badge {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .vds-zones-table .vds-table-nowrap {
+    white-space: normal;
+  }
+}
+
 [data-vds-theme="dark"] .vds-zone-status-badge--active {
   background: rgba(16, 185, 129, 0.15);
   color: #6ee7b7;

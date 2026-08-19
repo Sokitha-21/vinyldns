@@ -367,7 +367,11 @@ export function RecordsTable({
                 <th>
                   <span className="vds-th-with-icon">
                     <i className="bi bi-arrow-left-right me-1 text-warning" style={{ fontSize: '0.75rem' }} />
-                    Ownership Transfer Status
+                    <span>
+                      OWNERSHIP TRANSFER
+                      <br />
+                      STATUS
+                    </span>
                   </span>
                 </th>
               </>
