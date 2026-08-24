@@ -137,7 +137,6 @@ object ZoneSyncHandler extends DnsConversions with Monitored with TransactionPro
                     s"dotted host records: [$dottedGroupString]"
                 )
               }
-
             logger.info(
               s"zone.sync.changes; zoneName='${zone.name}'; " +
                 s"changeCount=${changesWithUserIds.size}; zoneChange='${zoneChange.id}'"
