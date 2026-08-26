@@ -113,7 +113,6 @@ describe('BatchChange', function(){
                     'type',
                     'status'
                 ];
-
                 sortableColumns.forEach(function(column) {
                     this.scope.sortBy(column);
 
