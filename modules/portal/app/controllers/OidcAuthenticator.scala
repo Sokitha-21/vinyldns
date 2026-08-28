@@ -145,8 +145,8 @@ class OidcAuthenticator @Inject() (wsClient: WSClient, configuration: Configurat
   }
 
   def getCodeFromAuthResponse(
-      request: RequestHeader,
-      expectedState: String
+    request: RequestHeader,
+    expectedState: String
   ): Either[ErrorResponse, AuthorizationCode] =
     Try(AuthenticationResponseParser.parse(new URI(request.uri))).toEither
       .leftMap { err =>
@@ -156,16 +156,22 @@ class OidcAuthenticator @Inject() (wsClient: WSClient, configuration: Configurat
       }
       .flatMap {
         case s: AuthenticationSuccessResponse =>
-          val code = Option(s.getAuthorizationCode)
-          val state = Option(s.getState)
+          val state = request.getQueryString("state")
 
           if (!state.contains(expectedState)) {
             Left(ErrorResponse(400, "Invalid OIDC state"))
           } else {
-            code match {
-              case Some(c) => Right(c)
+            Option(s.getAuthorizationCode) match {
+              case Some(code) =>
+                Right(code)
+
               case None =>
-                Left(ErrorResponse(500, "No code value in getCodeFromAuthResponse"))
+                Left(
+                  ErrorResponse(
+                    500,
+                    "No code value in getCodeFromAuthResponse"
+                  )
+                )
             }
           }
 
@@ -173,8 +179,13 @@ class OidcAuthenticator @Inject() (wsClient: WSClient, configuration: Configurat
           val errorMessage =
             s"Sign in error: ${err.getErrorObject.getDescription}"
 
-          Left(ErrorResponse(err.toHTTPResponse.getStatusCode, errorMessage))
-      }
+          Left(
+            ErrorResponse(
+              err.toHTTPResponse.getStatusCode,
+              errorMessage
+            )
+          )
+    }
 
   def isNotExpired(claimsSet: JWTClaimsSet): Boolean = {
     val now = new Date()
