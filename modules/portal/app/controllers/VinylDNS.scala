@@ -331,7 +331,9 @@ class VinylDNS @Inject() (
           vinyldnsServiceBackend
         )
     ).as("text/csv")
-      .withHeaders(cacheHeaders: _*)
+      .withHeaders(
+        cacheHeaders: _*
+      )
       .withHeaders(
         "Content-Disposition" -> "attachment; filename=\"credentials.csv\""
       )
