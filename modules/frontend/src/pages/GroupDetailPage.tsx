@@ -496,7 +496,7 @@ export function GroupDetailPage() {
               </div>
             ) : (
               <div className="vds-groups-table-wrap">
-                <table className="vds-groups-table">
+                <table className="vds-groups-table vds-group-changes-table">
                   <thead>
                     <tr>
                       <th
@@ -530,7 +530,7 @@ export function GroupDetailPage() {
                             {change.changeType}
                           </span>
                         </td>
-                        <td className="vds-table-secondary" style={{ maxWidth: 280 }}>
+                        <td className="vds-table-secondary">
                           {change.groupChangeMessage
                             ? change.groupChangeMessage.split('. ').filter(Boolean).map((sentence, i) => (
                                 <div key={i}>{sentence}{sentence.endsWith('.') ? '' : '.'}</div>

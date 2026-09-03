@@ -54,8 +54,58 @@ export function GroupsPage() {
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
   const justSelectedRef = useRef(false);
+  const createFormRef = useRef<HTMLDivElement>(null);
+  const editFormRef = useRef<HTMLDivElement>(null);
+  const createSnapshotRef = useRef("");
+  const editSnapshotRef = useRef("");
+  const [createFormDirty, setCreateFormDirty] = useState(false);
+  const [editFormDirty, setEditFormDirty] = useState(false);
   const FILTER_PAGE_SIZE = 100;
   const activeQuery = ignoreAccess ? allGroupsQuery : myGroupsQuery;
+
+  const serializeFormState = useCallback((root: HTMLElement | null) => {
+    if (!root) return "";
+    const fields = Array.from(
+      root.querySelectorAll("input, textarea, select"),
+    ) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>;
+
+    return fields
+      .map((field, index) => {
+        const key =
+          field.getAttribute("name") ??
+          field.getAttribute("id") ??
+          `${field.tagName.toLowerCase()}-${index}`;
+        if (field instanceof HTMLInputElement) {
+          if (field.type === "checkbox" || field.type === "radio") {
+            return `${key}:${field.checked}`;
+          }
+          if (field.type === "file") {
+            return `${key}:${field.files?.length ?? 0}`;
+          }
+        }
+        return `${key}:${field.value}`;
+      })
+      .join("|");
+  }, []);
+
+  const confirmDiscardChanges = useCallback((isDirty: boolean) => {
+    if (!isDirty) return true;
+    return window.confirm(
+      "You have unsaved changes. Do you want to close this form and discard them?",
+    );
+  }, []);
+
+  const closeCreateForm = useCallback(() => {
+    if (confirmDiscardChanges(createFormDirty)) {
+      setShowForm(false);
+    }
+  }, [createFormDirty, confirmDiscardChanges]);
+
+  const closeEditForm = useCallback(() => {
+    if (confirmDiscardChanges(editFormDirty)) {
+      setEditGroup(null);
+    }
+  }, [editFormDirty, confirmDiscardChanges]);
 
   const {
     groups,
@@ -217,7 +267,82 @@ export function GroupsPage() {
     setShowSuggestions(false);
   }, [ignoreAccess]);
 
+  useEffect(() => {
+    if (!showForm) {
+      createSnapshotRef.current = "";
+      setCreateFormDirty(false);
+      return;
+    }
+
+    const node = createFormRef.current;
+    if (!node) return;
+
+    const updateDirty = () => {
+      setCreateFormDirty(
+        serializeFormState(node) !== createSnapshotRef.current,
+      );
+    };
+
+    createSnapshotRef.current = serializeFormState(node);
+    updateDirty();
+
+    node.addEventListener("input", updateDirty);
+    node.addEventListener("change", updateDirty);
+
+    return () => {
+      node.removeEventListener("input", updateDirty);
+      node.removeEventListener("change", updateDirty);
+    };
+  }, [showForm, serializeFormState]);
+
+  useEffect(() => {
+    if (!editGroup) {
+      editSnapshotRef.current = "";
+      setEditFormDirty(false);
+      return;
+    }
+
+    const node = editFormRef.current;
+    if (!node) return;
+
+    const updateDirty = () => {
+      setEditFormDirty(serializeFormState(node) !== editSnapshotRef.current);
+    };
+
+    editSnapshotRef.current = serializeFormState(node);
+    updateDirty();
+
+    node.addEventListener("input", updateDirty);
+    node.addEventListener("change", updateDirty);
+
+    return () => {
+      node.removeEventListener("input", updateDirty);
+      node.removeEventListener("change", updateDirty);
+    };
+  }, [editGroup, serializeFormState]);
+
+  useEffect(() => {
+    const hasDirtyForm =
+      (showForm && createFormDirty) || (!!editGroup && editFormDirty);
+    if (!hasDirtyForm) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () =>
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [showForm, createFormDirty, editGroup, editFormDirty]);
+
   const handleRefresh = useCallback(() => {
+    if (showForm && !confirmDiscardChanges(createFormDirty)) return;
+    if (editGroup && !confirmDiscardChanges(editFormDirty)) return;
+
+    if (showForm) setShowForm(false);
+    if (editGroup) setEditGroup(null);
+
     if (ignoreAccess) {
       setAllGroupsQuery("");
     } else {
@@ -231,7 +356,16 @@ export function GroupsPage() {
     resetPaging();
     queryClient.invalidateQueries({ queryKey: ["groups"] });
     void queryClient.invalidateQueries({ queryKey: ["groups-count"] });
-  }, [ignoreAccess, resetPaging, queryClient]);
+  }, [
+    ignoreAccess,
+    resetPaging,
+    queryClient,
+    showForm,
+    editGroup,
+    createFormDirty,
+    editFormDirty,
+    confirmDiscardChanges,
+  ]);
 
   const handleTabSwitch = useCallback(
     (newIgnoreAccess: boolean) => {
@@ -299,6 +433,7 @@ export function GroupsPage() {
     g.members?.some((m) => m.id === profile?.id) ?? false;
   const hasAdminRole = (insightMgdCount ?? 0) > 0;
   const hasMemberRole = (insightMemberOnlyCount ?? 0) > 0;
+  const canViewCards = Boolean(profile?.isSuper || hasAdminRole);
   const tabShowsAllGroups = ignoreAccess || Boolean(profile?.isSuper);
   const hasNoRoleInData =
     tabShowsAllGroups && (groupCountData?.noRoleGroupCount ?? 0) > 0;
@@ -371,10 +506,12 @@ export function GroupsPage() {
           <button
             className="btn btn-primary d-flex align-items-center gap-2 vds-btn-primary-shadow vds-btn-nav"
             onClick={() => {
-              setShowForm((prev) => {
-                if (!prev) setEditGroup(null);
-                return !prev;
-              });
+              if (showForm) {
+                closeCreateForm();
+                return;
+              }
+              setEditGroup(null);
+              setShowForm(true);
             }}
           >
             <i className="bi bi-plus-circle-fill" />
@@ -398,11 +535,11 @@ export function GroupsPage() {
             tabIndex={-1}
             role="dialog"
             onClick={(e) => {
-              if (e.target === e.currentTarget) setShowForm(false);
+              if (e.target === e.currentTarget) closeCreateForm();
             }}
           >
             <div className="modal-dialog modal-dialog-centered" role="document">
-              <div className="modal-content">
+              <div className="modal-content" ref={createFormRef}>
                 <div
                   className="modal-header"
                   style={{
@@ -417,13 +554,13 @@ export function GroupsPage() {
                   <button
                     type="button"
                     className="btn-close btn-close-white"
-                    onClick={() => setShowForm(false)}
+                    onClick={closeCreateForm}
                   />
                 </div>
                 <div className="modal-body">
                   <GroupForm
                     onSubmit={handleCreate}
-                    onCancel={() => setShowForm(false)}
+                    onCancel={closeCreateForm}
                     isSubmitting={isCreating}
                     mode="create"
                   />
@@ -450,11 +587,11 @@ export function GroupsPage() {
             tabIndex={-1}
             role="dialog"
             onClick={(e) => {
-              if (e.target === e.currentTarget) setEditGroup(null);
+              if (e.target === e.currentTarget) closeEditForm();
             }}
           >
             <div className="modal-dialog modal-dialog-centered" role="document">
-              <div className="modal-content">
+              <div className="modal-content" ref={editFormRef}>
                 <div
                   className="modal-header"
                   style={{
@@ -469,14 +606,14 @@ export function GroupsPage() {
                   <button
                     type="button"
                     className="btn-close btn-close-white"
-                    onClick={() => setEditGroup(null)}
+                    onClick={closeEditForm}
                   />
                 </div>
                 <div className="modal-body">
                   <GroupForm
                     initialData={editGroup}
                     onSubmit={handleUpdate}
-                    onCancel={() => setEditGroup(null)}
+                    onCancel={closeEditForm}
                     isSubmitting={isUpdating}
                     mode="edit"
                   />
@@ -653,23 +790,25 @@ export function GroupsPage() {
                 )}
               </div>
               {/* ── Refresh ── */}
-              <button
-                type="button"
-                className="vds-cards-toggle-btn"
-                onClick={() => setShowCards((v) => !v)}
-              >
-                <span className="vds-cards-toggle-btn__icon">
-                  <i
-                    className={`bi ${showCards ? "bi-grid-fill" : "bi-grid"}`}
+              {canViewCards && (
+                <button
+                  type="button"
+                  className="vds-cards-toggle-btn"
+                  onClick={() => setShowCards((v) => !v)}
+                >
+                  <span className="vds-cards-toggle-btn__icon">
+                    <i
+                      className={`bi ${showCards ? "bi-grid-fill" : "bi-grid"}`}
+                    />
+                  </span>
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    {showCards ? "Hide Cards" : "Show Cards"}
+                  </span>
+                  <span
+                    className={`vds-cards-toggle-btn__dot${showCards ? "" : " vds-cards-toggle-btn__dot--off"}`}
                   />
-                </span>
-                <span style={{ whiteSpace: "nowrap" }}>
-                  {showCards ? "Hide Cards" : "Show Cards"}
-                </span>
-                <span
-                  className={`vds-cards-toggle-btn__dot${showCards ? "" : " vds-cards-toggle-btn__dot--off"}`}
-                />
-              </button>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -745,7 +884,7 @@ export function GroupsPage() {
         className={`vds-tab-content${tabFading ? " vds-tab-content--fading" : ""}`}
       >
         {/* ── Insight cards ── */}
-        {showCards && (
+        {canViewCards && showCards && (
           <div className="row mb-2 g-2 align-items-stretch justify-content-evenly vds-groups-insight-row">
             {/* Total Groups */}
             <div

@@ -100,6 +100,11 @@ export function ZoneDetailPage() {
   const [activeTab, setActiveTab]         = useState<DetailTab>('records');
   const [showRecordForm, setShowRecordForm] = useState(false);
   const [editRecord, setEditRecord]        = useState<RecordSet | null>(null);
+  const recordFormRef = useRef<HTMLDivElement>(null);
+  const recordSnapshotRef = useRef('');
+  const [recordFormDirty, setRecordFormDirty] = useState(false);
+  const aclRuleSnapshotRef = useRef('');
+  const [aclRuleDirty, setAclRuleDirty] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<RecordSet | null>(null);
   const [nameFilter, setNameFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -171,6 +176,55 @@ export function ZoneDetailPage() {
   const typeDropdownRef = useRef<HTMLDivElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const ttlDropdownRef = useRef<HTMLDivElement>(null);
+
+  const serializeFormState = useCallback((root: HTMLElement | null) => {
+    if (!root) return '';
+    const fields = Array.from(root.querySelectorAll('input, textarea, select')) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>;
+
+    return fields
+      .map((field, index) => {
+        const key = field.getAttribute('name') ?? field.getAttribute('id') ?? `${field.tagName.toLowerCase()}-${index}`;
+        if (field instanceof HTMLInputElement) {
+          if (field.type === 'checkbox' || field.type === 'radio') return `${key}:${field.checked}`;
+          if (field.type === 'file') return `${key}:${field.files?.length ?? 0}`;
+        }
+        return `${key}:${field.value}`;
+      })
+      .join('|');
+  }, []);
+
+  const confirmDiscardRecordChanges = useCallback(() => {
+    if (!recordFormDirty) return true;
+    return window.confirm('You have unsaved changes. Do you want to close this form and discard them?');
+  }, [recordFormDirty]);
+
+  const closeRecordForm = useCallback(() => {
+    if (confirmDiscardRecordChanges()) {
+      setShowRecordForm(false);
+      setEditRecord(null);
+    }
+  }, [confirmDiscardRecordChanges]);
+
+  const confirmDiscardAclRuleChanges = useCallback(() => {
+    if (!aclRuleDirty) return true;
+    return window.confirm('You have unsaved changes. Do you want to close this form and discard them?');
+  }, [aclRuleDirty]);
+
+  const closeAclRuleModal = useCallback(() => {
+    if (confirmDiscardAclRuleChanges()) {
+      setAclRuleModal(null);
+    }
+  }, [confirmDiscardAclRuleChanges]);
+
+  const runWithRecordFormGuard = useCallback((action: () => void) => {
+    const formOpen = showRecordForm || !!editRecord;
+    if (formOpen && !confirmDiscardRecordChanges()) return;
+    if (formOpen) {
+      setShowRecordForm(false);
+      setEditRecord(null);
+    }
+    action();
+  }, [showRecordForm, editRecord, confirmDiscardRecordChanges]);
 
   const { data: zoneData, isLoading: zoneLoading } = useQuery({
     queryKey: ['zone', id],
@@ -590,6 +644,73 @@ export function ZoneDetailPage() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  useEffect(() => {
+    if (!(showRecordForm || editRecord)) {
+      recordSnapshotRef.current = '';
+      setRecordFormDirty(false);
+      return;
+    }
+
+    const node = recordFormRef.current;
+    if (!node) return;
+
+    const updateDirty = () => {
+      setRecordFormDirty(serializeFormState(node) !== recordSnapshotRef.current);
+    };
+
+    recordSnapshotRef.current = serializeFormState(node);
+    updateDirty();
+
+    node.addEventListener('input', updateDirty);
+    node.addEventListener('change', updateDirty);
+
+    return () => {
+      node.removeEventListener('input', updateDirty);
+      node.removeEventListener('change', updateDirty);
+    };
+  }, [showRecordForm, editRecord, serializeFormState]);
+
+  useEffect(() => {
+    if (!((showRecordForm || editRecord) && recordFormDirty)) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [showRecordForm, editRecord, recordFormDirty]);
+
+  useEffect(() => {
+    if (!aclRuleModal) {
+      aclRuleSnapshotRef.current = '';
+      setAclRuleDirty(false);
+      return;
+    }
+
+    const currentSnapshot = JSON.stringify(aclRuleModal.rule);
+    if (!aclRuleSnapshotRef.current) {
+      aclRuleSnapshotRef.current = currentSnapshot;
+      setAclRuleDirty(false);
+      return;
+    }
+
+    setAclRuleDirty(currentSnapshot !== aclRuleSnapshotRef.current);
+  }, [aclRuleModal]);
+
+  useEffect(() => {
+    if (!(aclRuleModal && aclRuleDirty)) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [aclRuleModal, aclRuleDirty]);
+
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleCreateRecord = (data: Partial<RecordSet>) => {
     createRecord(data, { onSuccess: () => setShowRecordForm(false) });
@@ -764,10 +885,10 @@ export function ZoneDetailPage() {
                 className="modal fade show d-block"
                 tabIndex={-1}
                 role="dialog"
-                onClick={(e) => { if (e.target === e.currentTarget) { setShowRecordForm(false); setEditRecord(null); } }}
+                onClick={(e) => { if (e.target === e.currentTarget) closeRecordForm(); }}
               >
                 <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
-                  <div className="modal-content">
+                  <div className="modal-content" ref={recordFormRef}>
                     <div
                       className="modal-header"
                       style={{ background: editRecord ? 'linear-gradient(90deg, #3a6db5, #1e3a6e)' : 'linear-gradient(90deg, #1e5fa8, #0d1b3e)', color: '#fff' }}
@@ -779,7 +900,7 @@ export function ZoneDetailPage() {
                       <button
                         type="button"
                         className="btn-close btn-close-white"
-                        onClick={() => { setShowRecordForm(false); setEditRecord(null); }}
+                        onClick={closeRecordForm}
                       />
                     </div>
                     <div className="modal-body">
@@ -788,7 +909,7 @@ export function ZoneDetailPage() {
                         zoneName={zoneData.name}
                         initialData={editRecord ?? undefined}
                         onSubmit={editRecord ? handleUpdateRecord : handleCreateRecord}
-                        onCancel={() => { setShowRecordForm(false); setEditRecord(null); }}
+                        onCancel={closeRecordForm}
                         mode={editRecord ? 'edit' : 'create'}
                         isSharedZone={zoneData?.shared ?? false}
                         isReverseZone={zoneData.name.endsWith('in-addr.arpa.') || zoneData.name.endsWith('ip6.arpa.')}
@@ -822,7 +943,7 @@ export function ZoneDetailPage() {
                       />
                       <button
                         className="btn btn-sm vds-btn-flat d-flex align-items-center gap-1"
-                        onClick={() => void queryClient.invalidateQueries({ queryKey: ['record-changes-recent', id] })}
+                        onClick={() => runWithRecordFormGuard(() => void queryClient.invalidateQueries({ queryKey: ['record-changes-recent', id] }))}
                         title="Refresh recent changes"
                       >
                         <i className="bi bi-arrow-clockwise" />
@@ -872,7 +993,7 @@ export function ZoneDetailPage() {
                             .map((c) => (
                             <tr key={c.id}>
                               <td className="fw-semibold vds-table-primary">{c.recordSet.name}</td>
-                              <td><span className="vds-record-type-badge">{c.recordSet.type}</span></td>
+                              <td className="vds-table-secondary fw-semibold">{c.recordSet.type}</td>
                               <td><span className={`vds-change-badge vds-change-badge--${c.changeType.toLowerCase()}`}>{c.changeType}</span></td>
                               <td><span className={`vds-zone-status-badge ${changeStatusClass(c.status)}`}>{c.status}</span></td>
                               <td className="vds-table-secondary vds-table-nowrap small">{c.userName ?? c.userId}</td>
@@ -1066,14 +1187,14 @@ export function ZoneDetailPage() {
                       </button>
                       <button
                         className="btn btn-sm d-flex align-items-center gap-1 vds-btn-flat"
-                        onClick={() => {
+                        onClick={() => runWithRecordFormGuard(() => {
                           setNameFilter('');
                           setTypeFilter('');
                           setStatusFilter('');
                           setTtlFilter(null);
                           searchRecords({ name: '', type: '' });
                           void refetchRecords();
-                        }}
+                        })}
                       >
                         <i className="bi bi-arrow-clockwise" />
                         <span className="vds-btn-flat__label">Refresh</span>
@@ -1346,7 +1467,7 @@ export function ZoneDetailPage() {
                 />
                 <button
                   className="btn btn-sm vds-btn-flat d-flex align-items-center gap-1"
-                  onClick={() => void queryClient.invalidateQueries({ queryKey: ['record-changes', id] })}
+                  onClick={() => runWithRecordFormGuard(() => void queryClient.invalidateQueries({ queryKey: ['record-changes', id] }))}
                 >
                   <i className="bi bi-arrow-clockwise" />
                   <span className="vds-btn-flat__label">Refresh</span>
@@ -1388,7 +1509,7 @@ export function ZoneDetailPage() {
                     <tr key={c.id}>
                       <td className="vds-table-secondary vds-table-nowrap small vds-date-wrap">{formatDateTime(c.created)}</td>
                       <td className="fw-semibold vds-table-primary">{c.recordSet.name}</td>
-                      <td><span className="vds-record-type-badge">{c.recordSet.type}</span></td>
+                      <td className="vds-table-secondary fw-semibold">{c.recordSet.type}</td>
                       <td>
                         <div className="d-flex align-items-center gap-1 flex-wrap">
                           <span className={`vds-change-badge vds-change-badge--${c.changeType.toLowerCase()}`}>{c.changeType}</span>
@@ -1470,7 +1591,7 @@ export function ZoneDetailPage() {
                 />
                 <button
                   className="btn btn-sm vds-btn-flat d-flex align-items-center gap-1"
-                  onClick={() => void queryClient.invalidateQueries({ queryKey: ['zone-changes', id] })}
+                  onClick={() => runWithRecordFormGuard(() => void queryClient.invalidateQueries({ queryKey: ['zone-changes', id] }))}
                 >
                   <i className="bi bi-arrow-clockwise" />
                   <span className="vds-btn-flat__label">Refresh</span>
@@ -1598,7 +1719,7 @@ export function ZoneDetailPage() {
               <div className="ms-auto d-flex align-items-center gap-2">
                 <button
                   className="btn btn-sm vds-btn-flat d-flex align-items-center gap-1"
-                  onClick={() => void queryClient.invalidateQueries({ queryKey: ['zone', id] })}
+                  onClick={() => runWithRecordFormGuard(() => void queryClient.invalidateQueries({ queryKey: ['zone', id] }))}
                 >
                   <i className="bi bi-arrow-clockwise" />
                   <span className="vds-btn-flat__label">Refresh</span>
@@ -1972,7 +2093,7 @@ export function ZoneDetailPage() {
               <div className="ms-auto d-flex align-items-center gap-2">
                 <button
                   className="btn btn-sm vds-btn-flat d-flex align-items-center gap-1"
-                  onClick={() => void queryClient.invalidateQueries({ queryKey: ['zone', id] })}
+                  onClick={() => runWithRecordFormGuard(() => void queryClient.invalidateQueries({ queryKey: ['zone', id] }))}
                 >
                   <i className="bi bi-arrow-clockwise" />
                   <span className="vds-btn-flat__label">Refresh</span>
@@ -2371,7 +2492,7 @@ export function ZoneDetailPage() {
           {/* ── ACL Rule Create / Edit Modal ── */}
           {aclRuleModal && (
             <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
-              onMouseDown={e => { if (e.target === e.currentTarget) setAclRuleModal(null); }}>
+              onMouseDown={e => { if (e.target === e.currentTarget) closeAclRuleModal(); }}>
               <div className="modal-dialog modal-dialog-centered modal-lg">
                 <div className="modal-content">
                   <div className="modal-header" style={{ background: 'linear-gradient(90deg,#1e3a5f 0%,#2a4d7f 100%)', color: '#fff' }}>
@@ -2379,7 +2500,7 @@ export function ZoneDetailPage() {
                       <i className="bi bi-shield-plus" />
                       {aclRuleModal.mode === 'create' ? 'Create ACL Rule' : 'Update ACL Rule'}
                     </h5>
-                    <button type="button" className="btn-close btn-close-white" onClick={() => setAclRuleModal(null)} />
+                    <button type="button" className="btn-close btn-close-white" onClick={closeAclRuleModal} />
                   </div>
                   <div className="modal-body p-4">
                     <div className="row g-3">
@@ -2530,7 +2651,7 @@ export function ZoneDetailPage() {
                     >
                       <i className="bi bi-arrow-counterclockwise me-1" />Clear Form
                     </button>
-                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setAclRuleModal(null)}>
+                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={closeAclRuleModal}>
                       Close
                     </button>
                     <button

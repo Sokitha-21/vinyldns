@@ -54,6 +54,9 @@ export function ZonesPage() {
   // ── Modals / forms ───────────────────────────────────────────────────────────
   const [showConnectForm, setShowConnectForm] = useState(false);
   const [showCards, setShowCards] = useState(true);
+  const connectFormRef = useRef<HTMLDivElement>(null);
+  const connectSnapshotRef = useRef('');
+  const [connectFormDirty, setConnectFormDirty] = useState(false);
 
   // ── Per-tab search inputs (committed on Search / Enter) ──────────────────────
   const [myZonesInput,   setMyZonesInput]   = useState('');
@@ -542,6 +545,80 @@ export function ZonesPage() {
   // Access options: use server-authoritative counts when available, otherwise show both
   const hasShared  = zonesCount != null ? (zonesCount.sharedCount  > 0) : true;
   const hasPrivate = zonesCount != null ? (zonesCount.privateCount > 0) : true;
+
+  const serializeFormState = useCallback((root: HTMLElement | null) => {
+    if (!root) return '';
+    const fields = Array.from(root.querySelectorAll('input, textarea, select')) as Array<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>;
+
+    return fields
+      .map((field, index) => {
+        const key = field.getAttribute('name') ?? field.getAttribute('id') ?? `${field.tagName.toLowerCase()}-${index}`;
+        if (field instanceof HTMLInputElement) {
+          if (field.type === 'checkbox' || field.type === 'radio') return `${key}:${field.checked}`;
+          if (field.type === 'file') return `${key}:${field.files?.length ?? 0}`;
+        }
+        return `${key}:${field.value}`;
+      })
+      .join('|');
+  }, []);
+
+  const confirmDiscardConnectChanges = useCallback(() => {
+    if (!connectFormDirty) return true;
+    return window.confirm('You have unsaved changes. Do you want to close this form and discard them?');
+  }, [connectFormDirty]);
+
+  const closeConnectForm = useCallback(() => {
+    if (confirmDiscardConnectChanges()) {
+      setShowConnectForm(false);
+    }
+  }, [confirmDiscardConnectChanges]);
+
+  const toggleConnectForm = useCallback(() => {
+    if (showConnectForm) {
+      closeConnectForm();
+      return;
+    }
+    setShowConnectForm(true);
+  }, [showConnectForm, closeConnectForm]);
+
+  useEffect(() => {
+    if (!showConnectForm) {
+      connectSnapshotRef.current = '';
+      setConnectFormDirty(false);
+      return;
+    }
+
+    const node = connectFormRef.current;
+    if (!node) return;
+
+    const updateDirty = () => {
+      setConnectFormDirty(serializeFormState(node) !== connectSnapshotRef.current);
+    };
+
+    connectSnapshotRef.current = serializeFormState(node);
+    updateDirty();
+
+    node.addEventListener('input', updateDirty);
+    node.addEventListener('change', updateDirty);
+
+    return () => {
+      node.removeEventListener('input', updateDirty);
+      node.removeEventListener('change', updateDirty);
+    };
+  }, [showConnectForm, serializeFormState]);
+
+  useEffect(() => {
+    if (!(showConnectForm && connectFormDirty)) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [showConnectForm, connectFormDirty]);
+
   // ── Sync committed queries → hooks ───────────────────────────────────────────
   useEffect(() => { myZones.search(myZonesQuery, myZonesByGroup); },
     [myZonesQuery, myZonesByGroup]); 
@@ -618,6 +695,9 @@ export function ZonesPage() {
 
   // ── Refresh ────────────────────────────────────────────────────────────────────
   const handleRefresh = useCallback(() => {
+    if (showConnectForm && !confirmDiscardConnectChanges()) return;
+    if (showConnectForm) setShowConnectForm(false);
+
     setAccessFilter(null);
     setEmailFilter('');
     setMySuggestionsOpen(false);
@@ -641,7 +721,7 @@ export function ZonesPage() {
       allAbandoned.resetPaging();
       void queryClient.invalidateQueries({ queryKey: ['deleted-zones'] });
     }
-  }, [mainTab, myZones, allZones, myAbandoned, allAbandoned, queryClient]);
+  }, [mainTab, myZones, allZones, myAbandoned, allAbandoned, queryClient, showConnectForm, confirmDiscardConnectChanges]);
 
   // ── Search handlers ───────────────────────────────────────────────────────────
   const handleMyZonesSearch = useCallback(() => {
@@ -710,15 +790,25 @@ export function ZonesPage() {
             <small className="text-muted">Manage DNS zones and their configurations</small>
           </div>
         </div>
-        {mainTab === 'myZones' && isSuper && (
+        <div className="d-flex align-items-center gap-2">
+          {mainTab === 'myZones' && isSuper && (
+            <button
+              className="btn btn-primary d-flex align-items-center gap-2 vds-btn-primary-shadow vds-btn-nav"
+              onClick={toggleConnectForm}
+            >
+              <i className="bi bi-plug-fill" />
+              Connect Zone
+            </button>
+          )}
           <button
-            className="btn btn-primary d-flex align-items-center gap-2 vds-btn-primary-shadow vds-btn-nav"
-            onClick={() => setShowConnectForm((p) => !p)}
+            type="button"
+            className="btn btn-sm d-flex align-items-center vds-btn-flat"
+            title="Refresh"
+            onClick={handleRefresh}
           >
-            <i className="bi bi-plug-fill" />
-            Connect Zone
+            <i className="bi bi-arrow-clockwise" />
           </button>
-        )}
+        </div>
       </div>
 
       {/* ── Connect Zone modal ── */}
@@ -728,23 +818,23 @@ export function ZonesPage() {
             className="modal fade show d-block"
             tabIndex={-1}
             role="dialog"
-            onClick={(e) => { if (e.target === e.currentTarget) setShowConnectForm(false); }}
+            onClick={(e) => { if (e.target === e.currentTarget) closeConnectForm(); }}
           >
             <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
-              <div className="modal-content">
+              <div className="modal-content" ref={connectFormRef}>
                 <div className="modal-header" style={{ background: 'linear-gradient(90deg, #1e5fa8, #0d1b3e)', color: '#fff' }}>
                   <h5 className="modal-title d-flex align-items-center gap-2">
                     <i className="bi bi-plug-fill" />
                     Connect to Zone
                   </h5>
-                  <button type="button" className="btn-close btn-close-white" onClick={() => setShowConnectForm(false)} />
+                  <button type="button" className="btn-close btn-close-white" onClick={closeConnectForm} />
                 </div>
                 <div className="modal-body">
                   <ZoneForm
                     groups={groupsData ?? []}
                     backendIds={backendIds ?? []}
                     onSubmit={handleCreate}
-                    onCancel={() => setShowConnectForm(false)}
+                    onCancel={closeConnectForm}
                     isSubmitting={myZones.isCreating}
                     mode="create"
                   />
@@ -810,19 +900,11 @@ export function ZonesPage() {
                 <span>{showFilters ? 'Hide Filters' : 'Show Filters'}</span>
                 <span className={`vds-cards-toggle-btn__dot${showFilters ? '' : ' vds-cards-toggle-btn__dot--off'}`} />
               </button>
-              <button
-                type="button"
-                className="btn btn-sm vds-btn-flat d-flex align-items-center justify-content-center"
-                style={{ width: 32, height: 32, padding: 0, flexShrink: 0, borderRadius: '50%' }}
-                title="Refresh"
-                onClick={handleRefresh}
-              >
-                <i className="bi bi-arrow-clockwise" style={{ fontSize: '1rem' }} />
-              </button>
             </div>
           </div>
           {/* ── Filters row (animated) + abandoned subtab always-visible ── */}
-          <div className="d-flex align-items-center pt-2" style={{ minHeight: 32 }}>
+          {(showFilters || mainTab === 'abandonedZones') && (
+          <div className="d-flex align-items-center pt-2">
             {/* Abandoned subtab: always visible on the left */}
             {mainTab === 'abandonedZones' && (
               <div className="vds-pill-toggle me-2" style={{ flexShrink: 0 }}>
@@ -842,16 +924,9 @@ export function ZonesPage() {
                 </button>
               </div>
             )}
-            {/* Animated filters — always takes remaining space, collapses on hide */}
-            <div
-              className="ms-auto"
-              style={{
-                maxHeight: showFilters ? '60px' : '0px',
-                opacity: showFilters ? 1 : 0,
-                overflow: showFilters ? 'visible' : 'hidden',
-                transition: 'max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease',
-              }}
-            >
+            {/* Filters occupy row only when visible so hidden state leaves no gap */}
+            {showFilters && (
+            <div className="ms-auto">
               <div className="d-flex align-items-center justify-content-end gap-2" style={{ whiteSpace: 'nowrap' }}>
               {/* My Zones search + filters */}
               {mainTab === 'myZones' && (
@@ -1251,7 +1326,9 @@ export function ZonesPage() {
               )}
             </div>
             </div>
+            )}
           </div>
+          )}
         </div>
       </div>
 
