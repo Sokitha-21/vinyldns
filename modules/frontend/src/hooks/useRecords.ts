@@ -19,7 +19,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { recordsService } from '../services/recordsService';
 import { usePaging } from './usePaging';
 import { useAlerts } from '../contexts/AlertContext';
-import type { RecordSet } from '../types/record';
+import type { RecordSet, RecordSetListResponse } from '../types/record';
 
 function getErrorMessage(error: { response?: { data?: string | { errors?: string[] }; statusText?: string; status?: number } }): string {
   const status = error.response?.status ?? 0;
@@ -204,8 +204,22 @@ export function useZoneRecords(zoneId: string) {
   const { paging, nextPageUpdate, prevPageUpdate, getPrevStartFrom, resetPaging,
     nextPageEnabled, prevPageEnabled, getPanelTitle } = usePaging(100);
   const { addAlert } = useAlerts();
+  const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch } = useQuery({
+  const patchZoneRecordCache = useCallback((updater: (items: RecordSet[]) => RecordSet[]) => {
+    queryClient.setQueriesData<RecordSetListResponse>(
+      { queryKey: ['zone-recordsets', zoneId] },
+      (previous) => {
+        if (!previous) return previous;
+        return {
+          ...previous,
+          recordSets: updater(previous.recordSets ?? []),
+        };
+      }
+    );
+  }, [queryClient, zoneId]);
+
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['zone-recordsets', zoneId, nameFilter, typeFilter, paging.next],
     queryFn: async () => {
       const res = await recordsService.listRecordSetsByZone(
@@ -218,14 +232,27 @@ export function useZoneRecords(zoneId: string) {
       return res.data;
     },
     enabled: Boolean(zoneId),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
   });
+
+  const refreshZoneRecords = useCallback(() => {
+    void refetch();
+  }, [refetch]);
 
   const createRecordMutation = useMutation({
     mutationFn: (record: Partial<RecordSet>) =>
       recordsService.createRecordSet(zoneId, record),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      const created = response.data.recordSet;
+      patchZoneRecordCache((items) => {
+        if (items.some((record) => record.id === created.id)) return items;
+        return [created, ...items];
+      });
       addAlert('success', 'Record created successfully');
-      void refetch();
+      refreshZoneRecords();
     },
     onError: (err: unknown) => {
       addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
@@ -235,9 +262,13 @@ export function useZoneRecords(zoneId: string) {
   const updateRecordMutation = useMutation({
     mutationFn: ({ recordSetId, record }: { recordSetId: string; record: Partial<RecordSet> }) =>
       recordsService.updateRecordSet(zoneId, recordSetId, record),
-    onSuccess: () => {
+    onSuccess: (response, variables) => {
+      const updated = response.data.recordSet;
+      patchZoneRecordCache((items) =>
+        items.map((item) => (item.id === variables.recordSetId ? updated : item))
+      );
       addAlert('success', 'Record updated successfully');
-      void refetch();
+      refreshZoneRecords();
     },
     onError: (err: unknown) => {
       addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
@@ -247,9 +278,10 @@ export function useZoneRecords(zoneId: string) {
   const deleteRecordMutation = useMutation({
     mutationFn: (recordSetId: string) =>
       recordsService.deleteRecordSet(zoneId, recordSetId),
-    onSuccess: () => {
+    onSuccess: (_response, deletedRecordSetId) => {
+      patchZoneRecordCache((items) => items.filter((item) => item.id !== deletedRecordSetId));
       addAlert('success', 'Record deleted successfully');
-      void refetch();
+      refreshZoneRecords();
     },
     onError: (err: unknown) => {
       addAlert('danger', getErrorMessage(err as Parameters<typeof getErrorMessage>[0]));
@@ -273,6 +305,7 @@ export function useZoneRecords(zoneId: string) {
   return {
     records: data?.recordSets ?? [],
     isLoading,
+    isFetching,
     search,
     refetch,
     nextPage,

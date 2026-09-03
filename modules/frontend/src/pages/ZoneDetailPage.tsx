@@ -275,7 +275,7 @@ export function ZoneDetailPage() {
   });
 
   const {
-    records, isLoading: recordsLoading,
+    records, isLoading: recordsLoading, isFetching: recordsFetching,
     nextPage: recordsNext, prevPage: recordsPrev,
     nextPageEnabled: recNextEnabled, prevPageEnabled: recPrevEnabled,
     getPanelTitle: recPanelTitle,
@@ -763,7 +763,7 @@ export function ZoneDetailPage() {
   return (
     <div>
       {/* ── Page header ── */}
-      <div className="rounded-3 mb-3 d-flex justify-content-between align-items-center vds-page-header vds-page-header--lg">
+      <div className="rounded-3 mb-2 d-flex justify-content-between align-items-center vds-page-header vds-page-header--lg">
         <div className="d-flex align-items-center gap-3">
           <div className="vds-zone-detail-avatar">{initials(zoneData.name)}</div>
           <div>
@@ -784,7 +784,7 @@ export function ZoneDetailPage() {
         </button>
       </div>
 
-      <div className="vds-zone-meta-strip mb-3">
+      <div className="vds-zone-meta-strip mb-2">
         <div
           className="vds-zone-meta-item"
           style={{ cursor: 'pointer', userSelect: 'none' }}
@@ -848,7 +848,7 @@ export function ZoneDetailPage() {
       </div>
 
       {/* ── Tab toolbar ── */}
-      <div className="card mb-3 vds-toolbar-card">
+      <div className="card mb-2 vds-toolbar-card">
         <div className="card-body py-2 px-3">
           <div className="vds-pill-toggle">
             <button type="button"
@@ -928,7 +928,7 @@ export function ZoneDetailPage() {
             <>
               {/* ── Recent Record Changes ── */}
               {recentRcData?.recordSetChanges?.length ? (
-                <div className="vds-recent-changes-panel mb-3">
+                <div className="vds-recent-changes-panel mb-2">
                   <div className="vds-recent-changes-panel__header">
                     <i className="bi bi-clock-history me-2" />
                     Recent Record Changes
@@ -1047,7 +1047,7 @@ export function ZoneDetailPage() {
 
               {/* Records toolbar */}
               <div className="card mb-2 vds-toolbar-card">
-                <div className="card-body py-2 px-3">
+                <div className="card-body py-2 px-2">
                   <div className="d-flex gap-2 align-items-center flex-wrap">
                     <div className="vds-record-count-badge">
                       <i className="bi bi-file-earmark-text vds-record-count-badge__icon" />
@@ -1169,9 +1169,9 @@ export function ZoneDetailPage() {
                       )}
                     </div>
 
-                    <div className="ms-auto d-flex align-items-center gap-2">
+                    <div className="ms-auto d-flex align-items-center gap-2 flex-wrap justify-content-end">
                       <button
-                        className="btn btn-sm d-flex align-items-center gap-1 vds-btn-nav"
+                        className="btn btn-sm d-flex align-items-center gap-1 vds-btn-nav vds-create-record-btn"
                         onClick={() => { setShowRecordForm(true); setEditRecord(null); }}
                       >
                         <i className="bi bi-plus-circle-fill" />Create New Record
@@ -1187,6 +1187,7 @@ export function ZoneDetailPage() {
                       </button>
                       <button
                         className="btn btn-sm d-flex align-items-center gap-1 vds-btn-flat"
+                        disabled={recordsFetching}
                         onClick={() => runWithRecordFormGuard(() => {
                           setNameFilter('');
                           setTypeFilter('');
@@ -1196,8 +1197,8 @@ export function ZoneDetailPage() {
                           void refetchRecords();
                         })}
                       >
-                        <i className="bi bi-arrow-clockwise" />
-                        <span className="vds-btn-flat__label">Refresh</span>
+                        <i className={`bi bi-arrow-clockwise${recordsFetching ? ' vds-spin' : ''}`} />
+                        <span className="vds-btn-flat__label">{recordsFetching ? 'Refreshing...' : 'Refresh'}</span>
                       </button>
                     </div>
                   </div>
@@ -1248,27 +1249,37 @@ export function ZoneDetailPage() {
                 </div>
               )}
 
-              <RecordsTable
-                records={records.filter((r) =>
-                  (!statusFilter || r.status === statusFilter) &&
-                  (ttlFilter === null || r.ttl === ttlFilter)
+              <div className="position-relative">
+                {recordsFetching && (
+                  <div className="vds-table-fetch-overlay" role="status" aria-live="polite" aria-label="Refreshing records">
+                    <div className="vds-table-fetch-spinner">
+                      <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+                      Refreshing records...
+                    </div>
+                  </div>
                 )}
-                onEdit={(rec) => { setEditRecord(rec); setShowRecordForm(false); }}
-                onDelete={setRecordToDelete}
-                isSharedZone={zoneData.shared ?? false}
-                isSuper={isSuper}
-                isSupport={isSupport}
-                isZoneAdmin={isZoneAdmin}
-                userGroupIds={userGroupIds}
-                onRequestOwnership={(rec) => {
-                  const mode = rec.ownerGroupId ? 'request' : 'claim';
-                  setOwnershipGroupId('');
-                  setOwnershipModal({ mode, record: rec });
-                }}
-                onCloseOwnershipRequest={(rec) => cancelOwnershipRequestMutation.mutate(rec)}
-                onApproveOwnership={(rec) => approveOwnershipMutation.mutate(rec)}
-                onRejectOwnership={(rec) => rejectOwnershipMutation.mutate(rec)}
-              />
+                <RecordsTable
+                  records={records.filter((r) =>
+                    (!statusFilter || r.status === statusFilter) &&
+                    (ttlFilter === null || r.ttl === ttlFilter)
+                  )}
+                  onEdit={(rec) => { setEditRecord(rec); setShowRecordForm(false); }}
+                  onDelete={setRecordToDelete}
+                  isSharedZone={zoneData.shared ?? false}
+                  isSuper={isSuper}
+                  isSupport={isSupport}
+                  isZoneAdmin={isZoneAdmin}
+                  userGroupIds={userGroupIds}
+                  onRequestOwnership={(rec) => {
+                    const mode = rec.ownerGroupId ? 'request' : 'claim';
+                    setOwnershipGroupId('');
+                    setOwnershipModal({ mode, record: rec });
+                  }}
+                  onCloseOwnershipRequest={(rec) => cancelOwnershipRequestMutation.mutate(rec)}
+                  onApproveOwnership={(rec) => approveOwnershipMutation.mutate(rec)}
+                  onRejectOwnership={(rec) => rejectOwnershipMutation.mutate(rec)}
+                />
+              </div>
               {false && (recNextEnabled || recPrevEnabled) && (
                 <Pagination onPrev={recordsPrev} onNext={recordsNext}
                   prevEnabled={recPrevEnabled} nextEnabled={recNextEnabled}
@@ -1708,7 +1719,7 @@ export function ZoneDetailPage() {
           )}
 
           {/* ── Zone Info Panel ── */}
-          <div className="vds-recent-changes-panel mb-4">
+          <div className="vds-recent-changes-panel mb-3">
             <div className="vds-recent-changes-panel__header">
               <i className="bi bi-info-circle me-2" />Zone Info
               {!isZoneAdmin && (
@@ -1736,7 +1747,7 @@ export function ZoneDetailPage() {
             </div>
 
             {zoneInfoOpen && (
-            <div className="p-4">
+            <div className="p-2">
               {!isZoneAdmin && zoneData && (
                 <div className="row g-4">
                   {[
@@ -2087,7 +2098,7 @@ export function ZoneDetailPage() {
           </div>
 
           {isZoneAdmin && (
-          <div className="vds-recent-changes-panel mt-4">
+          <div className="vds-recent-changes-panel mt-3">
             <div className="vds-recent-changes-panel__header">
               <i className="bi bi-shield-lock me-2" />Zone Access Rules
               <div className="ms-auto d-flex align-items-center gap-2">
@@ -2207,7 +2218,7 @@ export function ZoneDetailPage() {
 
           {/* ── Zone Sync Schedule Panel (super users only) ── */}
           {isSuper && (
-            <div className="vds-recent-changes-panel mt-4">
+            <div className="vds-recent-changes-panel mt-3">
               <div className="vds-recent-changes-panel__header">
                 <i className="bi bi-calendar-check me-2" />Schedule Zone Sync
                 <div className="ms-auto">
@@ -2222,8 +2233,8 @@ export function ZoneDetailPage() {
                 </div>
               </div>
               {zoneSyncOpen && (              <>
-              <div className="p-4">
-                <div className="mb-4">
+              <div className="p-2">
+                <div className="mb-2">
                   <label className="vds-zone-form__label d-flex align-items-center gap-2">
                     <i className="bi bi-calendar-week" />Run on Days
                   </label>
@@ -2278,7 +2289,7 @@ export function ZoneDetailPage() {
                   </div>
                 </div>
 
-                <div className="row g-3 mb-4">
+                <div className="row g-3 mb-2">
                   <div className="col-sm-4">
                     <label className="vds-zone-form__label d-flex align-items-center gap-2">
                       <i className="bi bi-clock" />Hour (UTC)
@@ -2330,7 +2341,7 @@ export function ZoneDetailPage() {
                 </div>
 
                 {/* ─── UTC Time Converter ─── */}
-                <div className="mb-3">
+                <div className="mb-2">
                   <button
                     type="button"
                     className="btn btn-sm vds-btn-flat d-flex align-items-center gap-2 mb-2"
@@ -2340,7 +2351,7 @@ export function ZoneDetailPage() {
                     <i className="bi bi-globe2" />Convert to UTC time
                   </button>
                   {showUtcConverter && (
-                    <div className="p-3 rounded-3 border d-flex align-items-center gap-3 flex-wrap vds-utc-converter-box" style={{ background: '#f8fafc' }}>
+                    <div className="p-2 rounded-3 border d-flex align-items-center gap-3 flex-wrap vds-utc-converter-box" style={{ background: '#f8fafc' }}>
                       <div>
                         <label className="vds-zone-form__label">Your local time</label>
                         <input
