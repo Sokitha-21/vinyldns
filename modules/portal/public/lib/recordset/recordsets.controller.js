@@ -316,8 +316,9 @@
                     let recordName, recordType;
                     const pageSize = 100;
                     const zoneMap = {};
-                    const allRecords = [];
-                    let csvContent = '';
+                    const csvRows = [];
+                    let headerRow = '';
+                    let filename = '';
 
                     if ($scope.query && $scope.query.includes("|")) {
                         const queryRecord = $scope.query.split('|');
@@ -354,9 +355,20 @@
                             }).join(',');
                     }
 
+                    function setFilename() {
+                        const safeRecordName = (recordName || '')
+                            .replace(/\*/g, '')
+                            .replace(/[^a-zA-Z0-9.-]/g, '_');
+                        const recordLabel = recordType ? 'recordset' : 'recordsets';
+                        filename = safeRecordName
+                            ? `${safeRecordName} - ${recordLabel}.csv`
+                            : 'recordsets.csv';
+                    }
+
                     let visitedNextIds = new Set();
 
-                    function fetchAllPages(nextId = null) {
+                    // Stream processing: fetch page, process, drop from memory
+                    function fetchAndProcessPages(nextId = null) {
                         return recordsService.listRecordSetData(
                             pageSize,
                             nextId,
@@ -368,57 +380,56 @@
                         ).then(function (response) {
                             const recordSets = response.data.recordSets || [];
                             const newNextId = response.data.nextId;
+                            
                             if (!recordSets.length) return;
-                            allRecords.push(...recordSets);
-                            if (!newNextId || visitedNextIds.has(newNextId)) return;
-                            visitedNextIds.add(newNextId);
-                            return fetchAllPages(newNextId);
+                            
+                            // Initialize header on first page
+                            if (csvRows.length === 0) {
+                                setFilename();
+                                headerRow = buildHeaders();
+                                csvRows.push(headerRow);
+                            }
+
+                            const batchZoneIds = getPrivateZoneIdsToLoad(recordSets, zoneMap);
+                            
+                            return Promise.resolve()
+                                .then(() => {
+                                    if (batchZoneIds.length > 0) {
+                                        const promises = batchZoneIds.map(zoneId =>
+                                            recordsService.getCommonZoneDetails(zoneId)
+                                                .then(function (res) {
+                                                    zoneMap[zoneId] = res.data.zone.adminGroupName;
+                                                })
+                                                .catch(function () {
+                                                    zoneMap[zoneId] = "Unowned";
+                                                })
+                                        );
+                                        return Promise.all(promises);
+                                    }
+                                })
+                                .then(() => {
+                                    recordSets.forEach(r => {
+                                        csvRows.push(buildRow(r));
+                                    });
+                                })
+                                .then(() => {
+                                    // Continue fetching next page
+                                    if (!newNextId || visitedNextIds.has(newNextId)) return;
+                                    visitedNextIds.add(newNextId);
+                                    return fetchAndProcessPages(newNextId);
+                                });
                         });
                     }
 
-                    function loadPrivateZoneOwners() {
-                        if (!shouldLoadPrivateZoneOwners()) {
-                            return Promise.resolve();
-                        }
-
-                        const privateZoneIds = getPrivateZoneIdsToLoad(allRecords, zoneMap);
-                        if (!privateZoneIds.length) {
-                            return Promise.resolve();
-                        }
-
-                        const promises = privateZoneIds.map(zoneId =>
-                            recordsService.getCommonZoneDetails(zoneId)
-                                .then(function (res) {
-                                    zoneMap[zoneId] = res.data.zone.adminGroupName;
-                                })
-                                .catch(function () {
-                                    zoneMap[zoneId] = "Unowned";
-                                })
-                        );
-                        return Promise.all(promises);
-                    }
-
                     function downloadCsv() {
-                        if (!allRecords.length) {
+                        if (csvRows.length <= 1) { // Only header, no records
                             hideLoader();
                             return;
                         }
 
-                        const safeRecordName = (recordName || '')
-                            .replace(/\*/g, '')
-                            .replace(/[^a-zA-Z0-9.-]/g, '_');
-                        const recordLabel = recordType ? 'recordset' : 'recordsets';
-                        const filename = safeRecordName
-                            ? `${safeRecordName} - ${recordLabel}.csv`
-                            : 'recordsets.csv';
-
-                        const rows = [];
-                        rows.push(buildHeaders());
-
-                        allRecords.forEach(r => {
-                            rows.push(buildRow(r));
-                        });
-                        csvContent = '\uFEFF' + rows.join('\n');
+                        // Accumulate all CSV rows into single string
+                        // Record objects were dropped per-page, but CSV rows remain in csvRows[]
+                        const csvContent = '\uFEFF' + csvRows.join('\n');
 
                         const blob = new Blob([csvContent], { type: 'text/csv' });
                         const link = document.createElement('a');
@@ -430,8 +441,7 @@
                         hideLoader();
                     }
 
-                    fetchAllPages()
-                        .then(loadPrivateZoneOwners)
+                    fetchAndProcessPages()
                         .then(downloadCsv)
                         .catch(function (error) {
                             if (error) {
