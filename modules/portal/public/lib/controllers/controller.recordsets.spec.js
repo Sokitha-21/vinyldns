@@ -79,25 +79,11 @@ describe('Controller: RecordSetsController', function () {
         document.body.innerHTML = '';
     });
 
-    it('shouldLoadPrivateZoneOwners returns false when ownerGroupName field is deselected', function () {
+    it('shouldLoadPrivateZoneOwners returns true since all columns are always displayed', function () {
         document.body.innerHTML = '<input id="record-search-text" />';
 
         var scope = this.rootScope.$new();
         this.controllerFactory('RecordSetsController', {'$scope': scope});
-
-        scope.selectedFields.ownerGroupName = false;
-
-        expect(scope.shouldLoadPrivateZoneOwners()).toBe(false);
-        document.body.innerHTML = '';
-    });
-
-    it('shouldLoadPrivateZoneOwners returns true when ownerGroupName field is selected', function () {
-        document.body.innerHTML = '<input id="record-search-text" />';
-
-        var scope = this.rootScope.$new();
-        this.controllerFactory('RecordSetsController', {'$scope': scope});
-
-        scope.selectedFields.ownerGroupName = true;
 
         expect(scope.shouldLoadPrivateZoneOwners()).toBe(true);
         document.body.innerHTML = '';
