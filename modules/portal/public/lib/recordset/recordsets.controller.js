@@ -386,7 +386,7 @@
                     }
 
                     function downloadCsv() {
-                        if (csvRows.length <= 1) { // Only header, no records
+                        if (csvRows.length <= 1) {
                             hideLoader();
                             return;
                         }
