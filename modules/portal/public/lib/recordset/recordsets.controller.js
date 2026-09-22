@@ -346,7 +346,6 @@
                             const newNextId = response.data.nextId;
                             
                             if (!recordSets.length) return;
-                            
                             // Initialize header on first page
                             if (csvRows.length === 0) {
                                 setFilename();
