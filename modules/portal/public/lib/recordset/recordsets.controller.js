@@ -63,23 +63,6 @@
                 VIEW_DETAILS: 5
             };
             $scope.isRecordSearchTriggered = false;
-            $scope.HEADER_MAP = {
-            fqdn: 'FQDN',
-            id: 'Record ID',
-            name: 'Name',
-            type: 'Type',
-            ttl: 'TTL',
-            records: 'Record Data',
-            zoneName: 'Zone',
-            zoneId: 'Zone ID',
-            zoneShared: 'Zone Access Type',
-            ownerGroupName: 'Owner Group Name',
-            created: 'Created Date'
-            };
-            $scope.selectedFields = {};
-            angular.forEach($scope.HEADER_MAP, function(label, key) {
-                $scope.selectedFields[key] = true;
-            });
             
             // Function to copy the Record ID to clipboard
             $scope.copyToClipboard = function(type) {
@@ -119,21 +102,6 @@
             var recordsPaging = pagingService.getNewPagingParams(100);
             var recordType = [];
             var recordName = [];
-            $scope.exportOptions = { selectAll: true };
-
-            $scope.toggleAllFields = function () {
-                angular.forEach($scope.HEADER_MAP, function (label, key) {
-                    $scope.selectedFields[key] = $scope.exportOptions.selectAll;
-                });
-            };
-
-            $scope.updateSelectAllState = function () {
-                var allSelected = true;
-                angular.forEach($scope.selectedFields, function (value) {
-                    if (!value) allSelected = false;
-                });
-                $scope.exportOptions.selectAll = allSelected;
-            };
             
             // Initialize Bootstrap tooltips
             $(document).ready(function() {
@@ -330,29 +298,25 @@
                     }
 
                     function buildHeaders() {
-                        return Object.keys($scope.HEADER_MAP)
-                            .filter(key => $scope.selectedFields[key])
-                            .map(key => $scope.HEADER_MAP[key])
-                            .join(',');
+                        return 'FQDN,Record ID,Name,Type,TTL,Record Data,Zone,Zone ID,Zone Access Type,Owner Group Name,Created Date';
                     }
 
                     function buildRow(r) {
-                        return Object.keys($scope.HEADER_MAP)
-                            .filter(key => $scope.selectedFields[key])
-                            .map(key => {
-                                if (key === 'records')
-                                    return toCSVCell(getRecordData(r.records, r.type));
-                                if (key === 'zoneShared')
-                                    return toCSVCell(r.zoneShared ? 'Shared' : 'Private');
-                                if (key === 'created')
-                                    return toCSVCell(r.created ? new Date(r.created).toISOString() : '');
-                                if (key === 'ownerGroupName') {
-                                    if (r.zoneShared)
-                                        return toCSVCell(r.ownerGroupName || 'Unowned');
-                                    return toCSVCell(zoneMap[r.zoneId] || r.ownerGroupName || 'Unowned');
-                                }
-                                return toCSVCell(r[key] || '');
-                            }).join(',');
+                        const headers = ['fqdn', 'id', 'name', 'type', 'ttl', 'records', 'zoneName', 'zoneId', 'zoneShared', 'ownerGroupName', 'created'];
+                        return headers.map(key => {
+                            if (key === 'records')
+                                return toCSVCell(getRecordData(r.records, r.type));
+                            if (key === 'zoneShared')
+                                return toCSVCell(r.zoneShared ? 'Shared' : 'Private');
+                            if (key === 'created')
+                                return toCSVCell(r.created ? new Date(r.created).toISOString() : '');
+                            if (key === 'ownerGroupName') {
+                                if (r.zoneShared)
+                                    return toCSVCell(r.ownerGroupName || 'Unowned');
+                                return toCSVCell(zoneMap[r.zoneId] || r.ownerGroupName || 'Unowned');
+                            }
+                            return toCSVCell(r[key] || '');
+                        }).join(',');
                     }
 
                     function setFilename() {
@@ -461,7 +425,7 @@
             }
 
             function shouldLoadPrivateZoneOwners() {
-                return !!$scope.selectedFields.ownerGroupName;
+                return true;
             }
 
             function getPrivateZoneIdsToLoad(records, zoneMap) {
