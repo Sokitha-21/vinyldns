@@ -108,7 +108,6 @@ class MessagesConfigSpec extends AnyWordSpec with Matchers {
       )
       
       val result = applyOverride(originalMsg, testConfig)
-      // Override is used as-is; caller is responsible for matching placeholders
       result shouldBe overrideMsgWithoutPlaceholders
       result should not include "%d"
     }
