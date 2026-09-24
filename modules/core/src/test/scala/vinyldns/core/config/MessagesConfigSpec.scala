@@ -131,8 +131,6 @@ class MessagesConfigSpec extends AnyWordSpec with Matchers {
 
   "MessagesConfig loading" should {
     "load successfully (config loading tested in integration tests)" in {
-      // MessagesConfig loading is tested in integration tests with actual config files.
-      // This test verifies the structure is correct even if config may not always be available at unit test time
       val testConfig = MessagesConfig(List(
         Message("Test message", Some("Override")),
         Message("Another message", None)
