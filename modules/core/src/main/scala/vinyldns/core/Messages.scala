@@ -18,21 +18,29 @@ package vinyldns.core
 
 import vinyldns.core.config.MessagesConfig._
 import vinyldns.core.config.Message
+import org.slf4j.LoggerFactory
 
 object Messages {
 
+  private val logger = LoggerFactory.getLogger(this.getClass)
+
   // Getting the messages present in the config file
-  val configMessages: Map[String, Message] = messages.right.toOption match {
-    case Some(value) => value.messages.map(value => value.text -> value).toMap
-    case None => Map("error" -> Message("config-not-found", "config-not-found"))
-  }
+  val configMessages: Map[String, Message] = messages.fold(
+    failures => {
+      logger.error(s"Failed to load messages config, overrides will not be applied: $failures")
+      Map("error" -> Message("config-not-found", None))
+    },
+    value => value.messages.map(value => value.text -> value).toMap
+  )
 
   // Checking if a message is present in config file and overriding the existing message
   implicit class MessagesStringExtension(existingMessage: String) {
     def orConfig: String =
-      if (configMessages.contains(existingMessage) && configMessages(existingMessage).overrideText != null && configMessages(existingMessage).overrideText != "")
-        configMessages(existingMessage).overrideText
-      else existingMessage
+      configMessages
+        .get(existingMessage)
+        .flatMap(_.overrideText)
+        .filter(_.nonEmpty)
+        .getOrElse(existingMessage)
   }
 
   // Messages displayed to the user and the files in which they are present
@@ -190,8 +198,8 @@ object Messages {
 
   val InvalidPtrErrorMsg: String = "PTR is not valid in forward lookup zone".orConfig
 
-  val InvalidRequestErrorMsg: String = "Record with fqdn '%s.%s' cannot be created. " +
-    "Please check if a record with the same FQDN and type already exist and make the change there.".orConfig
+  val InvalidRequestErrorMsg: String = ("Record with fqdn '%s.%s' cannot be created. " +
+    "Please check if a record with the same FQDN and type already exist and make the change there.").orConfig
 
   val RtypeOrUserNotAllowedErrorMsg: String = "Record type is not allowed or the user is not authorized to create a dotted host in the zone '%s'".orConfig
 
@@ -199,8 +207,8 @@ object Messages {
 
   val IPv4inCnameErrorMsg: String = "Invalid CNAME: %s, valid CNAME record data cannot be an IP address.".orConfig
 
-  val MoreDotsThanAllowedErrorMsg: String = "RecordSet with name %s has more dots than that is allowed in config for this zone " +
-    "which is, 'dots-limit = %s'.".orConfig
+  val MoreDotsThanAllowedErrorMsg: String = ("RecordSet with name %s has more dots than that is allowed in config for this zone " +
+    "which is, 'dots-limit = %s'.").orConfig
 
   val InvalidEndingErrorMsg: String = "RecordSet name cannot end with a dot, unless it's an apex record.".orConfig
 
@@ -450,7 +458,7 @@ object Messages {
 
   val TXTRecordValidationMsg: String = "TXT record must be less than 64764 characters".orConfig
 
-  val NSDataErrorMsg: String = "NS data must absolute".orConfig //"NS data must be a positive integer"
+  val NSDataErrorMsg: String = "NS data must be a positive integer".orConfig
 
   val UnsupportedEncryptedTypeErrorMsg: String = "Unsupported type for zone connection key, must be a string".orConfig
 
@@ -586,8 +594,8 @@ object Messages {
   val InvalidDurationErrorMsg: String = "Invalid duration: %d seconds. Duration must be between %d-%d seconds.".orConfig
 
   /* SqsMessageQueueProvider.scala */
-  val InvalidQueueNameErrorMsg: String = "Invalid queue name: %s. Must be 1-80 alphanumeric, hyphen or underscore characters. " +
-    "FIFO queues (queue names ending in \".fifo\") are not supported.".orConfig
+  val InvalidQueueNameErrorMsg: String = ("Invalid queue name: %s. Must be 1-80 alphanumeric, hyphen or underscore characters. " +
+    "FIFO queues (queue names ending in \".fifo\") are not supported.").orConfig
 
   val nonExistentRecordDeleteMessage = "This record does not exist. No further action is required."
 

@@ -21,10 +21,9 @@ import pureconfig.ConfigSource
 import pureconfig.generic.auto._
 import pureconfig.error.ConfigReaderFailures
 
-final case class Message(text: String, overrideText: String)
+final case class Message(text: String, overrideText: Option[String])
 final case class MessagesConfig(messages: List[Message])
 
 object MessagesConfig {
-  val appConfigSource: ConfigObjectSource = ConfigSource.resources("application.conf")
-  val messages: Either[ConfigReaderFailures, MessagesConfig] = appConfigSource.at("vinyldns").load[MessagesConfig].map(x => x)
+  val messages: Either[ConfigReaderFailures, MessagesConfig] = ConfigSource.default.at("vinyldns").load[MessagesConfig]
 }
